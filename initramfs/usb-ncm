@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Bring up an NCM gadget on the mainline kernel (devtmpfs populates /dev).
+set -e
+export PATH=/bin
+mkdir -p /sys/kernel/config
+mount -t configfs configfs /sys/kernel/config
+g=/sys/kernel/config/usb_gadget/erhai-mainline
+mkdir "$g"
+echo 0x1d6b > "$g/idVendor"
+echo 0x0104 > "$g/idProduct"
+mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409"
+echo erhai-mainline-dev > "$g/strings/0x409/serialnumber"
+echo 'erhai development' > "$g/strings/0x409/manufacturer"
+echo 'Mainline first-boot evidence' > "$g/strings/0x409/product"
+echo 'NCM diagnostics' > "$g/configs/c.1/strings/0x409/configuration"
+echo 100 > "$g/configs/c.1/MaxPower"
+mkdir "$g/functions/ncm.usb0"
+echo 02:00:00:77:00:02 > "$g/functions/ncm.usb0/dev_addr"
+echo 02:00:00:77:00:01 > "$g/functions/ncm.usb0/host_addr"
+ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm.usb0"
+udc=
+for iteration in 1 2 3 4 5 6 7 8 9 10; do
+	set -- /sys/class/udc/*
+	if [ -e "$1" ]; then
+		[ "$#" -eq 1 ] || { echo 'Ambiguous UDC'; exit 1; }
+		udc=${1##*/}
+		break
+	fi
+	sleep 1
+done
+[ -n "$udc" ] || { echo 'No UDC'; exit 1; }
+echo "$udc" > "$g/UDC"
+ip link set usb0 up
+ip address add 192.168.77.2/24 dev usb0
+cat > /run/udhcpd.conf <<'EOF'
+start 192.168.77.10
+end 192.168.77.10
+interface usb0
+lease_file /run/udhcpd.leases
+pidfile /run/udhcpd.pid
+max_leases 1
+option subnet 255.255.255.0
+EOF
+touch /run/udhcpd.leases
+udhcpd /run/udhcpd.conf
