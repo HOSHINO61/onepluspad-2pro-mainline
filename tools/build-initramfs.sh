@@ -59,7 +59,10 @@ ncm) init_src="$repo/initramfs/init-ncm"; usb_src="$repo/initramfs/usb-ncm"
 	adsp_dst=/lib/firmware/qcom/sm8750/erhai
 	# Adreno 830 firmware (linux-firmware): SQE/GMU/AQE by catalog name, zap
 	# via DT firmware-name qcom/sm8750/gen80000_zap.mbn.
-	gpu_src="$ws/out/gpu-fw" ;;
+	gpu_src="$ws/out/gpu-fw"
+	# WCN7860 (ath12k) firmware; not in upstream linux-firmware, sourced from
+	# the ROCKNIX extra-firmware pack (Odin 3 set, same chip family).
+	wifi_src="$ws/out/wifi-fw/hw2.0" ;;
 *) echo "Unknown PROFILE '$profile' (acm|ncm)." >&2; exit 1 ;;
 esac
 exec 9>"$out/.build.lock"
@@ -106,6 +109,17 @@ trap 'rm -rf -- "$stage"' EXIT
 			printf 'file /lib/firmware/qcom/%s %s 0644 0 0\n' "$f" "$gpu_src/$f"
 		done
 		printf 'file /lib/firmware/qcom/sm8750/gen80000_zap.mbn %s 0644 0 0\n' "$gpu_src/gen80000_zap.mbn"
+	fi
+	if [[ -n ${wifi_src:-} ]]; then
+		for f in amss.bin m3.bin board-2.bin regdb.bin qdss.cfg aux_ucode.bin bdwlan.elf; do
+			[[ -f $wifi_src/$f ]] || { echo "WLAN firmware not found: $wifi_src/$f" >&2; exit 1; }
+		done
+		for d in /lib /lib/firmware /lib/firmware/ath12k /lib/firmware/ath12k/WCN7860 /lib/firmware/ath12k/WCN7860/hw2.0; do
+			printf 'dir %s 0755 0 0\n' "$d"
+		done
+		for f in amss.bin m3.bin board-2.bin regdb.bin qdss.cfg aux_ucode.bin bdwlan.elf; do
+			printf 'file /lib/firmware/ath12k/WCN7860/hw2.0/%s %s 0644 0 0\n' "$f" "$wifi_src/$f"
+		done
 	fi
 	if [[ -n ${adsp_src:-} ]]; then
 		[[ -f $adsp_src/adsp.mdt ]] || { echo "ADSP mdt not found: $adsp_src/adsp.mdt" >&2; exit 1; }
