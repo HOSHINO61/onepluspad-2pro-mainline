@@ -31,15 +31,35 @@ acm) init_src="$repo/initramfs/init"; usb_src="$repo/initramfs/usb-acm"
 	apps='sh mount mkdir cat uname sleep setsid cttyhack getty ln ls dmesg poweroff reboot'
 	image_name=initramfs.cpio.gz ;;
 ncm) init_src="$repo/initramfs/init-ncm"; usb_src="$repo/initramfs/usb-ncm"
-	apps='sh mount mkdir cat cp uname sleep ip ln touch udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink'
+	apps='sh mount mkdir cat cp uname sleep ip ln touch udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink timeout'
 	image_name=initramfs-ncm.cpio.gz
+	# DRM writeback diagnostic (erhai.wb=1): statically linked against the
+	# workspace kernel uapi headers. Skipped in standalone checkouts that
+	# have no kernel tree; WB_CAPTURE=on makes it a hard requirement.
+	wb_src="$repo/tools/wb-capture.c"
+	wb_inc="$ws/kernel/linux"
+	if [[ -f $wb_src && -d $wb_inc/include/uapi/drm ]]; then
+		wb_bin="$out/wb-capture"
+		"${CROSS_COMPILE:-aarch64-linux-gnu-}"gcc -static -O2 -Wall -Wextra \
+			-I"$wb_inc/include/uapi" -I"$wb_inc/arch/arm64/include/uapi" \
+			-o "$wb_bin" "$wb_src"
+		extra_bins="$wb_bin"
+	elif [[ ${WB_CAPTURE:-auto} == on ]]; then
+		echo "wb-capture requested but kernel uapi headers not found at $wb_inc" >&2
+		exit 1
+	else
+		echo "note: kernel uapi headers not found; building without wb-capture" >&2
+	fi
 	# Novatek NT36536 TDDI loses its RAM firmware on every panel prepare; the
 	# built-in touch driver requests it from the rootfs.
 	fw_files="$ws/out/nt36536-fw/nt36536-xn242.bin"
 	# ADSP PIL firmware: mdt container + sparsely numbered adsp.bNN segments,
 	# resolved by the loader next to firmware-name qcom/sm8750/erhai/adsp.mdt.
 	adsp_src="$ws/out/adsp-fw/modem-image"
-	adsp_dst=/lib/firmware/qcom/sm8750/erhai ;;
+	adsp_dst=/lib/firmware/qcom/sm8750/erhai
+	# Adreno 830 firmware (linux-firmware): SQE/GMU/AQE by catalog name, zap
+	# via DT firmware-name qcom/sm8750/gen80000_zap.mbn.
+	gpu_src="$ws/out/gpu-fw" ;;
 *) echo "Unknown PROFILE '$profile' (acm|ncm)." >&2; exit 1 ;;
 esac
 exec 9>"$out/.build.lock"
@@ -48,6 +68,7 @@ stage=$(mktemp -d "$out/stage.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 {
 	sha256sum "$init_src" "$usb_src" | cut -d' ' -f1
+	[[ -z ${extra_bins:-} ]] || sha256sum "$wb_src" | cut -d' ' -f1
 	printf '%s\n' "$expected"
 } | sha256sum | cut -d' ' -f1 >"$stage/build-id"
 {
@@ -60,6 +81,9 @@ trap 'rm -rf -- "$stage"' EXIT
 	printf 'file /init %s 0755 0 0\n' "$init_src"
 	printf 'file /bin/%s %s 0755 0 0\n' "$(basename -- "$usb_src")" "$usb_src"
 	printf 'file /bin/busybox %s 0755 0 0\n' "$busybox"
+	for b in ${extra_bins:-}; do
+		printf 'file /bin/%s %s 0755 0 0\n' "$(basename -- "$b")" "$b"
+	done
 	printf 'file /etc/build-id %s 0644 0 0\n' "$stage/build-id"
 	if [[ -n ${fw_files:-} ]]; then
 		printf 'dir /lib 0755 0 0\n'
@@ -70,6 +94,19 @@ trap 'rm -rf -- "$stage"' EXIT
 		[[ -f $fw ]] || { echo "Firmware blob not found: $fw" >&2; exit 1; }
 		printf 'file /lib/firmware/novatek/%s %s 0644 0 0\n' "$(basename -- "$fw")" "$fw"
 	done
+	if [[ -n ${gpu_src:-} ]]; then
+		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw gen80000_zap.mbn; do
+			[[ -f $gpu_src/$f ]] || { echo "GPU firmware not found: $gpu_src/$f" >&2; exit 1; }
+		done
+		printf 'dir /lib 0755 0 0\n'
+		printf 'dir /lib/firmware 0755 0 0\n'
+		printf 'dir /lib/firmware/qcom 0755 0 0\n'
+		printf 'dir /lib/firmware/qcom/sm8750 0755 0 0\n'
+		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw; do
+			printf 'file /lib/firmware/qcom/%s %s 0644 0 0\n' "$f" "$gpu_src/$f"
+		done
+		printf 'file /lib/firmware/qcom/sm8750/gen80000_zap.mbn %s 0644 0 0\n' "$gpu_src/gen80000_zap.mbn"
+	fi
 	if [[ -n ${adsp_src:-} ]]; then
 		[[ -f $adsp_src/adsp.mdt ]] || { echo "ADSP mdt not found: $adsp_src/adsp.mdt" >&2; exit 1; }
 		for d in /lib/firmware/qcom /lib/firmware/qcom/sm8750 "$adsp_dst"; do

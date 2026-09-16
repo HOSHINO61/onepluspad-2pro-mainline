@@ -15,8 +15,12 @@ mount -t tmpfs tmpfs /run
 mkdir -p /run/evidence
 
 WATCHDOG_SECONDS=600
+WB=0
 for arg in $(cat /proc/cmdline); do
-	case "$arg" in erhai.watchdog=*) WATCHDOG_SECONDS=${arg#erhai.watchdog=} ;; esac
+	case "$arg" in
+	erhai.watchdog=*) WATCHDOG_SECONDS=${arg#erhai.watchdog=} ;;
+	erhai.wb=1) WB=1 ;;
+	esac
 done
 echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
 # Bounded self-recovery with observable stages: armed marker above, fired
@@ -131,6 +135,26 @@ done
 # orchestrator may end the session over telnet instead of waiting out the
 # watchdog.
 echo 'BLOCK_READONLY=true' > /run/evidence/block-guard.txt
+
+# Clock state of the display pipeline (is the MDP core really at its OPP
+# ceiling?) and the panel-side DCS readback when the TEMP debugfs probe is
+# in the kernel. One-shot; debugfs may need the mount here.
+mkdir -p /sys/kernel/debug
+[ -e /sys/kernel/debug/devices_deferred ] || mount -t debugfs none /sys/kernel/debug
+grep -E "mdp|dispcc|dpu|dsi" /sys/kernel/debug/clk/clk_summary > /run/evidence/clks.txt 2>/dev/null
+[ -e /sys/kernel/debug/nt36536-panel/status ] &&
+	cat /sys/kernel/debug/nt36536-panel/status > /run/evidence/panel-status.txt 2>&1
+
+# Optional writeback capture (erhai.wb=1): grab what the DPU actually scans
+# out (fbcon content, then known color bars painted into fb0). Runs before
+# usb-ncm on purpose: once udhcpd hands the host its address the
+# orchestrator starts pulling immediately, so the frames must already exist
+# when httpd opens. Bounded so a capture fault can never wedge the session.
+if [ "$WB" = 1 ] && [ -x /bin/wb-capture ]; then
+	timeout 25 /bin/wb-capture --fb0-pattern --prefix /run/evidence/wb \
+		> /run/evidence/wb-info.txt 2>&1 || \
+		echo "wb-capture rc=$?" >> /run/evidence/wb-info.txt
+fi
 
 if /bin/usb-ncm; then
 	dmesg > /run/evidence/dmesg.txt
