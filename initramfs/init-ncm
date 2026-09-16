@@ -224,6 +224,12 @@ if /bin/usb-ncm; then
 		# binaries keep serving sockets that would otherwise collide with
 		# the debug services starting inside the desktop rootfs.
 		expiry=$((WATCHDOG_SECONDS - 120)); [ "$expiry" -lt 60 ] && expiry=60
+		# Expose the overlay upper inside the new root: after switch_root the
+		# initramfs /run is covered by systemd's fresh tmpfs and the upperdir
+		# otherwise has no reachable path, making delta captures impossible.
+		# /mnt survives (systemd does not mask it).
+		mkdir -p /newroot/mnt/erhai-upper
+		mount --bind /run/rootfs.rw /newroot/mnt/erhai-upper
 		mkdir -p /newroot/etc/systemd/system/timers.target.wants \
 			/newroot/etc/systemd/system/multi-user.target.wants
 		cat > /newroot/etc/systemd/system/erhai-session-expiry.service <<EOF
