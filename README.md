@@ -15,14 +15,17 @@ for the exact baseline, branch and commit.
 | Area | State | Notes |
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
-| Display | DSI panel 3392x2400@120 native KMS | needs the 862.5MHz MDP OPP (in tree) |
+| Display | DSI panel 3392x2400@120 native KMS, DPU-side verified pixel-exact | **visual confirmation pending** (kernel chain green; ktz8868 bias + DSC PPS fixes staged) |
 | Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
-| Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell on the panel | RAM-delivered squashfs, llvmpipe (no GPU accel yet) |
+| GPU (A830) | kernel-side up: GMU v5.1.25, render node answers, no zap needed on this retail unit | Mesa in Ubuntu 26.04 lacks the A830 chipid -> GNOME stays llvmpipe |
+| Wi-Fi (WCN7860) | PCIe Gen3 x2 up, firmware loads, `wlp1s0` managed by NetworkManager | needs AP credentials for an actual connection |
+| Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell session runs | RAM-delivered squashfs, llvmpipe; NM/ssh tooling in s5 |
 
-Not yet: GPU acceleration (A830), audio, persistent installation.
+Not yet: panel visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
+(HCI transport unidentified on this unit), audio, persistent installation.
 
 ## Repository layout
 
@@ -58,7 +61,8 @@ never inputs to the next build.
 tools/build-kernel.sh                  # Image + sm8750-erhai.dtb (incremental, ccache)
 PROFILE=ncm tools/build-initramfs.sh   # RAM userspace with the NCM evidence channel
 tools/build-erhai-abl-symbols.py       # packaging DTB ABL will accept
-tools/build-mainline-boot.py --output out/mainline-boot
+tools/build-mainline-boot.py --output out/mainline-boot            # minimal session
+# add `--profile desktop` for the pinned RAM Ubuntu desktop cmdline
 fastboot boot out/mainline-boot/boot-mainline.img
 ```
 
@@ -74,6 +78,11 @@ expires. Optional kernel cmdline flags: `erhai.watchdog=NN` (session length),
 RAM sessions write nothing to flash. Anything beyond that — partitioning,
 flashing, persistent installs — is out of scope for this tree and requires
 explicit separate steps and authorization.
+
+The RAM session's debug channel is an **unauthenticated root telnet** on the
+USB NCM link by design (it is the only bring-up channel on this device). It
+lives only inside the bounded RAM session with a watchdog that reboots back
+to Android; never carry it into a persistent install or a shipped image.
 
 ## License
 

@@ -26,6 +26,12 @@ DEFAULT_OUT = WS / 'out/kernel-firstboot'
 # AOSP mkbootimg, vendored at cache/tools/mkbootimg.py (see README inputs).
 MKBOOT = Path(os.environ.get('MKBOOTIMG', str(WS / 'cache/tools/mkbootimg.py')))
 CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
+# The one authoritative desktop-session cmdline. Everything beyond the base
+# contract lives here, not in per-invocation shell history: bump the rootfs
+# name when the default layer advances.
+DESKTOP_EXTRA = ('erhai.watchdog=5400 '
+                 'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
+                 'erhai.switchroot=1')
 
 
 def sha(path):
@@ -42,8 +48,14 @@ def main():
     parser.add_argument('--cmdline-extra', default='',
                         help='Appended to the standard cmdline (e.g. erhai.watchdog=1800 '
                              'to hold a demo session longer than 600s)')
+    parser.add_argument('--profile', choices=('desktop',),
+                        help='Append the pinned DESKTOP_EXTRA cmdline (RAM Ubuntu session)')
     args = parser.parse_args()
-    cmdline = CMDLINE + (' ' + args.cmdline_extra.strip() if args.cmdline_extra.strip() else '')
+    cmdline = CMDLINE
+    if args.profile == 'desktop':
+        cmdline += ' ' + DESKTOP_EXTRA
+    if args.cmdline_extra.strip():
+        cmdline += ' ' + args.cmdline_extra.strip()
     kout = args.kernel_out.resolve()
     image = kout / 'arch/arm64/boot/Image'
     dtb = args.dtb or kout / 'arch/arm64/boot/dts/qcom/sm8750-erhai.dtb'
