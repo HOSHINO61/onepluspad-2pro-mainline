@@ -33,7 +33,12 @@ echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
 # marker before the reboot attempt, sysrq fallback if reboot -f returns.
 # The PID travels so a switch_root hand-off can disarm it (systemd installs
 # its own session-expiry timer before taking over).
-( sleep "$WATCHDOG_SECONDS"
+# The timer sleeps in the background and the subshell waits on it, so a
+# SIGTERM from the hand-off ends the subshell at once; a foreground sleep
+# would only be reaped after it expired and the reboot would still run.
+( trap 'exit 0' TERM
+  sleep "$WATCHDOG_SECONDS" &
+  wait $!
   echo "WATCHDOG_FIRED uptime=$(cat /proc/uptime)" > /run/evidence/watchdog.txt
   sync; sleep 1; reboot -f
   sleep 15; echo s > /proc/sysrq-trigger; echo b > /proc/sysrq-trigger ) &
