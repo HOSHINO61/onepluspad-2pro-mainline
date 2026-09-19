@@ -14,6 +14,9 @@
 #   erhai.weston=1              autostart weston in the RAM session
 #   erhai.root=PARTLABEL=<name> mount that partition rw and boot it as the
 #                               persistent root (no session-expiry timer)
+#   erhai.debug=1               install the NCM debug channel into that
+#                               persistent root (off by default: an installed
+#                               system must not serve a root shell over USB)
 export PATH=/bin
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -118,17 +121,23 @@ find_partlabel() {
 # Migrate the NCM debug channel into the root at $1. The kernel keeps the usb0
 # gadget and its address across switch_root, so the service only re-arms the
 # address (idempotent) and serves telnet/http from the new userspace; the .link
-# file stops udev's predictable naming from renaming usb0 out from under it.
+# file stops udev's predictable naming from renaming usb0 out from under it and
+# the NetworkManager drop-in stops a desktop from taking the interface over.
+# The daemons come from the initramfs' own static BusyBox, copied in as
+# busybox-erhai: a stock distribution root has neither busybox nor sshd, and
+# this channel is the only way back in when there is no console.
 install_debug_channel() {
 	mkdir -p "$1/etc/systemd/system/multi-user.target.wants" \
-		"$1/etc/systemd/network"
+		"$1/etc/systemd/network" "$1/etc/NetworkManager/conf.d" \
+		"$1/usr/local/sbin"
+	cp /bin/busybox "$1/usr/local/sbin/busybox-erhai"
 	cat > "$1/etc/systemd/system/erhai-debug.service" <<'EOF'
 [Unit]
 Description=erhai NCM debug channel
 After=local-fs.target
 [Service]
 Type=simple
-ExecStart=/bin/sh -c 'ip link set usb0 up 2>/dev/null; ip addr add 192.168.77.2/24 dev usb0 2>/dev/null; /bin/busybox httpd -p 192.168.77.2:8081 -h /; exec /bin/busybox telnetd -F -b 192.168.77.2:2323 -l /bin/bash'
+ExecStart=/usr/local/sbin/busybox-erhai sh -c 'ip link set usb0 up 2>/dev/null; ip addr add 192.168.77.2/24 dev usb0 2>/dev/null; /usr/local/sbin/busybox-erhai httpd -p 192.168.77.2:8081 -h /; exec /usr/local/sbin/busybox-erhai telnetd -F -b 192.168.77.2:2323 -l /bin/bash'
 Restart=always
 [Install]
 WantedBy=multi-user.target
@@ -140,6 +149,10 @@ EOF
 MACAddress=02:00:00:77:00:02
 [Link]
 Name=usb0
+EOF
+	cat > "$1/etc/NetworkManager/conf.d/99-erhai-ncm.conf" <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:usb0
 EOF
 }
 
@@ -264,7 +277,7 @@ if /bin/usb-ncm; then
 	# result in rootfs.txt; erhai.switchroot=1 later hands PID1 to systemd.
 	# erhai.root=PARTLABEL=<name> boots an installed system from UFS
 	# instead; it is handled below and never combined with the RAM overlay.
-	ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0; ROOT_SPEC=
+	ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0; ROOT_SPEC=; DEBUG_CHANNEL=0
 	for arg in $(cat /proc/cmdline); do
 		case "$arg" in
 		erhai.rootfs=*) ROOTFS_URL=${arg#erhai.rootfs=} ;;
@@ -272,6 +285,7 @@ if /bin/usb-ncm; then
 		erhai.rootfs.sha256=*) ROOTFS_SHA=${arg#erhai.rootfs.sha256=} ;;
 		erhai.weston=1) WESTON=1 ;;
 		erhai.root=*) ROOT_SPEC=${arg#erhai.root=} ;;
+		erhai.debug=1) DEBUG_CHANNEL=1 ;;
 		esac
 	done
 	if [ -n "$ROOTFS_URL" ]; then
@@ -442,7 +456,11 @@ EOF
 	fi
 	if [ -n "$ROOT_SPEC" ] && grep -q ' /newroot ext4 ' /proc/mounts &&
 		[ -x /newroot/usr/lib/systemd/systemd ]; then
-		install_debug_channel /newroot
+		# An installed system keeps the distribution's own services; the
+		# unauthenticated debug channel is opt-in (erhai.debug=1) and is
+		# never left behind by a plain persistent boot. A RAM session is a
+		# debug session by definition and always gets it, above.
+		[ "$DEBUG_CHANNEL" = 1 ] && install_debug_channel /newroot
 		switch_to_newroot /run/evidence/root.txt
 	fi
 else
