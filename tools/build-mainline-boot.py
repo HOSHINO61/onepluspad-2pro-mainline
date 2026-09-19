@@ -32,6 +32,12 @@ CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
 DESKTOP_EXTRA = ('erhai.watchdog=900 erhai.session=5400 '
                  'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
                  'erhai.switchroot=1')
+# The persistent-install cmdline: boot the ext4 root installed on UFS, resolved
+# by partition label. The watchdog only bounds the initramfs phase; once the
+# installed system takes over it runs unattended like any other install, so no
+# session expiry is armed.
+PERSIST_EXTRA = 'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4'
+PROFILE_EXTRA = {'desktop': DESKTOP_EXTRA, 'persistent': PERSIST_EXTRA}
 
 
 def sha(path):
@@ -48,12 +54,13 @@ def main():
     parser.add_argument('--cmdline-extra', default='',
                         help='Appended to the standard cmdline (e.g. erhai.watchdog=1800 '
                              'to hold a demo session longer than 600s)')
-    parser.add_argument('--profile', choices=('desktop',),
-                        help='Append the pinned DESKTOP_EXTRA cmdline (RAM Ubuntu session)')
+    parser.add_argument('--profile', choices=tuple(PROFILE_EXTRA),
+                        help='Append a pinned cmdline: "desktop" runs the RAM Ubuntu '
+                             'session, "persistent" boots the installed UFS root')
     args = parser.parse_args()
     cmdline = CMDLINE
-    if args.profile == 'desktop':
-        cmdline += ' ' + DESKTOP_EXTRA
+    if args.profile:
+        cmdline += ' ' + PROFILE_EXTRA[args.profile]
     if args.cmdline_extra.strip():
         cmdline += ' ' + args.cmdline_extra.strip()
     kout = args.kernel_out.resolve()

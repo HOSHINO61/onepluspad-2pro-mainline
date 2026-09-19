@@ -1,8 +1,19 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 # Mainline first-boot evidence profile: the kernel has DEVTMPFS and all USB
-# gadget support built in; no module loading, no storage mounts. RAM evidence
-# is exported over NCM/HTTP; the session ends via telnet or the watchdog.
+# gadget support built in; no module loading. RAM evidence is exported over
+# NCM/HTTP; the session ends via telnet or the watchdog.
+#
+# Cmdline knobs:
+#   erhai.watchdog=<s>          bound the initramfs phase (default 600)
+#   erhai.session=<s>           length of the session installed at switch_root
+#   erhai.wb=1                  DRM writeback capture before the NCM bring-up
+#   erhai.rootfs=<url>          fetch a squashfs over NCM, mount it as an overlay
+#   erhai.rootfs.sha256=<hash>  verify that image
+#   erhai.switchroot=1          hand PID1 to systemd in the RAM overlay
+#   erhai.weston=1              autostart weston in the RAM session
+#   erhai.root=PARTLABEL=<name> mount that partition rw and boot it as the
+#                               persistent root (no session-expiry timer)
 export PATH=/bin
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -89,6 +100,61 @@ dump_drm() {
 	[ -e /sys/kernel/debug/devices_deferred ] || mount -t debugfs none /sys/kernel/debug
 	echo '-- devices_deferred --'
 	cat /sys/kernel/debug/devices_deferred
+}
+
+# Resolve PARTLABEL=<name> to a block device. The initramfs has no blkid and
+# no udev, but the partition uevents carry PARTNAME for every GPT entry.
+find_partlabel() {
+	for u in /sys/class/block/*/uevent; do
+		[ -e "$u" ] || continue
+		grep -qx "PARTNAME=$1" "$u" || continue
+		d=${u%/uevent}
+		echo "/dev/${d##*/}"
+		return 0
+	done
+	return 1
+}
+
+# Migrate the NCM debug channel into the root at $1. The kernel keeps the usb0
+# gadget and its address across switch_root, so the service only re-arms the
+# address (idempotent) and serves telnet/http from the new userspace; the .link
+# file stops udev's predictable naming from renaming usb0 out from under it.
+install_debug_channel() {
+	mkdir -p "$1/etc/systemd/system/multi-user.target.wants" \
+		"$1/etc/systemd/network"
+	cat > "$1/etc/systemd/system/erhai-debug.service" <<'EOF'
+[Unit]
+Description=erhai NCM debug channel
+After=local-fs.target
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'ip link set usb0 up 2>/dev/null; ip addr add 192.168.77.2/24 dev usb0 2>/dev/null; /bin/busybox httpd -p 192.168.77.2:8081 -h /; exec /bin/busybox telnetd -F -b 192.168.77.2:2323 -l /bin/bash'
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOF
+	ln -sf ../erhai-debug.service \
+		"$1/etc/systemd/system/multi-user.target.wants/erhai-debug.service"
+	cat > "$1/etc/systemd/network/10-erhai-ncm.link" <<'EOF'
+[Match]
+MACAddress=02:00:00:77:00:02
+[Link]
+Name=usb0
+EOF
+}
+
+# Hand PID1 to systemd in /newroot, recording the hand-off in $1. The initramfs
+# watchdog is disarmed here, and the initramfs daemons must die BEFORE the
+# switch: their deleted binaries keep serving sockets that would otherwise
+# collide with the debug services starting in the new root. udhcpd is left
+# running on purpose so the host keeps its NCM address across the switch.
+switch_to_newroot() {
+	kill "$WATCHDOG_PID" 2>/dev/null
+	kill "$TELNET_LOOP_PID" "$HEARTBEAT_PID" 2>/dev/null
+	for p in $(pidof telnetd httpd dd 2>/dev/null); do kill "$p" 2>/dev/null; done
+	echo "SWITCHROOT systemd $(cat /proc/uptime)" >> "$1"
+	sync
+	exec switch_root /newroot /sbin/init
 }
 
 # Liveness + clock observability: refreshed evidence for late HTTP fetches.
@@ -196,13 +262,16 @@ if /bin/usb-ncm; then
 	# Optional RAM desktop rootfs: erhai.rootfs=<url> fetches a zstd squashfs
 	# over NCM, mounts it under an overlay at /newroot, and records the
 	# result in rootfs.txt; erhai.switchroot=1 later hands PID1 to systemd.
-	ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0
+	# erhai.root=PARTLABEL=<name> boots an installed system from UFS
+	# instead; it is handled below and never combined with the RAM overlay.
+	ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0; ROOT_SPEC=
 	for arg in $(cat /proc/cmdline); do
 		case "$arg" in
 		erhai.rootfs=*) ROOTFS_URL=${arg#erhai.rootfs=} ;;
 		erhai.switchroot=1) SWITCHROOT=1 ;;
 		erhai.rootfs.sha256=*) ROOTFS_SHA=${arg#erhai.rootfs.sha256=} ;;
 		erhai.weston=1) WESTON=1 ;;
+		erhai.root=*) ROOT_SPEC=${arg#erhai.root=} ;;
 		esac
 	done
 	if [ -n "$ROOTFS_URL" ]; then
@@ -277,31 +346,7 @@ WantedBy=timers.target
 EOF
 		ln -sf ../erhai-session-expiry.timer \
 			/newroot/etc/systemd/system/timers.target.wants/erhai-session-expiry.timer
-		# Debug channel inside the desktop rootfs: the kernel keeps the
-		# usb0 gadget and its address across switch_root; this service
-		# just re-arms the address (idempotent) and serves telnet/http.
-		cat > /newroot/etc/systemd/system/erhai-debug.service <<'EOF'
-[Unit]
-Description=erhai NCM debug channel
-After=local-fs.target
-[Service]
-Type=simple
-ExecStart=/bin/sh -c 'ip link set usb0 up 2>/dev/null; ip addr add 192.168.77.2/24 dev usb0 2>/dev/null; /bin/busybox httpd -p 192.168.77.2:8081 -h /; exec /bin/busybox telnetd -F -b 192.168.77.2:2323 -l /bin/bash'
-Restart=always
-[Install]
-WantedBy=multi-user.target
-EOF
-		ln -sf ../erhai-debug.service \
-			/newroot/etc/systemd/system/multi-user.target.wants/erhai-debug.service
-		# Pin the gadget interface name: udev predictable naming would
-		# rename usb0 and break the address the initramfs configured.
-		mkdir -p /newroot/etc/systemd/network
-		cat > /newroot/etc/systemd/network/10-erhai-ncm.link <<'EOF'
-[Match]
-MACAddress=02:00:00:77:00:02
-[Link]
-Name=usb0
-EOF
+		install_debug_channel /newroot
 		# Early boot observability without a console: an alive marker as
 		# soon as local-fs is up, then a live journal stream to the host.
 		cat > /newroot/etc/systemd/system/erhai-alive.service <<'EOF'
@@ -365,15 +410,40 @@ EOF
 			ln -sf ../erhai-weston.service \
 				/newroot/etc/systemd/system/multi-user.target.wants/erhai-weston.service
 		fi
-		kill "$WATCHDOG_PID" 2>/dev/null
-		# The initramfs daemons must die before the switch: their deleted
-		# binaries keep serving sockets that would otherwise collide with
-		# the debug services starting inside the desktop rootfs.
-		kill "$TELNET_LOOP_PID" "$HEARTBEAT_PID" 2>/dev/null
-		for p in $(pidof telnetd httpd dd 2>/dev/null); do kill "$p" 2>/dev/null; done
-		echo "SWITCHROOT systemd $(cat /proc/uptime)" >> /run/evidence/rootfs.txt
-		sync
-		exec switch_root /newroot /sbin/init
+		switch_to_newroot /run/evidence/rootfs.txt
+	fi
+
+	# Persistent root (erhai.root=PARTLABEL=<name>): mount an installed ext4
+	# system from UFS and boot it. No session-expiry timer is installed --
+	# this is the real system, not a bounded demo session. Anything that
+	# fails here falls through to the evidence loop below, so the initramfs
+	# watchdog still returns the tablet on its own.
+	if [ -n "$ROOT_SPEC" ]; then
+		{
+			echo "spec=$ROOT_SPEC"
+			case "$ROOT_SPEC" in
+			PARTLABEL=*) label=${ROOT_SPEC#PARTLABEL=} ;;
+			*) label=; echo 'unsupported spec (PARTLABEL=<name> only)' ;;
+			esac
+			# The UFS attach finishes after userspace starts; wait bounded.
+			rootdev=; waited=0
+			while [ -n "$label" ] && [ "$waited" -lt 30 ]; do
+				rootdev=$(find_partlabel "$label") && break
+				rootdev=; waited=$((waited + 1)); sleep 1
+			done
+			echo "label=$label device=${rootdev:-NOT-FOUND} waited=${waited}s"
+			if [ -n "$rootdev" ]; then
+				mkdir -p /newroot
+				mount -t ext4 -o rw "$rootdev" /newroot
+				echo "mount rc=$?"
+				grep ' /newroot ' /proc/mounts
+			fi
+		} > /run/evidence/root.txt 2>&1
+	fi
+	if [ -n "$ROOT_SPEC" ] && grep -q ' /newroot ext4 ' /proc/mounts &&
+		[ -x /newroot/usr/lib/systemd/systemd ]; then
+		install_debug_channel /newroot
+		switch_to_newroot /run/evidence/root.txt
 	fi
 else
 	echo USB_SETUP_FAILURE
