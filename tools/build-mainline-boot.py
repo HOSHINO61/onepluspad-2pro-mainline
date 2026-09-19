@@ -29,7 +29,7 @@ CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
 # The one authoritative desktop-session cmdline. Everything beyond the base
 # contract lives here, not in per-invocation shell history: bump the rootfs
 # name when the default layer advances.
-DESKTOP_EXTRA = ('erhai.watchdog=5400 '
+DESKTOP_EXTRA = ('erhai.watchdog=900 erhai.session=5400 '
                  'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
                  'erhai.switchroot=1')
 

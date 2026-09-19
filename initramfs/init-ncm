@@ -15,13 +15,19 @@ mount -t tmpfs tmpfs /run
 mkdir -p /run/evidence
 
 WATCHDOG_SECONDS=600
+SESSION_SECONDS=
 WB=0
 for arg in $(cat /proc/cmdline); do
 	case "$arg" in
 	erhai.watchdog=*) WATCHDOG_SECONDS=${arg#erhai.watchdog=} ;;
+	erhai.session=*) SESSION_SECONDS=${arg#erhai.session=} ;;
 	erhai.wb=1) WB=1 ;;
 	esac
 done
+# erhai.watchdog bounds the initramfs phase only (a boot that wedges before the
+# hand-off must not sit for a whole desktop session); erhai.session, when
+# given, is the length of the desktop session installed at switch_root.
+[ -n "$SESSION_SECONDS" ] || SESSION_SECONDS=$WATCHDOG_SECONDS
 echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
 # Bounded self-recovery with observable stages: armed marker above, fired
 # marker before the reboot attempt, sysrq fallback if reboot -f returns.
@@ -141,9 +147,26 @@ echo 'BLOCK_READONLY=true' > /run/evidence/block-guard.txt
 # in the kernel. One-shot; debugfs may need the mount here.
 mkdir -p /sys/kernel/debug
 [ -e /sys/kernel/debug/devices_deferred ] || mount -t debugfs none /sys/kernel/debug
-grep -E "mdp|dispcc|dpu|dsi" /sys/kernel/debug/clk/clk_summary > /run/evidence/clks.txt 2>/dev/null
+grep -E "disp_cc|mdp|dpu|dsi|gpu_cc|gpucc" /sys/kernel/debug/clk/clk_summary > /run/evidence/clks.txt 2>/dev/null
 [ -e /sys/kernel/debug/nt36536-panel/status ] &&
 	cat /sys/kernel/debug/nt36536-panel/status > /run/evidence/panel-status.txt 2>&1
+
+# Display-link ground truth while fbcon is actively driving (deterministic:
+# this runs after the panel probes, before any desktop blanking). The INTF
+# frame counter sampled twice tells whether frames complete at all; the DSI
+# CTRL/STATUS0 tell whether the link is enabled and the video engine busy.
+{
+	for a in 0x0ae94000 0x0ae96000; do
+		echo "dsi@$a ctrl=$(devmem $a 32) status0=$(devmem $((a+4)) 32) dsc=$(devmem $((a+668)) 32)"
+	done
+	for a in 0x0ae36000 0x0ae37000; do
+		echo "intf@$a te_en=$(devmem $a 32) frame=$(devmem $((a+172)) 32) status=$(devmem $((a+620)) 32)"
+	done
+	sleep 1
+	for a in 0x0ae36000 0x0ae37000; do
+		echo "intf@$a frame2=$(devmem $((a+172)) 32)"
+	done
+} > /run/evidence/dsiregs.txt 2>&1
 
 # Optional writeback capture (erhai.wb=1): grab what the DPU actually scans
 # out (fbcon content, then known color bars painted into fb0). Runs before
@@ -223,7 +246,7 @@ if /bin/usb-ncm; then
 		# The initramfs daemons must die BEFORE the switch: their deleted
 		# binaries keep serving sockets that would otherwise collide with
 		# the debug services starting inside the desktop rootfs.
-		expiry=$((WATCHDOG_SECONDS - 120)); [ "$expiry" -lt 60 ] && expiry=60
+		expiry=$((SESSION_SECONDS - 120)); [ "$expiry" -lt 60 ] && expiry=60
 		# Expose the overlay upper inside the new root: after switch_root the
 		# initramfs /run is covered by systemd's fresh tmpfs and the upperdir
 		# otherwise has no reachable path, making delta captures impossible.
