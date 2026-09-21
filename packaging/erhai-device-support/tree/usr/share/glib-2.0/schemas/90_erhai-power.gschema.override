@@ -1,0 +1,33 @@
+# erhai display power: the settings this tablet has been measured to keep.
+#
+# The screen blanks when it is idle and comes back on the next input event,
+# and the machine suspends and resumes, both verified on the hardware. What is
+# still left alone is what nobody has answered yet.
+[org.gnome.settings-daemon.plugins.power]
+# A power-key press puts GNOME's dialog on the screen instead of suspending
+# straight away. Suspend works, but nobody has yet pressed the power key to
+# come back from one -- the key is a registered wakeup source in the kernel,
+# which is not the same as a person having seen it wake the tablet. Until it
+# has, a deliberate choice is the right thing for the only button this machine
+# has.
+power-button-action='interactive'
+# Same reason: suspending by itself after a timeout is a thing the tablet
+# would do while nobody is holding it, so it waits for the key press to be
+# confirmed.
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-type='nothing'
+idle-dim=true
+
+[org.gnome.desktop.session]
+# Five minutes, the GNOME default. The blank and the wake are the part that
+# was broken and is now measured: three blank/wake cycles in a row bring the
+# desktop back, before and after a suspend.
+idle-delay=uint32 300
+
+[org.gnome.desktop.screensaver]
+# The one thing still turned off. A locked screen on this tablet has to be
+# answered on an on-screen keyboard -- there is no hardware one that works
+# (TECH-DEBT D13) -- and nobody has yet watched that keyboard appear here. A
+# lock that cannot be answered is a reboot, so it stays off until someone has
+# seen it work, and then this line goes away.
+lock-enabled=false

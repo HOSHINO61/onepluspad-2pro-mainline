@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+# The logind drop-in was named for the stopgap it carried: suspend did not
+# work, the idle blank did not wake, and nothing was allowed to put the tablet
+# to sleep. Both now do, so the file says something else and is named for what
+# it is. dpkg has to be told, or the old conffile is left behind to fight the
+# new one.
+if command -v dpkg-maintscript-helper >/dev/null 2>&1; then
+	dpkg-maintscript-helper mv_conffile \
+		/etc/systemd/logind.conf.d/90-erhai-stopgap.conf \
+		/etc/systemd/logind.conf.d/90-erhai-power.conf \
+		0.1.6~ -- "$@"
+fi
+
+exit 0

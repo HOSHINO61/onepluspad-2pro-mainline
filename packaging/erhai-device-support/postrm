@@ -2,20 +2,20 @@
 # SPDX-License-Identifier: GPL-2.0-only
 set -e
 
-SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
 BT_UNITS='erhai-bt-address-generate.service erhai-bt-address.service'
 WIFI_UNITS='erhai-wifi-address-generate.service'
 
+if command -v dpkg-maintscript-helper >/dev/null 2>&1; then
+	dpkg-maintscript-helper mv_conffile \
+		/etc/systemd/logind.conf.d/90-erhai-stopgap.conf \
+		/etc/systemd/logind.conf.d/90-erhai-power.conf \
+		0.1.6~ -- "$@"
+fi
+
 case "$1" in
 remove | purge)
-	# Undo the masks this package's postinst put in place. Suspend still does
-	# not work on this hardware -- removing the package is a statement that the
-	# user wants the distribution's behaviour back, not that the bug is fixed.
-	if command -v systemctl >/dev/null 2>&1; then
-		# shellcheck disable=SC2086
-		systemctl unmask --quiet $SLEEP_TARGETS || true
-		[ -d /run/systemd/system ] && systemctl daemon-reload || true
-	fi
+	# Nothing to unmask: this package no longer masks the sleep targets, and
+	# a mask it did not put there is not its to take away.
 	if command -v glib-compile-schemas >/dev/null 2>&1; then
 		glib-compile-schemas /usr/share/glib-2.0/schemas || true
 	fi

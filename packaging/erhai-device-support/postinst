@@ -7,6 +7,13 @@ BT_UNITS='erhai-bt-address-generate.service erhai-bt-address.service'
 WIFI_UNITS='erhai-wifi-address-generate.service'
 ASIDE=/var/lib/erhai/switch/pre-deb
 
+if command -v dpkg-maintscript-helper >/dev/null 2>&1; then
+	dpkg-maintscript-helper mv_conffile \
+		/etc/systemd/logind.conf.d/90-erhai-stopgap.conf \
+		/etc/systemd/logind.conf.d/90-erhai-power.conf \
+		0.1.6~ -- "$@"
+fi
+
 case "$1" in
 configure)
 	# Before there was a package the switcher was copied into /usr/local/sbin
@@ -52,18 +59,19 @@ configure)
 		udevadm control --reload-rules >/dev/null 2>&1 || true
 	fi
 
-	# D19/D23: a suspend blanks this tablet until a long power-key press, and
-	# the idle blank does not come back on touch either. The gsettings override
-	# and the logind drop-in ship as files; the sleep targets have to be masked
-	# here. Both come back with `systemctl unmask` when the package is removed.
+	# Suspend used to blank this tablet until a long power-key press, so an
+	# earlier version of this package masked the four sleep targets. It
+	# suspends and resumes now, so take the masks off again -- and do it
+	# whatever version is being upgraded from, because a mask this package
+	# put there is this package's to remove.
 	if command -v systemctl >/dev/null 2>&1; then
 		# shellcheck disable=SC2086
-		systemctl mask --quiet $SLEEP_TARGETS || true
+		systemctl unmask --quiet $SLEEP_TARGETS || true
 		[ -d /run/systemd/system ] && systemctl daemon-reload || true
 	fi
-	# logind reads its drop-ins at start, so the ignored power key takes effect
-	# at the next boot; nothing here restarts logind, which would end the
-	# user's session mid-upgrade.
+	# logind reads its drop-ins at start, so the power-key setting takes
+	# effect at the next boot; nothing here restarts logind, which would end
+	# the user's session mid-upgrade.
 	if command -v glib-compile-schemas >/dev/null 2>&1; then
 		glib-compile-schemas /usr/share/glib-2.0/schemas || true
 	fi
