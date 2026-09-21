@@ -25,7 +25,7 @@ erhai-firmware needs neither the ROM cache nor the network.
     tools/build-debs.py --avb-key <key>.pem --avbtool <avbtool.py>
 
     --debug              build the triplet with the debug channel enabled and
-                         mark the version +dbg. Off by default: the persistent
+                         mark the version ~dbg. Off by default: the persistent
                          install ships without an unauthenticated root telnet.
     --triplet-signed D   use an already-signed triplet instead of building one
                          (no kernel build, no AVB key needed)
@@ -35,6 +35,36 @@ erhai-firmware needs neither the ROM cache nor the network.
                          --refresh-apply the new bytes and their hashes are
                          taken into the tree -- this is how a later ROM version
                          gets in.
+
+Versions
+--------
+
+    <release>[~dbg]+g<kernel commit>.b<build id>
+    0.1.1+g1e4124bb816d.b3f2a9c41       0.1.1~dbg+g1e4124bb816d.b3f2a9c41
+
+<release> comes from packaging/VERSION and is bumped by hand for each release
+meant to install over the last one. It is the only part dpkg's ordering ever
+reaches, because every build of one release carries the same one: the earlier
+scheme put a payload digest where the counter belongs, so half of all new
+builds sorted *below* the installed package and apt called them downgrades.
+
+The rest names the build rather than ordering it. <kernel commit> is the
+kernel the triplet was built from, so `dpkg -l` says which kernel is installed
+without opening a package; it is left out when the triplet came in already
+signed and its commit is therefore unknown. <build id> is a digest of
+everything the four packages contain -- each staged payload *and* each
+package's DEBIAN templates as they read before @VERSION@ is filled in, so a
+changed description or maintainer script produces a new id where before only
+payload bytes did. The version cannot be part of its own seed, which is why it
+is the templates and not the finished control files that go in.
+
+~dbg sorts below the plain release, so at one release counter the product
+build installs over the debug build and not the other way round: a debug build
+carries an unauthenticated root telnet, and leaving it in place should take a
+deliberate bump rather than happen by ordering accident.
+
+Two builds from the same inputs still produce the same four files byte for
+byte; nothing in the version is drawn from the clock or the build host.
 
 The AVB signing key and avbtool stay on the build host. They are inputs to the
 build, never contents of a package.
@@ -65,8 +95,9 @@ else:
 PACKAGING = REPO / 'packaging'
 FIRMWARE = PACKAGING / 'firmware'
 MANIFEST = PACKAGING / 'firmware-manifest.json'
-UPSTREAM_VERSION = '0.1.0'
+VERSION_FILE = PACKAGING / 'VERSION'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
+DEBIAN_SCRIPTS = ('preinst', 'postinst', 'prerm', 'postrm')
 PACKAGES = ('erhai-device-support', 'erhai-firmware', 'erhai-kernel', 'erhai-device')
 PARTS = ('boot', 'init_boot', 'vendor_boot')
 SWITCHER_PROGRAMS = ('erhai-switch', 'erhai-switch-install-ubuntu-images')
@@ -324,12 +355,24 @@ def install_file(source, target, mode):
 
 
 def copy_tree(source, root):
+    """Pack a packaging tree as it is checked out, executable bits and all.
+
+    Git records the executable bit, so a program that lives in the tree -- a
+    unit's ExecStart, say -- arrives installable without the build script
+    having to carry a list of which files are programs.
+    """
     for entry in sorted(source.rglob('*')):
         if entry.is_dir():
             continue
         if entry.is_symlink():
             die(f'packaging tree carries a symlink, which is not packed: {entry}')
-        install_file(entry, root / entry.relative_to(source), 0o644)
+        # Bytecode caches are not part of the package. Running one of the
+        # tree's own programs from the checkout leaves a __pycache__ beside
+        # it, and it would otherwise be packed into /usr/sbin.
+        if '__pycache__' in entry.parts or entry.suffix == '.pyc':
+            continue
+        mode = 0o755 if entry.stat().st_mode & 0o100 else 0o644
+        install_file(entry, root / entry.relative_to(source), mode)
 
 
 def stage_device_support(root):
@@ -471,6 +514,42 @@ def tree_digest(root):
     return digest.hexdigest()
 
 
+def metadata_digest(package, substitutions):
+    """A canonical digest of what a package says about itself.
+
+    The build id has to cover the DEBIAN side too -- a reworded description or
+    an edited maintainer script is a different package -- but the finished
+    control file holds the version, and a version cannot be part of its own
+    seed. So the templates go in, as they read before @VERSION@ is filled in,
+    together with every substitution that is not the version itself.
+    """
+    digest = hashlib.sha256()
+    for name in ('control', *DEBIAN_SCRIPTS):
+        source = PACKAGING / package / name
+        if source.is_file():
+            digest.update(f'{name} {sha256_file(source)}\n'.encode())
+    for key in sorted(substitutions):
+        digest.update(f'{key} {substitutions[key]}\n'.encode())
+    return digest.hexdigest()
+
+
+def read_release():
+    """The release counter from packaging/VERSION: the orderable part of the version."""
+    if not VERSION_FILE.is_file():
+        die(f'{VERSION_FILE.relative_to(REPO)} is missing; it holds the release counter')
+    lines = [line.strip() for line in VERSION_FILE.read_text().splitlines()]
+    values = [line for line in lines if line and not line.startswith('#')]
+    if len(values) != 1:
+        die(f'{VERSION_FILE.relative_to(REPO)} must hold exactly one version line')
+    release = values[0]
+    # Debian upstream versions start with a digit; ~ and + are reserved here
+    # for the debug marker and the build id this script appends.
+    if not re.fullmatch(r'[0-9][0-9A-Za-z.]*', release):
+        die(f'{VERSION_FILE.relative_to(REPO)} holds {release!r}, which is not a '
+            f'release counter of the form 0.1.2')
+    return release
+
+
 def installed_size_kib(root):
     """What the payload costs on disk, in KiB; DEBIAN/ is not installed."""
     total = 0
@@ -485,7 +564,7 @@ def write_control(root, package, version, substitutions):
     debian = root / 'DEBIAN'
     debian.mkdir(parents=True, exist_ok=True)
     text = (PACKAGING / package / 'control').read_text()
-    values = {'@VERSION@': version, '@MAINTAINER@': MAINTAINER,
+    values = {'@VERSION@': version,
               '@INSTALLED_SIZE@': str(installed_size_kib(root)), **substitutions}
     for key, value in values.items():
         text = text.replace(key, value)
@@ -495,7 +574,7 @@ def write_control(root, package, version, substitutions):
     (debian / 'control').write_text(text)
     (debian / 'control').chmod(0o644)
 
-    for script in ('preinst', 'postinst', 'prerm', 'postrm'):
+    for script in DEBIAN_SCRIPTS:
         source = PACKAGING / package / script
         if not source.is_file():
             continue
@@ -571,7 +650,8 @@ def main():
     parser.add_argument('--triplet-signed', type=Path,
                         help='Use this already-signed triplet instead of building one')
     parser.add_argument('--debug', action='store_true',
-                        help='Enable the debug channel in the packaged kernel command line')
+                        help='Enable the debug channel in the packaged kernel command '
+                             'line and mark the version ~dbg')
     parser.add_argument('--refresh-from-rom', action='store_true',
                         help='Re-extract the firmware closure from the pinned ROM and '
                              'upstream inputs and diff it against packaging/firmware')
@@ -618,16 +698,26 @@ def main():
                 kernel_meta = stage_kernel(root, args, work, release)
             roots[package] = root
 
-        # One build id for the set, derived from what the set actually
-        # contains. Two builds from the same inputs get the same version, and a
-        # changed byte anywhere produces a new one.
-        payloads = {package: tree_digest(root) for package, root in roots.items()}
-        seed = ''.join(f'{package} {payloads[package]}\n' for package in sorted(payloads))
-        version = f'{UPSTREAM_VERSION}+b{hashlib.sha256(seed.encode()).hexdigest()[:8]}'
-        if args.debug:
-            version += '+dbg'
+        substitutions = {'@KERNEL_RELEASE@': release or '',
+                         '@MAINTAINER@': MAINTAINER}
 
-        substitutions = {'@KERNEL_RELEASE@': release or ''}
+        # One build id for the set, derived from everything the set contains:
+        # the staged payloads and the DEBIAN templates behind them. Two builds
+        # from the same inputs get the same id, and a changed byte anywhere --
+        # a firmware file, a unit, a description -- produces a new one. It
+        # identifies the build; packaging/VERSION is what orders it.
+        payloads = {package: tree_digest(root) for package, root in roots.items()}
+        metadata = {package: metadata_digest(package, substitutions) for package in roots}
+        seed = ''.join(f'{package} payload {payloads[package]} '
+                       f'metadata {metadata[package]}\n' for package in sorted(roots))
+        build_id = hashlib.sha256(seed.encode()).hexdigest()[:8]
+        commit = (kernel_meta or {}).get('kernel_commit')
+        stamp = f'+g{commit[:12]}.b{build_id}' if commit else f'+b{build_id}'
+        # ~ sorts below everything, so the product build of a release installs
+        # over its debug build and never the reverse.
+        release_counter = read_release()
+        version = release_counter + ('~dbg' if args.debug else '') + stamp
+
         epoch = source_date_epoch(args.kernel_out)
         built = []
         for package in wanted:
@@ -637,6 +727,8 @@ def main():
 
         summary = {
             'version': version,
+            'release': release_counter,
+            'build_id': build_id,
             'source_date_epoch': epoch,
             'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'debug_channel': bool(args.debug),
@@ -644,7 +736,8 @@ def main():
             'firmware_files': len(manifest['files']),
             'packages': {path.name: {'sha256': sha256_file(path),
                                      'bytes': path.stat().st_size,
-                                     'payload_sha256': payloads[path.name.split('_')[0]]}
+                                     'payload_sha256': payloads[path.name.split('_')[0]],
+                                     'metadata_sha256': metadata[path.name.split('_')[0]]}
                          for path in built},
         }
         (out_dir / 'build-manifest.json').write_text(json.dumps(summary, indent=2) + '\n')
