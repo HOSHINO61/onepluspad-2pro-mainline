@@ -7,6 +7,7 @@
 # hand out a stale kernel.
 
 SKIPUNZIP=0
+MODDIR_AT_RUNTIME=/data/adb/modules/erhai_switch
 
 ui_print "- erhai dual boot switch"
 
@@ -22,5 +23,9 @@ set_perm "$MODPATH/system/bin/erhai-switch" 0 0 0755
 set_perm_recursive "$MODPATH/webroot" 0 0 0755 0644
 
 ui_print "- installed /system/bin/erhai-switch"
+# Whether that path exists at run time is KernelSU's business, and on some
+# builds its module mount never appears; the module directory always does.
+ui_print "- if 'erhai-switch' is not on PATH after the reboot, call it as"
+ui_print "  $MODDIR_AT_RUNTIME/system/bin/erhai-switch"
 ui_print "- run 'erhai-switch status' in a root shell, or use the WebUI button"
 ui_print "- it refuses to switch until the Linux root carries a signed triplet"

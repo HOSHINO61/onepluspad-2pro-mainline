@@ -34,6 +34,16 @@ const out = document.getElementById('out');
 const go = document.getElementById('go');
 const check = document.getElementById('check');
 
+// KernelSU is supposed to mount a module's system/ over /system, which would
+// put erhai-switch on PATH. On this tablet's ColorOS build that mount never
+// appears -- the module installs and enables, and /system/bin/erhai-switch
+// still does not exist, in the init mount namespace either (measured
+// 2026-09-21). The module directory is a real path whatever happens, so
+// resolve the script instead of assuming PATH.
+const SWITCH =
+  '$(command -v erhai-switch || ' +
+  'echo /data/adb/modules/erhai_switch/system/bin/erhai-switch)';
+
 // KernelSU's WebUI bridge. Kept behind one function so the page says what is
 // wrong instead of failing silently when it is opened outside the manager.
 function exec(cmd) {
@@ -73,8 +83,8 @@ async function run(cmd, busy) {
 // wait for: the page simply goes away with the system.
 go.addEventListener('click', () => {
   if (!confirm('Write the Ubuntu triplet into the active slot and reboot?')) return;
-  run('erhai-switch to-ubuntu', 'archiving Android, writing Ubuntu, verifying…');
+  run(SWITCH + ' to-ubuntu', 'archiving Android, writing Ubuntu, verifying…');
 });
-check.addEventListener('click', () => run('erhai-switch status', 'reading…'));
-run('erhai-switch status', 'reading…');
+check.addEventListener('click', () => run(SWITCH + ' status', 'reading…'));
+run(SWITCH + ' status', 'reading…');
 </script>

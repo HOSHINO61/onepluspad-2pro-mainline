@@ -80,6 +80,16 @@ erhai-switch to-android      # install the archive, reboot
 Root: `sudo`/`pkexec` on Ubuntu, a KernelSU root shell on Android.
 `--no-reboot` stops before the reboot, `--dry-run` writes nothing at all.
 
+Whether `erhai-switch` is on PATH on the Android side depends on KernelSU
+mounting the module's `system/` over `/system`, and that mount does not
+appear on every build — on the tablet's own ColorOS it does not, in the init
+mount namespace either. The module directory is a real path regardless, so
+the WebUI resolves the script at run time and a root shell can always use:
+
+```sh
+su -c '/data/adb/modules/erhai_switch/system/bin/erhai-switch to-ubuntu'
+```
+
 Safety rules the script enforces, in this order: a set with a missing or
 non-matching `SHA256SUMS` is refused before any write; every partition is
 written whole, synced, read back and compared; a read-back that does not match
