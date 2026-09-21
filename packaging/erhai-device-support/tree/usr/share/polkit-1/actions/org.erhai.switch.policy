@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  pkexec resolves a program to an action through the exec.path annotation, so
+  this one action covers every erhai-switch subcommand. They all end in the
+  same place: three boot partitions of the active slot are rewritten and the
+  tablet restarts into the other system. Authenticating as an administrator is
+  the right bar for that, and there is no weaker variant worth declaring.
+
+  No accompanying rules.d snippet: on this system an administrator is already
+  the person sitting in front of the tablet, so auth_admin_keep asks for their
+  own password and a JavaScript rule granting exactly that would only add a
+  file that can break polkit parsing for everything else.
+-->
+<policyconfig>
+  <vendor>erhai mainline port</vendor>
+
+  <action id="org.erhai.switch.run">
+    <description>Switch the system in the active boot slot</description>
+    <message>Authentication is required to swap the boot images and restart the tablet</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/sbin/erhai-switch</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

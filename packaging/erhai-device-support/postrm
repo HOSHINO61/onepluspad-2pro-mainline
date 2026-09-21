@@ -1,0 +1,26 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
+
+case "$1" in
+remove | purge)
+	# Undo the masks this package's postinst put in place. Suspend still does
+	# not work on this hardware -- removing the package is a statement that the
+	# user wants the distribution's behaviour back, not that the bug is fixed.
+	if command -v systemctl >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		systemctl unmask --quiet $SLEEP_TARGETS || true
+		[ -d /run/systemd/system ] && systemctl daemon-reload || true
+	fi
+	if command -v glib-compile-schemas >/dev/null 2>&1; then
+		glib-compile-schemas /usr/share/glib-2.0/schemas || true
+	fi
+	if command -v update-desktop-database >/dev/null 2>&1; then
+		update-desktop-database -q /usr/share/applications || true
+	fi
+	;;
+esac
+
+exit 0

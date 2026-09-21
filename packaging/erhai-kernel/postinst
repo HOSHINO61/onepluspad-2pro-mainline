@@ -1,0 +1,27 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+RELEASE='@KERNEL_RELEASE@'
+IMAGES=/usr/lib/erhai/boot/$RELEASE
+INSTALLER=/usr/sbin/erhai-switch-install-ubuntu-images
+
+case "$1" in
+configure)
+	[ -x "$INSTALLER" ] ||
+		{ echo "erhai-kernel: $INSTALLER is missing" >&2; exit 1; }
+	if [ -d /run/systemd/system ]; then
+		# A booted system. The store takes the new set, and if Ubuntu is the
+		# one in the slot the slot is rewritten in place -- otherwise the next
+		# boot would still run the old kernel. No reboot from here: apt is in
+		# the middle of a transaction and the user decides when to restart.
+		"$INSTALLER" "$IMAGES"
+	else
+		# Assembly in a chroot: fill the store, touch no partition. There is no
+		# active slot in here, and /dev belongs to whatever is doing the build.
+		"$INSTALLER" "$IMAGES" --no-activate
+	fi
+	;;
+esac
+
+exit 0

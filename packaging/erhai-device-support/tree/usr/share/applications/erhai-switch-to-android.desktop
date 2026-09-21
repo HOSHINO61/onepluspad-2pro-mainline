@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Switch to Android
+Comment=Put the Android boot images back in the active slot and restart
+Exec=pkexec /usr/sbin/erhai-switch to-android
+Icon=system-reboot
+Terminal=false
+StartupNotify=false
+NoDisplay=false
+Categories=System;
+Keywords=android;dualboot;reboot;switch;

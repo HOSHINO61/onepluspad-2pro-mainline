@@ -1,0 +1,12 @@
+# The switcher appends to one log from both systems -- Ubuntu as root and
+# Android from a KernelSU root shell -- so the file is rotated by copying and
+# truncating rather than renamed out from under a writer that is not running
+# under this init at all.
+/var/lib/erhai/switch/switch.log {
+	rotate 5
+	size 256k
+	missingok
+	notifempty
+	copytruncate
+	create 0644 root root
+}

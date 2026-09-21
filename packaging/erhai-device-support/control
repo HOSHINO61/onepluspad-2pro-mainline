@@ -1,0 +1,25 @@
+Package: erhai-device-support
+Version: @VERSION@
+Architecture: all
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Section: admin
+Priority: optional
+Depends: systemd
+Description: OnePlus Pad 2 Pro (erhai) device support
+ Everything the mainline port needs in the running system that is neither a
+ firmware blob nor a kernel: the dual-boot switcher that rotates the Android
+ and Ubuntu boot triplets through the active A/B slot, the store it keeps
+ under /var/lib/erhai/switch, a desktop entry and polkit action for the
+ Android direction, and the power settings this port needs until
+ suspend/resume works.
+ .
+ It also disables flash-kernel (/etc/flash-kernel/machine = "none", the tool's
+ own documented switch). The distribution's initramfs hooks call it whenever a
+ kernel or firmware trigger fires, it has no database entry for this tablet,
+ and it would have nothing to do if it had one: the boot images are built by
+ erhai-kernel and written by erhai-switch. Left enabled it fails and takes
+ dracut's configure down with it.
+ .
+ Nothing here is tied to a particular kernel build. The boot images belong to
+ erhai-kernel, which drives this package's installer from its own postinst.

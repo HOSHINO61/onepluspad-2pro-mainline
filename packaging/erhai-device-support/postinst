@@ -1,0 +1,48 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
+ASIDE=/var/lib/erhai/switch/pre-deb
+
+case "$1" in
+configure)
+	# Before there was a package the switcher was copied into /usr/local/sbin
+	# by hand, and /usr/local/sbin comes first on root's PATH. A copy left
+	# there would keep shadowing the packaged one, so an upgrade would install
+	# a new switcher and the old one would still be what runs -- and what runs
+	# writes boot partitions. Move an *unpackaged* copy out of the way rather
+	# than delete it: it is somebody's file, it just may not stay on PATH.
+	for prog in erhai-switch erhai-switch-install-ubuntu-images; do
+		stale=/usr/local/sbin/$prog
+		[ -e "$stale" ] || continue
+		dpkg-query -S "$stale" >/dev/null 2>&1 && continue
+		mkdir -p "$ASIDE"
+		if mv -f "$stale" "$ASIDE/$prog"; then
+			echo "erhai-device-support: $stale predates this package and shadows" \
+			     "/usr/sbin/$prog; moved to $ASIDE/$prog" >&2
+		fi
+	done
+
+	# D19/D23: a suspend blanks this tablet until a long power-key press, and
+	# the idle blank does not come back on touch either. The gsettings override
+	# and the logind drop-in ship as files; the sleep targets have to be masked
+	# here. Both come back with `systemctl unmask` when the package is removed.
+	if command -v systemctl >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		systemctl mask --quiet $SLEEP_TARGETS || true
+		[ -d /run/systemd/system ] && systemctl daemon-reload || true
+	fi
+	# logind reads its drop-ins at start, so the ignored power key takes effect
+	# at the next boot; nothing here restarts logind, which would end the
+	# user's session mid-upgrade.
+	if command -v glib-compile-schemas >/dev/null 2>&1; then
+		glib-compile-schemas /usr/share/glib-2.0/schemas || true
+	fi
+	if command -v update-desktop-database >/dev/null 2>&1; then
+		update-desktop-database -q /usr/share/applications || true
+	fi
+	;;
+esac
+
+exit 0

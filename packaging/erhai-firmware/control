@@ -1,0 +1,22 @@
+Package: erhai-firmware
+Version: @VERSION@
+Architecture: all
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Section: kernel
+Priority: optional
+Description: OnePlus Pad 2 Pro (erhai) firmware closure
+ The firmware this unit's mainline drivers ask for by name and the
+ distribution does not ship under that name: the NT36536 touch controller's
+ application firmware, the Adreno 830 SQE/GMU/AQE microcode and its zap
+ shader, the WCN7860 Wi-Fi and Bluetooth images, and the ADSP PIL set.
+ .
+ This kernel is built without CONFIG_FW_LOADER_COMPRESS, so the zstd-suffixed
+ copies in linux-firmware are unreadable to it even where the same file
+ exists; every path here is a plain file under a name no other package owns,
+ so nothing is diverted and nothing is overwritten.
+ .
+ The binaries are not in the project's source tree. They are extracted at
+ build time from pinned inputs -- the stock ROM images of the firmware this
+ unit runs and the pinned upstream archives -- and every file is checked
+ against packaging/firmware-manifest.json before it is packed.

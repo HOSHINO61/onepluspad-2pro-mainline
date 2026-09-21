@@ -33,6 +33,7 @@ Not yet: panel visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 tools/       build & packaging entry points (see below)
 initramfs/   RAM userspace profiles (USB ACM console / NCM evidence channel)
 switch/      dual-boot switcher and its KernelSU module (see switch/README.md)
+packaging/   debian metadata for the device .deb set (see tools/build-debs.py)
 kernel/      source.json pinning the kernel repo identity and tool inputs
 ```
 
@@ -84,6 +85,37 @@ hash footer (`tools/sign-boot-triplet.py`), self-signed included — `vbmeta`
 lists `boot` as a chain partition, so a missing footer is malformed metadata
 that even an unlocked bootloader refuses. See `switch/README.md`.
 
+## Device packages
+
+The installed system is Canonical's Ubuntu, unpacked as it ships and free to
+follow upstream through apt. Everything this tablet needs on top of it is a
+package, and each package owns exactly what it installs:
+
+```sh
+tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
+```
+
+| Package | Owns |
+|---|---|
+| `erhai-device-support` | `/usr/sbin/erhai-switch{,-install-ubuntu-images}`, the store directory and its logrotate snippet, the "Switch to Android" desktop entry and its polkit action, and the power settings this port needs until suspend/resume works |
+| `erhai-kernel` | the signed boot triplet under `/usr/lib/erhai/boot/<release>/`; its postinst hands the set to the switcher's installer, so **a kernel update is an apt upgrade** |
+| `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
+| `erhai-device` | a metapackage depending on the three |
+
+The build needs no root (`dpkg-deb --root-owner-group` on a staged tree) and
+takes its firmware from pinned inputs — the stock ROM images of the firmware
+the unit runs and the pinned upstream archives — checking every extracted byte
+against `packaging/firmware-manifest.json`. No firmware binary is in this tree,
+and neither the AVB signing key nor avbtool ever enters a package.
+
+Two builds of the same inputs produce the same bytes: the version carries a
+build id derived from the packaged content (`0.1.0+b<8 hex>`), the AVB footers
+use a salt derived from the image instead of avbtool's random default, and the
+archive timestamps are pinned to the kernel commit.
+
+`--debug` builds the triplet with the RAM session's debug channel enabled and
+marks the version `+dbg`. The default is off: see Safety.
+
 ## Safety
 
 RAM sessions write nothing to flash. Anything beyond that — partitioning,
@@ -96,6 +128,9 @@ The RAM session's debug channel is an **unauthenticated root telnet** on the
 USB NCM link by design (it is the only bring-up channel on this device). It
 lives only inside the bounded RAM session with a watchdog that reboots back
 to Android; never carry it into a persistent install or a shipped image.
+`tools/build-debs.py` therefore leaves it out of `erhai-kernel` unless it is
+asked for explicitly with `--debug`, which also marks the version `+dbg` so an
+installed debug build is visible in `dpkg -l`.
 
 ## License
 

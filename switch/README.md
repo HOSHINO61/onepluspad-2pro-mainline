@@ -50,6 +50,14 @@ ksu-module/                          KernelSU module: the script + one button
 tests/switch-selftest.sh             decision-logic self-test (files, not a device)
 ```
 
+On the Ubuntu side these are not copied by hand: `erhai-device-support`
+installs both scripts into `/usr/sbin` and owns the store directory, and
+`erhai-kernel`'s postinst calls the installer with the triplet it just shipped
+(see the main README). The package's postinst also moves any pre-package copy
+in `/usr/local/sbin` aside -- that directory comes first on root's PATH, so a
+leftover there would keep shadowing the packaged switcher. On the Android side
+nothing changes: the KernelSU module carries the same script and no images.
+
 ## Store layout
 
 On the Linux root filesystem, so both systems see the same archive. Android
@@ -79,6 +87,14 @@ erhai-switch to-android      # install the archive, reboot
 
 Root: `sudo`/`pkexec` on Ubuntu, a KernelSU root shell on Android.
 `--no-reboot` stops before the reboot, `--dry-run` writes nothing at all.
+
+In a desktop session the Android direction is also an application:
+`erhai-device-support` ships a **Switch to Android** entry that runs
+`pkexec erhai-switch to-android` against the polkit action
+`org.erhai.switch.run`, so it asks for an administrator password and nothing
+else. There is deliberately no desktop entry for the other direction: from
+Ubuntu the tablet is already in Ubuntu, and the way back is the KernelSU
+module's button on the Android side.
 
 Whether `erhai-switch` is on PATH on the Android side depends on KernelSU
 mounting the module's `system/` over `/system`, and that mount does not
