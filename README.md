@@ -33,7 +33,8 @@ Not yet: panel visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 tools/       build & packaging entry points (see below)
 initramfs/   RAM userspace profiles (USB ACM console / NCM evidence channel)
 switch/      dual-boot switcher and its KernelSU module (see switch/README.md)
-packaging/   debian metadata for the device .deb set (see tools/build-debs.py)
+packaging/   debian metadata for the device .deb set (see tools/build-debs.py),
+             and firmware/ -- the device firmware closure it packs
 kernel/      source.json pinning the kernel repo identity and tool inputs
 ```
 
@@ -52,9 +53,10 @@ never inputs to the next build.
 - The stock `dtbo.img` and base DTB tables of *your* unit (payload.dumper from
   the stock OTA package) at `cache/stock-c34/` — ABL requires the boot DTB to
   carry the stock overlay symbols and root identity.
-- Device firmware blobs extracted read-only from your own unit: the NT36536
-  touch firmware (`tools/extract-nt36536-fw.py` from the vendor headfile or
-  dtbo blob) and the ADSP `adsp.m*` + `adsp_dtb.*` set from `modem_a`.
+- Nothing for firmware: `packaging/firmware/` already carries the closure this
+  unit needs, and `packaging/firmware/README.md` says where every file came
+  from. Only moving to a later stock ROM needs the ROM itself, through
+  `tools/build-debs.py --refresh-from-rom`.
 - Ubuntu Base 26.04 ARM64 tarball (pinned sha256) for the desktop demo.
 
 ## Quickstart
@@ -103,10 +105,13 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-device` | a metapackage depending on the three |
 
 The build needs no root (`dpkg-deb --root-owner-group` on a staged tree) and
-takes its firmware from pinned inputs — the stock ROM images of the firmware
-the unit runs and the pinned upstream archives — checking every extracted byte
-against `packaging/firmware-manifest.json`. No firmware binary is in this tree,
-and neither the AVB signing key nor avbtool ever enters a package.
+takes its firmware from `packaging/firmware/`, checking every file against the
+sha256 and size recorded in `packaging/firmware-manifest.json` before packing
+it — so `erhai-firmware` builds out of this checkout alone, with no ROM cache
+and no network. `--refresh-from-rom` runs the other direction: it extracts the
+closure from the pinned stock ROM images and upstream archives again and diffs
+that against the tree, which is how a later ROM version gets in. Neither the
+AVB signing key nor avbtool ever enters a package.
 
 Two builds of the same inputs produce the same bytes: the version carries a
 build id derived from the packaged content (`0.1.0+b<8 hex>`), the AVB footers
@@ -136,3 +141,12 @@ installed debug build is visible in `dpkg -l`.
 
 GPL-2.0-only (see LICENSE), matching the integration scripts' SPDX headers.
 Kernel and third-party inputs keep their own licenses and authors.
+
+`packaging/firmware/` is the exception worth naming out loud: 72 proprietary
+Qualcomm and OnePlus binaries, redistributed here exactly as they came so that
+the port builds from one tree. The project claims no copyright and grants no
+license over them, and GPL-2.0-only does not reach them. 59 of them were
+extracted from this unit's stock OnePlus OTA, for which no redistribution
+permission from OnePlus or Qualcomm has been established. Per-file provenance
+is in `packaging/firmware-manifest.json` and the terms are spelled out in
+[`packaging/firmware/README.md`](packaging/firmware/README.md).

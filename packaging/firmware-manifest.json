@@ -52,434 +52,506 @@
       "install": "ath12k/WCN7860/hw2.0/amss.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/amss.bin",
-      "sha256": "bbdfeec01b7de20e89c7e6906d7ea3fd89b896862de29396696a93dbb59fc77a"
+      "sha256": "bbdfeec01b7de20e89c7e6906d7ea3fd89b896862de29396696a93dbb59fc77a",
+      "size": 6971456
     },
     {
       "install": "ath12k/WCN7860/hw2.0/m3.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/m3.bin",
-      "sha256": "063840b7509e5da791afa6c2905b191297a401c06d39774b82330949c1c8f438"
+      "sha256": "063840b7509e5da791afa6c2905b191297a401c06d39774b82330949c1c8f438",
+      "size": 290816
     },
     {
       "install": "ath12k/WCN7860/hw2.0/board-2.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/board-2.bin",
-      "sha256": "9cce38db012867432566dc0deea6d647c2ae2ffa367d3fc90b300e517b748381"
+      "sha256": "9cce38db012867432566dc0deea6d647c2ae2ffa367d3fc90b300e517b748381",
+      "size": 149948
     },
     {
       "install": "ath12k/WCN7860/hw2.0/regdb.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/regdb.bin",
-      "sha256": "c774af903051e7af845435352fdb2ec6158835c4c95fd9323be22658971ffc6f"
+      "sha256": "c774af903051e7af845435352fdb2ec6158835c4c95fd9323be22658971ffc6f",
+      "size": 24278
     },
     {
       "install": "ath12k/WCN7860/hw2.0/qdss.cfg",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/qdss.cfg",
-      "sha256": "4683d8683437a11172723dc5820801aaaf5eb082336875a7664142582cc90cbb"
+      "sha256": "4683d8683437a11172723dc5820801aaaf5eb082336875a7664142582cc90cbb",
+      "size": 6245
     },
     {
       "install": "ath12k/WCN7860/hw2.0/aux_ucode.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/aux_ucode.bin",
-      "sha256": "2b2eef47107e1c61e1f809371c7413867cf748fb57a2887cc4ff4d386b680fad"
+      "sha256": "2b2eef47107e1c61e1f809371c7413867cf748fb57a2887cc4ff4d386b680fad",
+      "size": 61440
     },
     {
       "install": "ath12k/WCN7860/hw2.0/bdwlan.elf",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/ath12k/WCN7860/hw2.0/bdwlan.elf",
-      "sha256": "68175a7eeffe9ebe32cfb22676e3ac4c250eb3dcf35d4abe18fee45440e08f76"
+      "sha256": "68175a7eeffe9ebe32cfb22676e3ac4c250eb3dcf35d4abe18fee45440e08f76",
+      "size": 125288
     },
     {
       "install": "qca/gngbtfw20.mbn",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/qca/gngbtfw20.mbn",
-      "sha256": "84e210e2ba386a9bad91a2d9dd5d1f4e2559b385f226b463dcfa4d8159f5937f"
+      "sha256": "84e210e2ba386a9bad91a2d9dd5d1f4e2559b385f226b463dcfa4d8159f5937f",
+      "size": 260616
     },
     {
       "install": "qca/gngbtnv20.bin",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/qca/gngbtnv20.bin",
-      "sha256": "a4586f5205dc3752f7d52fd6b7106b02ffe877774e5633018ac48be99d5a079b"
+      "sha256": "a4586f5205dc3752f7d52fd6b7106b02ffe877774e5633018ac48be99d5a079b",
+      "size": 13415
     },
     {
       "install": "qcom/gen80000_sqe.fw",
       "from": "linux-firmware",
       "member": "qcom/gen80000_sqe.fw",
-      "sha256": "30ee3301534f95799d4afaf73864f3c369baa5a5dea8481e7f0cb8cc941f396c"
+      "sha256": "30ee3301534f95799d4afaf73864f3c369baa5a5dea8481e7f0cb8cc941f396c",
+      "size": 111476
     },
     {
       "install": "qcom/gen80000_gmu.bin",
       "from": "linux-firmware",
       "member": "qcom/gen80000_gmu.bin",
-      "sha256": "1ad8175e6cd01ea76c64d20b83600038c52dd29844b48d57b11b769b038863a5"
+      "sha256": "1ad8175e6cd01ea76c64d20b83600038c52dd29844b48d57b11b769b038863a5",
+      "size": 88896
     },
     {
       "install": "qcom/gen80000_aqe.fw",
       "from": "linux-firmware",
       "member": "qcom/gen80000_aqe.fw",
-      "sha256": "67562ad5baae3a133c92a6e48a9d1b1a9a867fe2f85b49324e244e963f3b89c5"
+      "sha256": "67562ad5baae3a133c92a6e48a9d1b1a9a867fe2f85b49324e244e963f3b89c5",
+      "size": 25044
     },
     {
       "install": "qcom/sm8750/gen80000_zap.mbn",
       "from": "linux-firmware",
       "member": "qcom/sm8750/gen80000_zap.mbn",
-      "sha256": "0e3ae03f7dd3170621e7b231802639535410bbc2a1c3ba0829c15ab4cf3996cf"
+      "sha256": "0e3ae03f7dd3170621e7b231802639535410bbc2a1c3ba0829c15ab4cf3996cf",
+      "size": 12088
     },
     {
       "install": "novatek/nt36536-xn242.bin",
       "from": "stock-dtbo",
       "node": "nt36536@0",
       "property": "firmware-data-0",
-      "sha256": "3e3596895975b28459b1937ea35c819b96386b82cbdcc9c61592af8488db702b"
+      "sha256": "3e3596895975b28459b1937ea35c819b96386b82cbdcc9c61592af8488db702b",
+      "size": 258048
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b00",
       "from": "stock-modem",
       "member": "::/image/adsp.b00",
-      "sha256": "2046042b8d4450278b4d7d0ceb55208830d02c7d9793a0de56177c4e244563f5"
+      "sha256": "2046042b8d4450278b4d7d0ceb55208830d02c7d9793a0de56177c4e244563f5",
+      "size": 1812
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b01",
       "from": "stock-modem",
       "member": "::/image/adsp.b01",
-      "sha256": "ee7924d4e54c1e76dff49fe658f0a4b8badb07894bdba2e715ac362ff2dc8f6f"
+      "sha256": "ee7924d4e54c1e76dff49fe658f0a4b8badb07894bdba2e715ac362ff2dc8f6f",
+      "size": 20896
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b02",
       "from": "stock-modem",
       "member": "::/image/adsp.b02",
-      "sha256": "a78175a6afc24e64d8b3b6a46c3735098828746a8d5457ce9971e4895d8ff4cc"
+      "sha256": "a78175a6afc24e64d8b3b6a46c3735098828746a8d5457ce9971e4895d8ff4cc",
+      "size": 38924
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b03",
       "from": "stock-modem",
       "member": "::/image/adsp.b03",
-      "sha256": "6b60acee23c56396486d043d8fe283b3c5001abec470d68da7efc9c89fd33e54"
+      "sha256": "6b60acee23c56396486d043d8fe283b3c5001abec470d68da7efc9c89fd33e54",
+      "size": 110723
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b04",
       "from": "stock-modem",
       "member": "::/image/adsp.b04",
-      "sha256": "75fb5b59d51113770ea95d01659589e7826df48cb2dea0dd46d55b3a3a5f90a0"
+      "sha256": "75fb5b59d51113770ea95d01659589e7826df48cb2dea0dd46d55b3a3a5f90a0",
+      "size": 32756
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b05",
       "from": "stock-modem",
       "member": "::/image/adsp.b05",
-      "sha256": "0d4eabda3f29ba18f11648c63e6fb8c5c9572ae07fc50b4f27e5b5dab450a981"
+      "sha256": "0d4eabda3f29ba18f11648c63e6fb8c5c9572ae07fc50b4f27e5b5dab450a981",
+      "size": 84180
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b06",
       "from": "stock-modem",
       "member": "::/image/adsp.b06",
-      "sha256": "e6620acbbb26225bad34dc1a3d447547ed397c9bf049cb46e2f1acc7091b960f"
+      "sha256": "e6620acbbb26225bad34dc1a3d447547ed397c9bf049cb46e2f1acc7091b960f",
+      "size": 196608
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b07",
       "from": "stock-modem",
       "member": "::/image/adsp.b07",
-      "sha256": "051eb4806e182424f093cb723f38b023f96b35ca29387bda3afa536bff16e154"
+      "sha256": "051eb4806e182424f093cb723f38b023f96b35ca29387bda3afa536bff16e154",
+      "size": 368
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b08",
       "from": "stock-modem",
       "member": "::/image/adsp.b08",
-      "sha256": "a3446b252604c139f7f1ccf20fa96197e4025b49aa59252ea0c1a3a46cf6c230"
+      "sha256": "a3446b252604c139f7f1ccf20fa96197e4025b49aa59252ea0c1a3a46cf6c230",
+      "size": 9236
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b09",
       "from": "stock-modem",
       "member": "::/image/adsp.b09",
-      "sha256": "ae197f26cb783554f7e0a095a5bd7463c2694237471c27ab5d6ac5483f6ff646"
+      "sha256": "ae197f26cb783554f7e0a095a5bd7463c2694237471c27ab5d6ac5483f6ff646",
+      "size": 3117680
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b10",
       "from": "stock-modem",
       "member": "::/image/adsp.b10",
-      "sha256": "41b627bc800a8c109288e7c2686f26602b0e38eebe37b2595f06c76a49c8f4a4"
+      "sha256": "41b627bc800a8c109288e7c2686f26602b0e38eebe37b2595f06c76a49c8f4a4",
+      "size": 266100
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b11",
       "from": "stock-modem",
       "member": "::/image/adsp.b11",
-      "sha256": "048cb22769ae424fee74b87367433363a589c96514eca2f6f9c97602302c6b22"
+      "sha256": "048cb22769ae424fee74b87367433363a589c96514eca2f6f9c97602302c6b22",
+      "size": 2584
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b12",
       "from": "stock-modem",
       "member": "::/image/adsp.b12",
-      "sha256": "dc9b5da0663857370f60fa47ed8bcd1616fb13b21b145b1352b684f2fdb637bc"
+      "sha256": "dc9b5da0663857370f60fa47ed8bcd1616fb13b21b145b1352b684f2fdb637bc",
+      "size": 62148
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b13",
       "from": "stock-modem",
       "member": "::/image/adsp.b13",
-      "sha256": "1fb37eb8f3cd0a2c381c45ca98012d8450cce0a80425ff60e1dab68993334d4d"
+      "sha256": "1fb37eb8f3cd0a2c381c45ca98012d8450cce0a80425ff60e1dab68993334d4d",
+      "size": 7112
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b14",
       "from": "stock-modem",
       "member": "::/image/adsp.b14",
-      "sha256": "cb741f83c8d0507bb88826e5b5efd5da59befd511fb51258abe33f8de72f8467"
+      "sha256": "cb741f83c8d0507bb88826e5b5efd5da59befd511fb51258abe33f8de72f8467",
+      "size": 255112
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b15",
       "from": "stock-modem",
       "member": "::/image/adsp.b15",
-      "sha256": "bf43099dc2bc6d70215d3dcfe60299939cd8563cf0f847f33b994eeaea454726"
+      "sha256": "bf43099dc2bc6d70215d3dcfe60299939cd8563cf0f847f33b994eeaea454726",
+      "size": 163980
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b16",
       "from": "stock-modem",
       "member": "::/image/adsp.b16",
-      "sha256": "e8659cc30f8b0c373d74311a9db980ed2ef5d7a1da4e2a839e1611784900ab72"
+      "sha256": "e8659cc30f8b0c373d74311a9db980ed2ef5d7a1da4e2a839e1611784900ab72",
+      "size": 454656
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b17",
       "from": "stock-modem",
       "member": "::/image/adsp.b17",
-      "sha256": "29b34e45e1da4fd252bfd751ee50ebf6bda4fdb6909bee2dd0ac6c77378654b6"
+      "sha256": "29b34e45e1da4fd252bfd751ee50ebf6bda4fdb6909bee2dd0ac6c77378654b6",
+      "size": 3073252
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b18",
       "from": "stock-modem",
       "member": "::/image/adsp.b18",
-      "sha256": "bbaf377b615740442fd8db366a64d24e98fb62b6be86d6978aaa1c51a87eaea8"
+      "sha256": "bbaf377b615740442fd8db366a64d24e98fb62b6be86d6978aaa1c51a87eaea8",
+      "size": 30576
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b19",
       "from": "stock-modem",
       "member": "::/image/adsp.b19",
-      "sha256": "0f4fdca6caa09f5797bea00b6cfb1096812b2123c207c7e997aa157c7eaaf894"
+      "sha256": "0f4fdca6caa09f5797bea00b6cfb1096812b2123c207c7e997aa157c7eaaf894",
+      "size": 272
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b20",
       "from": "stock-modem",
       "member": "::/image/adsp.b20",
-      "sha256": "cba3a139e17a8bd3698ef2e1fd162b0a50f0e9eb7aeeb1cef6e6d2dd9cf8b015"
+      "sha256": "cba3a139e17a8bd3698ef2e1fd162b0a50f0e9eb7aeeb1cef6e6d2dd9cf8b015",
+      "size": 452508
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b21",
       "from": "stock-modem",
       "member": "::/image/adsp.b21",
-      "sha256": "e0a6b69a87373de2584260f0cc219c3c441f783a4d82e79d2b6a724890938b31"
+      "sha256": "e0a6b69a87373de2584260f0cc219c3c441f783a4d82e79d2b6a724890938b31",
+      "size": 622592
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b22",
       "from": "stock-modem",
       "member": "::/image/adsp.b22",
-      "sha256": "c618bc778f52edbcc5ae5269cf53f5fbc92fb6fea0d50527fd44db18882c84d4"
+      "sha256": "c618bc778f52edbcc5ae5269cf53f5fbc92fb6fea0d50527fd44db18882c84d4",
+      "size": 3729304
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b23",
       "from": "stock-modem",
       "member": "::/image/adsp.b23",
-      "sha256": "63935e5a5e3f6955922980cf5356368f3952e8e8141680108936cd75239bfc06"
+      "sha256": "63935e5a5e3f6955922980cf5356368f3952e8e8141680108936cd75239bfc06",
+      "size": 6197252
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b25",
       "from": "stock-modem",
       "member": "::/image/adsp.b25",
-      "sha256": "436cdafe2ba672d46d7661c1376a7cffc99b0e85c69ed2e7ad857c1ab3a7d283"
+      "sha256": "436cdafe2ba672d46d7661c1376a7cffc99b0e85c69ed2e7ad857c1ab3a7d283",
+      "size": 592
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b26",
       "from": "stock-modem",
       "member": "::/image/adsp.b26",
-      "sha256": "96640a2cf71c104f901179fd263af2dee3183b04306457e25bf5591f942cdd47"
+      "sha256": "96640a2cf71c104f901179fd263af2dee3183b04306457e25bf5591f942cdd47",
+      "size": 15876
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b27",
       "from": "stock-modem",
       "member": "::/image/adsp.b27",
-      "sha256": "c0da3b4e46434234a4d4a322515ea04ba5a1da3f909d57740666f594519a749a"
+      "sha256": "c0da3b4e46434234a4d4a322515ea04ba5a1da3f909d57740666f594519a749a",
+      "size": 39144
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b28",
       "from": "stock-modem",
       "member": "::/image/adsp.b28",
-      "sha256": "5a6c7eab888bf53812e068d9f93ba171094b472ca278df181974b3d3ed20895b"
+      "sha256": "5a6c7eab888bf53812e068d9f93ba171094b472ca278df181974b3d3ed20895b",
+      "size": 1032668
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b29",
       "from": "stock-modem",
       "member": "::/image/adsp.b29",
-      "sha256": "1e003b0231a60e25a7c71dff03dd879bbc42adb344ef11bfefda318385643b3c"
+      "sha256": "1e003b0231a60e25a7c71dff03dd879bbc42adb344ef11bfefda318385643b3c",
+      "size": 212800
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b30",
       "from": "stock-modem",
       "member": "::/image/adsp.b30",
-      "sha256": "db926af16cf2b99dd5ab4ed3be03d266b73d8839025df7ad7ecab8ff35b096ad"
+      "sha256": "db926af16cf2b99dd5ab4ed3be03d266b73d8839025df7ad7ecab8ff35b096ad",
+      "size": 174156
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b31",
       "from": "stock-modem",
       "member": "::/image/adsp.b31",
-      "sha256": "e24da6e864c2f3633ca24def525a2a818779babd7753e2c5d9e5358a491cb03f"
+      "sha256": "e24da6e864c2f3633ca24def525a2a818779babd7753e2c5d9e5358a491cb03f",
+      "size": 170792
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b32",
       "from": "stock-modem",
       "member": "::/image/adsp.b32",
-      "sha256": "f983300f2bae27ae3de35e1ef9993b64b10dfd474939880e9fece682e48cf6fa"
+      "sha256": "f983300f2bae27ae3de35e1ef9993b64b10dfd474939880e9fece682e48cf6fa",
+      "size": 16796
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b33",
       "from": "stock-modem",
       "member": "::/image/adsp.b33",
-      "sha256": "194fd4a8d1d5ac4b0d19525ab4313007d95716573add828cb5ac84e3be80e251"
+      "sha256": "194fd4a8d1d5ac4b0d19525ab4313007d95716573add828cb5ac84e3be80e251",
+      "size": 191496
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b34",
       "from": "stock-modem",
       "member": "::/image/adsp.b34",
-      "sha256": "17fcd8d88bfb8794e45374c84dea4d97a0601ed69242b46a093b955989e88428"
+      "sha256": "17fcd8d88bfb8794e45374c84dea4d97a0601ed69242b46a093b955989e88428",
+      "size": 91264
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b35",
       "from": "stock-modem",
       "member": "::/image/adsp.b35",
-      "sha256": "7ee2d72c84379efcec8cf4a85a80408e8a65481164b9b081e27a350ade676354"
+      "sha256": "7ee2d72c84379efcec8cf4a85a80408e8a65481164b9b081e27a350ade676354",
+      "size": 70744
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b36",
       "from": "stock-modem",
       "member": "::/image/adsp.b36",
-      "sha256": "6c098f276e313457e089ea96d1f115ce8e80a91f75bf1ad4213a5720c2615105"
+      "sha256": "6c098f276e313457e089ea96d1f115ce8e80a91f75bf1ad4213a5720c2615105",
+      "size": 298068
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b37",
       "from": "stock-modem",
       "member": "::/image/adsp.b37",
-      "sha256": "4c3c78ad12aedd723e90cc08b4c018bc93b7d935ec77228034699115ff690b50"
+      "sha256": "4c3c78ad12aedd723e90cc08b4c018bc93b7d935ec77228034699115ff690b50",
+      "size": 229376
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b38",
       "from": "stock-modem",
       "member": "::/image/adsp.b38",
-      "sha256": "659955897c2d426ac71fa4f145a1c0d5173b0d01357a579435ff4d41bb814f3d"
+      "sha256": "659955897c2d426ac71fa4f145a1c0d5173b0d01357a579435ff4d41bb814f3d",
+      "size": 7612348
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b39",
       "from": "stock-modem",
       "member": "::/image/adsp.b39",
-      "sha256": "18fe933d718e8cd351be4121c45b86040e4fc5b3bbf37ec678802c060a8b6be7"
+      "sha256": "18fe933d718e8cd351be4121c45b86040e4fc5b3bbf37ec678802c060a8b6be7",
+      "size": 1646600
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b40",
       "from": "stock-modem",
       "member": "::/image/adsp.b40",
-      "sha256": "271c5783def587733c57edd67523fd9890a97b12fd2ee0ad4237226454bb6b85"
+      "sha256": "271c5783def587733c57edd67523fd9890a97b12fd2ee0ad4237226454bb6b85",
+      "size": 20
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b41",
       "from": "stock-modem",
       "member": "::/image/adsp.b41",
-      "sha256": "792d7f9b66ff796f016b7958830d93c614c4895356e3682b22dd9bd05c34cee1"
+      "sha256": "792d7f9b66ff796f016b7958830d93c614c4895356e3682b22dd9bd05c34cee1",
+      "size": 89456
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b42",
       "from": "stock-modem",
       "member": "::/image/adsp.b42",
-      "sha256": "0cfdc597a59a7b0d4d2fa3ebfd514eaf83077543392fda6d1c620153cf314ac3"
+      "sha256": "0cfdc597a59a7b0d4d2fa3ebfd514eaf83077543392fda6d1c620153cf314ac3",
+      "size": 28672
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b43",
       "from": "stock-modem",
       "member": "::/image/adsp.b43",
-      "sha256": "392fef76143872917c91ccae3beaf8fdd72dcd13d87b3e0c320ee48ee8eddda2"
+      "sha256": "392fef76143872917c91ccae3beaf8fdd72dcd13d87b3e0c320ee48ee8eddda2",
+      "size": 33256
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b44",
       "from": "stock-modem",
       "member": "::/image/adsp.b44",
-      "sha256": "a028fbcb83978bd79da03a87626d33ac49627b19b72751e71392bcb6cc3aa865"
+      "sha256": "a028fbcb83978bd79da03a87626d33ac49627b19b72751e71392bcb6cc3aa865",
+      "size": 524252
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b45",
       "from": "stock-modem",
       "member": "::/image/adsp.b45",
-      "sha256": "aaae7f4c029f21d22eb12121f65933d02c5c7ba95b9784f21a546792a9d997f1"
+      "sha256": "aaae7f4c029f21d22eb12121f65933d02c5c7ba95b9784f21a546792a9d997f1",
+      "size": 10052
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b46",
       "from": "stock-modem",
       "member": "::/image/adsp.b46",
-      "sha256": "41d0d2cfaed6275007b42843ac4ad450258efa36dae76626c7d9d34f4a0142ee"
+      "sha256": "41d0d2cfaed6275007b42843ac4ad450258efa36dae76626c7d9d34f4a0142ee",
+      "size": 237256
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b47",
       "from": "stock-modem",
       "member": "::/image/adsp.b47",
-      "sha256": "c9d1f620d793fd9a7885a156a07f039309658e4f9ac778ac16b2b1d92cc09d1c"
+      "sha256": "c9d1f620d793fd9a7885a156a07f039309658e4f9ac778ac16b2b1d92cc09d1c",
+      "size": 82
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b48",
       "from": "stock-modem",
       "member": "::/image/adsp.b48",
-      "sha256": "4cfe75d5f0c7e640aa8472baa59a207a1b2a5990b014cd82c2a25428b840cb57"
+      "sha256": "4cfe75d5f0c7e640aa8472baa59a207a1b2a5990b014cd82c2a25428b840cb57",
+      "size": 81920
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b49",
       "from": "stock-modem",
       "member": "::/image/adsp.b49",
-      "sha256": "c118a999be579b73501bc3aa70c6f83e5bb917efad123eb6500c47c07704ff94"
+      "sha256": "c118a999be579b73501bc3aa70c6f83e5bb917efad123eb6500c47c07704ff94",
+      "size": 87127
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b50",
       "from": "stock-modem",
       "member": "::/image/adsp.b50",
-      "sha256": "a0e4c9127cc096f0b641716cd42ca7ff1899d410899873f5236fda978ae2a5b7"
+      "sha256": "a0e4c9127cc096f0b641716cd42ca7ff1899d410899873f5236fda978ae2a5b7",
+      "size": 958464
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b51",
       "from": "stock-modem",
       "member": "::/image/adsp.b51",
-      "sha256": "7eb727ecd97eb46bcbf9d25b076444821d5c11fae0d5b752ce1c3b54bfefc881"
+      "sha256": "7eb727ecd97eb46bcbf9d25b076444821d5c11fae0d5b752ce1c3b54bfefc881",
+      "size": 53248
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b52",
       "from": "stock-modem",
       "member": "::/image/adsp.b52",
-      "sha256": "c97cc464ae702282292a0d0d937f900cb689241b8828bc8a2c64c2c43b32e961"
+      "sha256": "c97cc464ae702282292a0d0d937f900cb689241b8828bc8a2c64c2c43b32e961",
+      "size": 6987560
     },
     {
       "install": "qcom/sm8750/erhai/adsp.b54",
       "from": "stock-modem",
       "member": "::/image/adsp.b54",
-      "sha256": "9d86b334bc23c306bc097b990448b6c46ad3831794b7cf23bc7237e8e9977fd4"
+      "sha256": "9d86b334bc23c306bc097b990448b6c46ad3831794b7cf23bc7237e8e9977fd4",
+      "size": 6392
     },
     {
       "install": "qcom/sm8750/erhai/adsp.mdt",
       "from": "stock-modem",
       "member": "::/image/adsp.mdt",
-      "sha256": "d8ba0913598e8d91f68cf3f43f6a63b67c792aa5ec364244f38dcefbeae89c07"
+      "sha256": "d8ba0913598e8d91f68cf3f43f6a63b67c792aa5ec364244f38dcefbeae89c07",
+      "size": 8204
     },
     {
       "install": "qcom/sm8750/erhai/adsp_dtb.b00",
       "from": "stock-modem",
       "member": "::/image/adsp_dtb.b00",
-      "sha256": "35890c629637501aa43d3f22572def470d8b888188c17be91a8f345a608c050f"
+      "sha256": "35890c629637501aa43d3f22572def470d8b888188c17be91a8f345a608c050f",
+      "size": 148
     },
     {
       "install": "qcom/sm8750/erhai/adsp_dtb.b01",
       "from": "stock-modem",
       "member": "::/image/adsp_dtb.b01",
-      "sha256": "f9fd22e909a4f06dd105e81d92251903b4cb03f33454a62ff0a741676c49921a"
+      "sha256": "f9fd22e909a4f06dd105e81d92251903b4cb03f33454a62ff0a741676c49921a",
+      "size": 159284
     },
     {
       "install": "qcom/sm8750/erhai/adsp_dtb.b02",
       "from": "stock-modem",
       "member": "::/image/adsp_dtb.b02",
-      "sha256": "42030acc6255dd233f6056d8387762a0b820d010bb88e62c80d43558e393b2f8"
+      "sha256": "42030acc6255dd233f6056d8387762a0b820d010bb88e62c80d43558e393b2f8",
+      "size": 3896
     },
     {
       "install": "qcom/sm8750/erhai/adsp_dtb.mdt",
       "from": "stock-modem",
       "member": "::/image/adsp_dtb.mdt",
-      "sha256": "4c472279c7f1c29ba5eef171592e9325e47e4d398e35280c511d827406ca3336"
+      "sha256": "4c472279c7f1c29ba5eef171592e9325e47e4d398e35280c511d827406ca3336",
+      "size": 4044
     }
   ]
 }

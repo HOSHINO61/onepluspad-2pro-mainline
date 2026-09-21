@@ -16,7 +16,9 @@ Description: OnePlus Pad 2 Pro (erhai) firmware closure
  exists; every path here is a plain file under a name no other package owns,
  so nothing is diverted and nothing is overwritten.
  .
- The binaries are not in the project's source tree. They are extracted at
- build time from pinned inputs -- the stock ROM images of the firmware this
- unit runs and the pinned upstream archives -- and every file is checked
- against packaging/firmware-manifest.json before it is packed.
+ The binaries live in the project's packaging/firmware tree, taken unmodified
+ from this unit's stock ROM images and from pinned upstream archives, and each
+ one is checked against the sha256 and size recorded in
+ packaging/firmware-manifest.json before it is packed. They are proprietary
+ Qualcomm and OnePlus binaries under their own terms, not the packaging's
+ GPL-2.0-only; packaging/firmware/README.md says where each came from.

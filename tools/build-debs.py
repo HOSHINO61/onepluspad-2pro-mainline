@@ -17,10 +17,10 @@ is a package, and each package owns exactly what it installs:
     erhai-device          a metapackage depending on the three
 
 Inputs are pinned, never inherited: the kernel comes from a clean checkout at a
-named commit, the firmware from the stock ROM images and upstream archives
-listed in packaging/firmware-manifest.json, and every extracted byte is checked
-against a recorded sha256 before it is packed. Nothing here reads a previous
-build's output.
+named commit and the firmware from packaging/firmware/, every file of which is
+checked against the sha256 and size recorded in packaging/firmware-manifest.json
+before it is packed. Nothing here reads a previous build's output, and building
+erhai-firmware needs neither the ROM cache nor the network.
 
     tools/build-debs.py --avb-key <key>.pem --avbtool <avbtool.py>
 
@@ -29,9 +29,12 @@ build's output.
                          install ships without an unauthenticated root telnet.
     --triplet-signed D   use an already-signed triplet instead of building one
                          (no kernel build, no AVB key needed)
-    --refresh-firmware-manifest
-                         re-read the pinned inputs and rewrite the recorded
-                         sha256 of every firmware file
+    --refresh-from-rom   re-extract every firmware file from the pinned stock
+                         ROM images and upstream archives and diff the result
+                         against packaging/firmware/; nothing is packed. With
+                         --refresh-apply the new bytes and their hashes are
+                         taken into the tree -- this is how a later ROM version
+                         gets in.
 
 The AVB signing key and avbtool stay on the build host. They are inputs to the
 build, never contents of a package.
@@ -60,6 +63,7 @@ else:
     WS = Path(os.environ.get('ERHAI_WORKSPACE', str(REPO))).resolve()
 
 PACKAGING = REPO / 'packaging'
+FIRMWARE = PACKAGING / 'firmware'
 MANIFEST = PACKAGING / 'firmware-manifest.json'
 UPSTREAM_VERSION = '0.1.0'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
@@ -89,9 +93,17 @@ def run(command, **kwargs):
 
 
 # --------------------------------------------------------------------------
-# Firmware inputs
+# Firmware
 #
-# Three kinds of pinned input, none of them a previous build's output:
+# The binaries live in packaging/firmware/, laid out exactly as they install
+# under /usr/lib/firmware, and packaging/firmware-manifest.json is the per-file
+# record of where each one came from and what it must hash and weigh. A build
+# copies from the tree and verifies against the manifest; it never reaches for
+# the ROM cache or the network.
+#
+# --refresh-from-rom is the other direction, for a later ROM version: extract
+# the closure again from the pinned inputs and diff it against the tree. Four
+# kinds of input, none of them a previous build's output:
 #   archive  an upstream tarball, by member path
 #   fat      a stock ROM partition image (FAT), read with mtools, no mount and
 #            so no privileges
@@ -189,8 +201,11 @@ def fetch_url(url, target, expected):
     target.write_bytes(data)
 
 
-def firmware_sources(manifest, refresh):
-    """Resolve and hash-check every pinned input the manifest names."""
+def firmware_sources(manifest, adopt):
+    """Resolve and hash-check every pinned input the manifest names.
+
+    Only --refresh-from-rom needs these. An ordinary build reads the tree.
+    """
     resolved = {}
     for name, entry in manifest['inputs'].items():
         if entry['kind'] == 'url-base':
@@ -201,7 +216,7 @@ def firmware_sources(manifest, refresh):
             die(f'pinned firmware input is missing: {entry["path"]} '
                 f'({entry.get("origin", "see packaging/firmware-manifest.json")})')
         digest = sha256_file(path)
-        if refresh:
+        if adopt:
             entry['sha256'] = digest
         elif digest != entry['sha256']:
             die(f'{entry["path"]} is {digest}, the manifest pins {entry["sha256"]}')
@@ -209,9 +224,8 @@ def firmware_sources(manifest, refresh):
     return resolved
 
 
-def stage_firmware_tree(manifest, sources, root, refresh):
-    """Extract the closure into <root>/usr/lib/firmware, verifying every file."""
-    base = root / 'usr/lib/firmware'
+def extract_firmware(manifest, sources, base, adopt):
+    """Extract the closure from the pinned inputs into <base>."""
     for spec in manifest['files']:
         source = sources[spec['from']]
         target = base / spec['install']
@@ -225,18 +239,78 @@ def stage_firmware_tree(manifest, sources, root, refresh):
         elif source['kind'] == 'url-base':
             cached = WS / source['cache'] / spec['member']
             fetch_url(source['base_url'] + spec['member'], cached,
-                      None if refresh else spec.get('sha256'))
+                      None if adopt else spec.get('sha256'))
             shutil.copyfile(cached, target)
         else:
             die(f'unknown firmware input kind: {source["kind"]}')
         target.chmod(0o644)
-        digest = sha256_file(target)
-        if refresh:
-            spec['sha256'] = digest
-        elif digest != spec['sha256']:
-            die(f'firmware {spec["install"]} extracted as {digest}, '
-                f'the manifest pins {spec["sha256"]}')
-    return len(manifest['files'])
+
+
+def tracked_firmware():
+    """Every firmware file in the tree, by install path; README.md is prose."""
+    if not FIRMWARE.is_dir():
+        return set()
+    return {path.relative_to(FIRMWARE).as_posix()
+            for path in FIRMWARE.rglob('*')
+            if path.is_file() and path.name != 'README.md'}
+
+
+def refresh_from_rom(manifest, adopt):
+    """Extract the closure again from the pinned inputs and diff it against the tree.
+
+    This is the door a later ROM version comes through: extract, read what
+    moved, and with --refresh-apply take the new bytes and their hashes in.
+    Nothing is packed here, and no ordinary build runs it.
+    """
+    sources = firmware_sources(manifest, adopt)
+    work = Path(tempfile.mkdtemp(prefix='erhai-firmware.'))
+    try:
+        extract_firmware(manifest, sources, work, adopt)
+        unchanged, changed, added = [], [], []
+        for spec in manifest['files']:
+            extracted = work / spec['install']
+            digest, size = sha256_file(extracted), extracted.stat().st_size
+            repo = FIRMWARE / spec['install']
+            if not repo.is_file():
+                added.append(spec['install'])
+            elif sha256_file(repo) == digest:
+                unchanged.append(spec['install'])
+                if spec.get('sha256') != digest or spec.get('size') != size:
+                    changed.append(spec['install'])
+                continue
+            else:
+                changed.append(spec['install'])
+            if adopt:
+                repo.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(extracted, repo)
+                repo.chmod(0o644)
+        if adopt:
+            for spec in manifest['files']:
+                extracted = work / spec['install']
+                spec['sha256'] = sha256_file(extracted)
+                spec['size'] = extracted.stat().st_size
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    stale = sorted(tracked_firmware() - {s['install'] for s in manifest['files']})
+    for install in sorted(changed):
+        print(f'  changed: {install}')
+    for install in sorted(added):
+        print(f'  new:     {install}')
+    for install in stale:
+        print(f'  stale:   {install} (in the tree, not in the manifest)')
+    print(f'refresh-from-rom: {len(unchanged)} unchanged, {len(changed)} changed, '
+          f'{len(added)} new, {len(stale)} stale')
+    if adopt:
+        MANIFEST.write_text(json.dumps(manifest, indent=2) + '\n')
+        print(f'wrote {len(changed) + len(added)} files under '
+              f'{FIRMWARE.relative_to(REPO)} and refreshed '
+              f'{MANIFEST.relative_to(REPO)}')
+        if stale:
+            die('remove the stale files by hand; this tool does not delete')
+    elif changed or added or stale:
+        die('packaging/firmware does not match the pinned inputs; '
+            '--refresh-apply takes the difference in')
 
 
 # --------------------------------------------------------------------------
@@ -268,9 +342,35 @@ def stage_device_support(root):
     (root / 'var/lib/erhai/switch').mkdir(parents=True, exist_ok=True)
 
 
-def stage_firmware(root, manifest, sources, refresh):
-    count = stage_firmware_tree(manifest, sources, root, refresh)
-    print(f'  firmware: {count} files')
+def stage_firmware(root, manifest):
+    """Copy the closure out of the tree, verifying every file on the way in."""
+    base = root / 'usr/lib/firmware'
+    for spec in manifest['files']:
+        source = FIRMWARE / spec['install']
+        if not source.is_file():
+            die(f'firmware {spec["install"]} is not in '
+                f'{FIRMWARE.relative_to(REPO)}; --refresh-from-rom '
+                f'--refresh-apply puts it there')
+        size = source.stat().st_size
+        if size != spec['size']:
+            die(f'firmware {spec["install"]} is {size} bytes, '
+                f'the manifest pins {spec["size"]}')
+        digest = sha256_file(source)
+        if digest != spec['sha256']:
+            die(f'firmware {spec["install"]} is {digest}, '
+                f'the manifest pins {spec["sha256"]}')
+        target = base / spec['install']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        target.chmod(0o644)
+    # The manifest is the whole record, in both directions: a binary the tree
+    # carries and it does not list has no recorded origin, so it is not packed.
+    stale = sorted(tracked_firmware() - {s['install'] for s in manifest['files']})
+    if stale:
+        die(f'{FIRMWARE.relative_to(REPO)} holds files the manifest does not '
+            f'list: {", ".join(stale)}')
+    print(f'  firmware: {len(manifest["files"])} files from '
+          f'{FIRMWARE.relative_to(REPO)}')
 
 
 def build_triplet(args, work):
@@ -472,18 +572,26 @@ def main():
                         help='Use this already-signed triplet instead of building one')
     parser.add_argument('--debug', action='store_true',
                         help='Enable the debug channel in the packaged kernel command line')
-    parser.add_argument('--refresh-firmware-manifest', action='store_true',
-                        help='Rewrite the recorded sha256 of every pinned firmware file')
+    parser.add_argument('--refresh-from-rom', action='store_true',
+                        help='Re-extract the firmware closure from the pinned ROM and '
+                             'upstream inputs and diff it against packaging/firmware')
+    parser.add_argument('--refresh-apply', action='store_true',
+                        help='With --refresh-from-rom, take the difference into '
+                             'packaging/firmware and the manifest')
     parser.add_argument('--only', choices=PACKAGES, action='append',
                         help='Build just these packages (repeatable)')
     args = parser.parse_args()
 
+    manifest = json.loads(MANIFEST.read_text())
+    if args.refresh_from_rom:
+        refresh_from_rom(manifest, args.refresh_apply)
+        return
+    if args.refresh_apply:
+        die('--refresh-apply only means something with --refresh-from-rom')
+
     if shutil.which('dpkg-deb') is None:
         die('dpkg-deb is required')
     wanted = tuple(args.only) if args.only else PACKAGES
-
-    manifest = json.loads(MANIFEST.read_text())
-    sources = firmware_sources(manifest, args.refresh_firmware_manifest)
 
     release_file = Path(args.kernel_out) / 'include/config/kernel.release'
     release = release_file.read_text().strip() if release_file.is_file() else None
@@ -505,14 +613,10 @@ def main():
             if package == 'erhai-device-support':
                 stage_device_support(root)
             elif package == 'erhai-firmware':
-                stage_firmware(root, manifest, sources, args.refresh_firmware_manifest)
+                stage_firmware(root, manifest)
             elif package == 'erhai-kernel':
                 kernel_meta = stage_kernel(root, args, work, release)
             roots[package] = root
-
-        if args.refresh_firmware_manifest:
-            MANIFEST.write_text(json.dumps(manifest, indent=2) + '\n')
-            print(f'refreshed {MANIFEST.relative_to(REPO)}')
 
         # One build id for the set, derived from what the set actually
         # contains. Two builds from the same inputs get the same version, and a
