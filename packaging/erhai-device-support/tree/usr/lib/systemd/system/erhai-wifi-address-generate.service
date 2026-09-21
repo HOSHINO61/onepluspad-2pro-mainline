@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# First boot only: decide what this unit's Wi-Fi MAC address is, and write it
+# down where the administrator can see it and replace it.  The address is
+# machine-specific data and lives under /var/lib/erhai, never in the root tree
+# or in a package.
+#
+# Applying it is not this unit's job -- 81-erhai-wifi-address.rules does that
+# from the radio's own udev event, which is the only hook that is reliably
+# ordered before NetworkManager.  This unit exists so the file is there to be
+# read and edited even on a tablet whose radio never came up, and so the
+# derivation is recorded once rather than repeated silently.
+#
+# ConditionPathExists=! is what makes it first-boot-only, and it is also how an
+# address is pre-seeded: write the file by hand and this unit never runs.
+[Unit]
+Description=Derive this tablet's Wi-Fi MAC address
+ConditionPathExists=!/var/lib/erhai/wifi-address
+After=local-fs.target
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=30
+ExecStart=/usr/sbin/erhai-wifi-address --generate
+
+[Install]
+WantedBy=multi-user.target

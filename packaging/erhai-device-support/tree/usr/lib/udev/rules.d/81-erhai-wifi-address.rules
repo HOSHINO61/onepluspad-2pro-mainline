@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Give this tablet's Wi-Fi interface its own MAC address, before anything in
+# userspace has looked at it.
+#
+# The WCN7860 here has no per-unit calibration, so its firmware answers with an
+# address out of the Atheros default OUI and invents the rest -- differently at
+# every boot.  erhai-wifi-address(8) replaces it with one derived from hardware
+# this unit does carry.  See /usr/sbin/erhai-wifi-address.
+#
+# This has to be a udev rule rather than a service: NetworkManager ignores a
+# netdev until udev has marked it initialized, which does not happen until RUN
+# has returned, so there is no window in which the interface is managed with
+# the firmware's address.  A service ordered before NetworkManager would race
+# the PCI probe and the firmware handshake instead.
+#
+# It has to sort after 80-net-setup-link.rules, which is where the interface
+# gets its predictable name and its ID_NET_DRIVER property.
+#
+# Matching the driver rather than the interface name is what keeps a plugged-in
+# USB adapter from being handed the tablet's address: this is the identity of
+# the radio on the board, not of whatever happens to be wlan0.
+
+ACTION!="add", GOTO="erhai_wifi_address_end"
+SUBSYSTEM!="net", GOTO="erhai_wifi_address_end"
+ENV{DEVTYPE}!="wlan", GOTO="erhai_wifi_address_end"
+ENV{ID_NET_DRIVER}!="ath12k*", GOTO="erhai_wifi_address_end"
+
+RUN+="/usr/sbin/erhai-wifi-address --apply $env{INTERFACE}"
+
+LABEL="erhai_wifi_address_end"

@@ -1,0 +1,349 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Give this tablet's Wi-Fi interface a MAC address of its own.
+
+    erhai-wifi-address --generate [--force]   derive and store the address
+    erhai-wifi-address --apply [INTERFACE]    give it to the interface
+    erhai-wifi-address --show                 print it and where it came from
+
+The WCN7860 on this board has no per-unit calibration: the board data is the
+generic board-2.bin from ROCKNIX, so the firmware answers the driver's service
+ready with an address out of the Atheros default OUI 00:03:7f and makes up the
+rest.  It makes up different bytes at every boot -- 00:03:7f:12:39:16,
+00:03:7f:12:d9:98, 00:03:7f:12:6b:8d on three boots of this unit -- so the
+tablet is not just unidentifiable, it is a different machine every time it
+comes up.  A DHCP reservation, a MAC filter or anything that accounts by MAC
+never sees the same tablet twice.
+
+The address is machine-specific data, so by the porting rules it is injected
+into /var/lib/erhai at install or first boot and never built into the root
+tree, into a package, or into the kernel's device tree -- the same treatment
+the Bluetooth address gets, with its own derivation scheme so the two never
+come out the same.
+
+Pre-seed /var/lib/erhai/wifi-address by hand -- one line, XX:XX:XX:XX:XX:XX --
+and --generate leaves it alone; that is the way to give a unit an address out
+of a block you actually own.
+
+Why this runs from a udev rule rather than a service: the address has to be in
+place before NetworkManager takes the interface, and udev is the one hook that
+is ordered that way.  NetworkManager ignores a netdev until udev has marked it
+initialized, which does not happen until this program has returned, so there
+is no window in which the interface is managed with the firmware's address.  A
+service ordered Before=NetworkManager.service would race the PCI probe and the
+firmware handshake instead, which land seconds into the boot.
+
+Why it does not need a systemd .link file: those cannot take a per-unit value
+from a file, only a literal written into the unit, which is exactly what must
+not go into a package.
+"""
+import argparse
+import fcntl
+import hashlib
+import os
+import re
+import socket
+import struct
+import sys
+from pathlib import Path
+
+STATE_DIR = Path('/var/lib/erhai')
+ADDRESS_FILE = STATE_DIR / 'wifi-address'
+
+# The driver behind the radio this program is for.  Matching on it is what
+# keeps a plugged-in USB adapter from being handed the tablet's address.
+DRIVER_PREFIX = 'ath12k'
+
+# Setting a hardware address is an ioctl on any socket; see netdevice(7).
+SIOCGIFFLAGS = 0x8913
+SIOCGIFHWADDR = 0x8927
+SIOCSIFHWADDR = 0x8924
+IFF_UP = 0x1
+ARPHRD_ETHER = 1
+IFNAMSIZ = 16
+
+ADDRESS_RE = re.compile(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$')
+
+
+def say(message):
+    print(f'erhai-wifi-address: {message}', file=sys.stderr, flush=True)
+
+
+class Failed(Exception):
+    """Something this program cannot fix; the caller prints it and exits 1."""
+
+
+# --------------------------------------------------------------------------
+# Deriving an address
+#
+# The same per-unit identifiers the Bluetooth address is derived from, in the
+# same order and for the same reasons: the UFS serial is the one this hardware
+# actually has, /sys/devices/soc0/serial_number is absent on the mainline
+# kernels this port runs on, and /etc/machine-id identifies an installation
+# rather than a tablet.
+
+
+def read_identifier():
+    """(source, material) from the first per-unit identifier this unit has."""
+    for node in sorted(Path('/sys/class/block').glob('sd*/device/serial')):
+        try:
+            value = re.sub(r'[^0-9A-Za-z]', '', node.read_text())
+        except OSError:
+            continue
+        # A UFS serial is a run of hex digits; a blank or one-character read
+        # is the device answering with nothing, not an identity.
+        if len(value) >= 8:
+            return 'ufs-serial', value
+    for path, source, least in (
+            (Path('/sys/devices/soc0/serial_number'), 'soc-serial', 4),
+            (Path('/etc/machine-id'), 'machine-id', 8)):
+        try:
+            value = re.sub(r'[^0-9A-Za-z]', '', path.read_text())
+        except OSError:
+            continue
+        if len(value) >= least:
+            return source, value
+    raise Failed('no per-unit identifier on this system')
+
+
+def derive():
+    """(source, address) for this unit, the same on every run."""
+    source, material = read_identifier()
+    # Hash rather than reuse: the address is broadcast in every frame the
+    # tablet sends, and the serial it comes from should not be.  The scheme
+    # name is part of what is hashed, which is what keeps this address and the
+    # Bluetooth one -- same sources, same material -- from colliding.
+    seed = f'erhai-wifi-address v1\n{source}\n{material}\n'.encode()
+    digest = hashlib.sha256(seed).digest()[:6]
+    # Locally administered (bit 1 set) and unicast (bit 0 clear): this port has
+    # no claim on any other block.  It also puts every result out of reach of
+    # the Atheros default 00:03:7f, whose first octet is even.
+    octets = [(digest[0] | 0x02) & 0xfe, *digest[1:]]
+    return source, ':'.join(f'{octet:02X}' for octet in octets)
+
+
+def usable(address):
+    """A station address: well formed, not a placeholder, and not multicast."""
+    if not ADDRESS_RE.match(address):
+        return False
+    if address in ('00:00:00:00:00:00', 'FF:FF:FF:FF:FF:FF'):
+        return False
+    # A multicast address is not a station address; the interface would be
+    # unreachable with one.
+    return not int(address[:2], 16) & 1
+
+
+def read_stored():
+    """The address in /var/lib/erhai/wifi-address, or None."""
+    try:
+        text = ADDRESS_FILE.read_text()
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = re.sub(r'#.*', '', line).strip().upper()
+        if line:
+            return line
+    return None
+
+
+def store(address):
+    """Write the address out.  Best effort: a read-only /var is not fatal."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        temporary = ADDRESS_FILE.with_suffix('.new')
+        temporary.write_text(address + '\n')
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, ADDRESS_FILE)
+    except OSError as error:
+        say(f'could not write {ADDRESS_FILE} ({error}); '
+            f'using the derived address anyway')
+        return False
+    return True
+
+
+def generate(force):
+    if ADDRESS_FILE.exists() and not force:
+        say(f'{ADDRESS_FILE} already exists; leaving it alone')
+        return
+    source, address = derive()
+    if not usable(address):
+        raise Failed(f'derived an address that is not usable: {address}')
+    if store(address):
+        say(f"derived this unit's address from {source} and wrote {ADDRESS_FILE}")
+
+
+def wanted_address():
+    """The address this unit should answer to, and where it came from.
+
+    The stored file wins when it is there.  When it is not -- the udev event
+    for the radio can arrive before any service has run, and on first boot it
+    does -- the derivation is used directly and written out afterwards.  It is
+    a pure function of hardware this unit carries, so the value is the same one
+    --generate would have stored; the file is the record and the override, not
+    the source of truth.
+    """
+    stored = read_stored()
+    if stored is not None:
+        if not usable(stored):
+            raise Failed(f'{ADDRESS_FILE} holds {stored!r}, '
+                         f'which is not a usable address')
+        return stored, f'{ADDRESS_FILE}'
+    source, address = derive()
+    if not usable(address):
+        raise Failed(f'derived an address that is not usable: {address}')
+    store(address)
+    return address, source
+
+
+# --------------------------------------------------------------------------
+# Handing it to the interface
+
+
+def interfaces():
+    """Every network interface driven by this tablet's Wi-Fi driver."""
+    found = []
+    for path in sorted(Path('/sys/class/net').iterdir()):
+        try:
+            driver = (path / 'device' / 'driver').resolve().name
+        except OSError:
+            continue
+        if driver.startswith(DRIVER_PREFIX):
+            found.append(path.name)
+    return found
+
+
+def pick_interface(named):
+    """The interface to act on: the one udev named, or the radio we know.
+
+    udev passes the interface from the event.  Falling back to a search keeps
+    this working if that name is stale -- the rename to the predictable name
+    happens in the same event -- and lets the program be run by hand with no
+    argument at all.
+    """
+    if named and Path('/sys/class/net', named).exists():
+        return named
+    found = interfaces()
+    if not found:
+        raise Failed(f'no {DRIVER_PREFIX} interface on this system'
+                     + (f' (and {named!r} does not exist)' if named else ''))
+    if len(found) > 1:
+        raise Failed(f'several {DRIVER_PREFIX} interfaces ({", ".join(found)}); '
+                     f'name the one to set on the command line')
+    return found[0]
+
+
+class Interface:
+    """ioctls on one network interface; see netdevice(7)."""
+
+    def __init__(self, name):
+        self.name = name
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def close(self):
+        self.socket.close()
+
+    def _ioctl(self, request, payload):
+        request_bytes = struct.pack(f'{IFNAMSIZ}s', self.name.encode()) + payload
+        return fcntl.ioctl(self.socket.fileno(), request, request_bytes)
+
+    def address(self):
+        answer = self._ioctl(SIOCGIFHWADDR, bytes(16))
+        return ':'.join(f'{octet:02X}' for octet in answer[18:24])
+
+    def up(self):
+        answer = self._ioctl(SIOCGIFFLAGS, bytes(16))
+        flags, = struct.unpack('<H', answer[IFNAMSIZ:IFNAMSIZ + 2])
+        return bool(flags & IFF_UP)
+
+    def set_address(self, address):
+        octets = bytes(int(part, 16) for part in address.split(':'))
+        self._ioctl(SIOCSIFHWADDR,
+                    struct.pack('<H6s8x', ARPHRD_ETHER, octets))
+
+
+def apply_address(named):
+    address, source = wanted_address()
+    interface = Interface(pick_interface(named))
+    try:
+        current = interface.address()
+        if current == address:
+            say(f'{interface.name} already answers to {address}')
+            return 0
+        if interface.up():
+            # mac80211 will only take an address on an interface that is not
+            # running, and taking this one down would drop whatever the user
+            # is connected over.  This is the install-time case, not the boot
+            # case: at the udev event the interface has never been up.
+            say(f'{interface.name} is up with {current}; leaving it alone. '
+                f'{address} takes effect at the next boot, or now with '
+                f'`ip link set dev {interface.name} down` first')
+            return 0
+        interface.set_address(address)
+        settled = interface.address()
+        if settled != address:
+            raise Failed(f'{interface.name} took {settled} '
+                         f'rather than {address}')
+        say(f'{interface.name} answers to {address} (from {source})')
+        return 0
+    finally:
+        interface.close()
+
+
+def show():
+    stored = read_stored()
+    try:
+        source, derived = derive()
+    except Failed:
+        source, derived = None, None
+    if stored is None:
+        say(f'nothing stored in {ADDRESS_FILE} yet'
+            + (f'; this unit derives {derived} from {source}' if derived else ''))
+    else:
+        print(stored)
+        if derived == stored:
+            say(f'derived from {source}')
+        else:
+            say(f"stored in {ADDRESS_FILE}; not what this unit's hardware derives")
+    for name in interfaces():
+        interface = Interface(name)
+        try:
+            state = 'up' if interface.up() else 'down'
+            say(f'{name} answers to {interface.address()} ({state})')
+        finally:
+            interface.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument('--generate', action='store_true',
+                        help="derive this unit's address and store it")
+    action.add_argument('--apply', action='store_true',
+                        help='give the stored address to the interface (the default)')
+    action.add_argument('--show', action='store_true',
+                        help='print the stored address and where it came from')
+    parser.add_argument('--force', action='store_true',
+                        help='with --generate, replace an address already stored')
+    parser.add_argument('interface', nargs='?',
+                        help='the interface to set; found automatically if omitted')
+    args = parser.parse_args()
+
+    try:
+        if args.generate:
+            generate(args.force)
+        elif args.show:
+            show()
+        else:
+            return apply_address(args.interface)
+    except Failed as failure:
+        say(str(failure))
+        return 1
+    except OSError as error:
+        say(f'the interface would not take the address: {error}')
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

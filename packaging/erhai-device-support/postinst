@@ -4,6 +4,7 @@ set -e
 
 SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
 BT_UNITS='erhai-bt-address-generate.service erhai-bt-address.service'
+WIFI_UNITS='erhai-wifi-address-generate.service'
 ASIDE=/var/lib/erhai/switch/pre-deb
 
 case "$1" in
@@ -29,14 +30,26 @@ configure)
 	# ordered before it, because the management interface takes a public
 	# address only while the controller is still unconfigured and powered
 	# down. Nothing here starts bluetooth.service or changes its state.
+	#
+	# The Wi-Fi address unit only writes the address down; the udev rule is
+	# what puts it on the interface, because that is the only hook ordered
+	# ahead of NetworkManager.
 	if command -v deb-systemd-helper >/dev/null 2>&1; then
-		for unit in $BT_UNITS; do
+		for unit in $BT_UNITS $WIFI_UNITS; do
 			deb-systemd-helper unmask "$unit" >/dev/null 2>&1 || true
 			deb-systemd-helper enable "$unit" >/dev/null 2>&1 || true
 		done
 	elif command -v systemctl >/dev/null 2>&1; then
 		# shellcheck disable=SC2086
-		systemctl enable --quiet $BT_UNITS || true
+		systemctl enable --quiet $BT_UNITS $WIFI_UNITS || true
+	fi
+
+	# udevd watches the rule directories and reloads on its own, but an
+	# explicit reload is what makes that a guarantee rather than a timing
+	# assumption -- and this package's rule has to be in effect before the
+	# radio's next add event, not eventually.
+	if command -v udevadm >/dev/null 2>&1; then
+		udevadm control --reload-rules >/dev/null 2>&1 || true
 	fi
 
 	# D19/D23: a suspend blanks this tablet until a long power-key press, and
@@ -65,7 +78,17 @@ configure)
 	# the next boot runs them again.
 	if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
 		# shellcheck disable=SC2086
-		systemctl start $BT_UNITS || true
+		systemctl start $BT_UNITS $WIFI_UNITS || true
+	fi
+
+	# Wi-Fi is the other half of the same idea, but it cannot be applied the
+	# same way: mac80211 takes an address only on an interface that is not
+	# running, and taking this one down would drop whatever the user is
+	# connected over -- possibly the connection this very upgrade came over.
+	# So record the address now and let the udev rule apply it at the next
+	# boot; the program says so rather than failing.
+	if command -v erhai-wifi-address >/dev/null 2>&1; then
+		erhai-wifi-address --apply || true
 	fi
 	;;
 esac

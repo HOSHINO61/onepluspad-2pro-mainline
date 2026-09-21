@@ -4,6 +4,7 @@ set -e
 
 SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
 BT_UNITS='erhai-bt-address-generate.service erhai-bt-address.service'
+WIFI_UNITS='erhai-wifi-address-generate.service'
 
 case "$1" in
 remove | purge)
@@ -24,30 +25,36 @@ remove | purge)
 	;;
 esac
 
-# The Bluetooth address units, handled the way dh_installsystemd generates it:
-# masked while the package is merely removed, so a dependency cannot start a
-# unit whose program is gone, and forgotten entirely on purge.
+# The address units, handled the way dh_installsystemd generates it: masked
+# while the package is merely removed, so a dependency cannot start a unit whose
+# program is gone, and forgotten entirely on purge.
 #
-# /var/lib/erhai/bt-address is not touched in either case. It is this tablet's
-# identity rather than this package's file: devices that paired with it know
-# that address, and removing a package should not hand the tablet a new one.
+# Neither /var/lib/erhai/bt-address nor /var/lib/erhai/wifi-address is touched
+# in either case. They are this tablet's identity rather than this package's
+# files: devices that paired with it know the one, and DHCP reservations and
+# MAC filters know the other, so removing a package should not hand the tablet
+# new ones. The radio goes back to the firmware's address at the next boot
+# because the udev rule is gone, which is the distribution's behaviour again.
 case "$1" in
 remove)
 	if command -v deb-systemd-helper >/dev/null 2>&1; then
-		for unit in $BT_UNITS; do
+		for unit in $BT_UNITS $WIFI_UNITS; do
 			deb-systemd-helper mask "$unit" >/dev/null 2>&1 || true
 		done
+	fi
+	if command -v udevadm >/dev/null 2>&1; then
+		udevadm control --reload-rules >/dev/null 2>&1 || true
 	fi
 	;;
 purge)
 	if command -v deb-systemd-helper >/dev/null 2>&1; then
-		for unit in $BT_UNITS; do
+		for unit in $BT_UNITS $WIFI_UNITS; do
 			deb-systemd-helper purge "$unit" >/dev/null 2>&1 || true
 			deb-systemd-helper unmask "$unit" >/dev/null 2>&1 || true
 		done
 	elif command -v systemctl >/dev/null 2>&1; then
 		# shellcheck disable=SC2086
-		systemctl disable --quiet $BT_UNITS || true
+		systemctl disable --quiet $BT_UNITS $WIFI_UNITS || true
 	fi
 	;;
 esac

@@ -12,7 +12,7 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  and Ubuntu boot triplets through the active A/B slot, the store it keeps
  under /var/lib/erhai/switch, a desktop entry and polkit action for the
  Android direction, the power settings this port needs until suspend/resume
- works, and the Bluetooth address this unit answers to.
+ works, and the Bluetooth and Wi-Fi addresses this unit answers to.
  .
  The combo chip's NVM carries one address for every tablet of this model, so
  the kernel marks the controller unconfigured and BlueZ ignores it.
@@ -23,6 +23,17 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  first boot and is in no package. It speaks to the kernel directly rather than
  running btmgmt, which waits forever for input it will never get when its
  stdin is not a terminal, as it never is under systemd.
+ .
+ The Wi-Fi radio has the same problem and a worse symptom: with no per-unit
+ calibration its firmware answers out of the Atheros default OUI and invents
+ the rest of the address afresh at every boot, so the tablet is a different
+ machine to every DHCP reservation and MAC filter each time it comes up.
+ erhai-wifi-address derives a stable address for this unit by its own scheme,
+ stores it in /var/lib/erhai/wifi-address, and a udev rule applies it to the
+ radio's interface. It has to be udev rather than a service: NetworkManager
+ ignores a netdev until udev has finished with it, so there is no window in
+ which the interface is managed with the firmware's address. A drop-in keeps
+ NetworkManager from putting the firmware's address back.
  .
  It also disables flash-kernel (/etc/flash-kernel/machine = "none", the tool's
  own documented switch). The distribution's initramfs hooks call it whenever a
