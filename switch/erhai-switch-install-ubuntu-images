@@ -1,0 +1,108 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Populate the switcher's Ubuntu triplet from a signed image directory.
+#
+# This is the half of the dual boot that gets updated: a new kernel produces a
+# new boot/init_boot/vendor_boot set, which has to reach the store *and*, if
+# Ubuntu is the system currently occupying the slot, the slot itself -- or the
+# next boot would still run the old kernel. The previous set is kept in
+# ubuntu.prev/ so a bad kernel can be rolled back without a host.
+#
+# Meant to be called by the erhai-kernel package's postinst with the directory
+# it just installed; usable by hand for a locally built triplet.
+#
+#   erhai-switch-install-ubuntu-images <signed-triplet-dir> [--no-activate]
+#
+# The source directory is what tools/sign-boot-triplet.py writes: the three
+# .img files with AVB hash footers, SHA256SUMS, and manifest.json.
+
+set -u
+
+PROG=erhai-switch-install-ubuntu-images
+PARTS='boot init_boot vendor_boot'
+STORE=${ERHAI_SWITCH_STORE:-/var/lib/erhai/switch}
+SWITCHER=${ERHAI_SWITCH:-erhai-switch}
+ACTIVATE=1
+SOURCE=
+
+die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 1; }
+say() { printf '%s: %s\n' "$PROG" "$*"; }
+
+while [ $# -gt 0 ]; do
+	case $1 in
+	--no-activate) ACTIVATE=0 ;;
+	--store) shift; STORE=${1:-} ;;
+	--store=*) STORE=${1#--store=} ;;
+	-h|--help) sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-*) die "unknown option: $1" ;;
+	*) [ -z "$SOURCE" ] || die 'only one source directory'; SOURCE=$1 ;;
+	esac
+	shift
+done
+[ -n "$SOURCE" ] || die 'usage: erhai-switch-install-ubuntu-images <signed-triplet-dir>'
+[ "$(id -u)" = 0 ] || die 'must run as root'
+[ -d "$SOURCE" ] || die "no such directory: $SOURCE"
+[ -f "$SOURCE/SHA256SUMS" ] || die "$SOURCE has no SHA256SUMS; sign the triplet first"
+
+# Refuse before touching the store, not halfway through it.
+for name in $PARTS; do
+	[ -f "$SOURCE/$name.img" ] || die "$SOURCE is missing $name.img"
+	want=$(sed -n "s/^\([0-9a-f]\{64\}\)  *$name\.img\$/\1/p" "$SOURCE/SHA256SUMS" | head -n 1)
+	[ -n "$want" ] || die "SHA256SUMS has no entry for $name.img"
+	got=$(sha256sum "$SOURCE/$name.img" | cut -d' ' -f1)
+	[ "$got" = "$want" ] || die "$name.img is $got, SHA256SUMS says $want"
+done
+
+mkdir -p "$STORE" || die "cannot create $STORE"
+staging=$STORE/.ubuntu.new
+rm -rf "$staging"
+mkdir -p "$staging" || die "cannot create $staging"
+for name in $PARTS; do
+	cp "$SOURCE/$name.img" "$staging/$name.img" || die "cannot copy $name.img"
+done
+cp "$SOURCE/SHA256SUMS" "$staging/SHA256SUMS" || die 'cannot copy SHA256SUMS'
+[ -f "$SOURCE/manifest.json" ] && cp "$SOURCE/manifest.json" "$staging/manifest.json"
+{
+	printf '{\n'
+	printf '  "set": "ubuntu",\n'
+	printf '  "source": "%s",\n' "$SOURCE"
+	printf '  "installed": "%s"\n' \
+		"$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)"
+	printf '}\n'
+} > "$staging/meta.json"
+sync
+
+# Rotate only once the new set is complete on disk: an interrupted install
+# must not be able to destroy both the new and the previous triplet.
+rm -rf "$STORE/ubuntu.prev.old"
+[ -d "$STORE/ubuntu.prev" ] && mv "$STORE/ubuntu.prev" "$STORE/ubuntu.prev.old"
+[ -d "$STORE/ubuntu" ] && mv "$STORE/ubuntu" "$STORE/ubuntu.prev"
+mv "$staging" "$STORE/ubuntu" || die "cannot move $staging into place"
+rm -rf "$STORE/ubuntu.prev.old"
+sync
+say "installed a new Ubuntu triplet in $STORE/ubuntu (previous one in ubuntu.prev)"
+
+[ "$ACTIVATE" = 1 ] || exit 0
+
+# If Ubuntu is the system in the slot right now, the slot holds the *old*
+# images and has to be rewritten, without rebooting: the caller (an apt
+# transaction, usually) decides when to reboot.
+if ! command -v "$SWITCHER" >/dev/null 2>&1 && [ ! -x "$SWITCHER" ]; then
+	say "erhai-switch not found; the slot was not updated"
+	exit 0
+fi
+# "is one of our images in the slot right now" is the precise question, and
+# the marker in the boot header answers it without depending on which build.
+status=$("$SWITCHER" status 2>/dev/null || true)
+case $status in
+*'erhai marker in boot: yes'*)
+	say 'Ubuntu occupies the slot; writing the new triplet into it'
+	"$SWITCHER" to-ubuntu --no-reboot ||
+		die 'the slot was NOT updated; do not reboot until erhai-switch status is clean'
+	say 'the slot now holds the new triplet; reboot when convenient'
+	;;
+*)
+	say 'Android occupies the slot; the new triplet is used at the next switch'
+	;;
+esac

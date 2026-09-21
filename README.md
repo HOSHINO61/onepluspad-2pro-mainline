@@ -32,6 +32,7 @@ Not yet: panel visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 ```
 tools/       build & packaging entry points (see below)
 initramfs/   RAM userspace profiles (USB ACM console / NCM evidence channel)
+switch/      dual-boot switcher and its KernelSU module (see switch/README.md)
 kernel/      source.json pinning the kernel repo identity and tool inputs
 ```
 
@@ -73,11 +74,23 @@ expires. Optional kernel cmdline flags: `erhai.watchdog=NN` (session length),
 `erhai.switchroot=1` (hand PID1 to systemd with a matching expiry timer),
 `erhai.weston=1` (autostart the pixman weston desktop).
 
+## Dual boot
+
+`switch/` holds the persistent-install half: Android and Ubuntu take turns in
+the **active** A/B slot, because this unit's B slot carries an older firmware
+chain that can never boot and its ABL will not run a kernel out of `recovery`.
+Every image written into `boot`/`init_boot`/`vendor_boot` must carry an AVB
+hash footer (`tools/sign-boot-triplet.py`), self-signed included — `vbmeta`
+lists `boot` as a chain partition, so a missing footer is malformed metadata
+that even an unlocked bootloader refuses. See `switch/README.md`.
+
 ## Safety
 
 RAM sessions write nothing to flash. Anything beyond that — partitioning,
 flashing, persistent installs — is out of scope for this tree and requires
-explicit separate steps and authorization.
+explicit separate steps and authorization. The switcher in `switch/` is the
+one exception, and it writes only the three boot partitions of the slot that
+is already active.
 
 The RAM session's debug channel is an **unauthenticated root telnet** on the
 USB NCM link by design (it is the only bring-up channel on this device). It

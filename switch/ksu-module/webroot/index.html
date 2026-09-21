@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>erhai dual boot</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 1.5rem max(1rem, env(safe-area-inset-left)) 2rem;
+         font: 15px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 1.15rem; margin: 0 0 .25rem; }
+  p.sub { margin: 0 0 1.25rem; opacity: .7; }
+  button { font: inherit; padding: .7rem 1.1rem; border-radius: .5rem;
+           border: 1px solid currentColor; background: transparent;
+           color: inherit; cursor: pointer; }
+  button[disabled] { opacity: .5; cursor: progress; }
+  #go { font-weight: 600; }
+  pre { white-space: pre-wrap; word-break: break-word; margin-top: 1.25rem;
+        padding: .75rem; border-radius: .5rem;
+        background: color-mix(in srgb, currentColor 8%, transparent); }
+</style>
+
+<h1>erhai dual boot</h1>
+<p class="sub">Rotates the boot triplet through the active slot. Android is
+archived on the Linux root first; nothing else is written.</p>
+
+<p>
+  <button id="go">Reboot to Ubuntu</button>
+  <button id="check">Status</button>
+</p>
+<pre id="out">loading…</pre>
+
+<script>
+const out = document.getElementById('out');
+const go = document.getElementById('go');
+const check = document.getElementById('check');
+
+// KernelSU's WebUI bridge. Kept behind one function so the page says what is
+// wrong instead of failing silently when it is opened outside the manager.
+function exec(cmd) {
+  const api = window.ksu;
+  if (!api || typeof api.exec !== 'function') {
+    return Promise.reject(new Error('open this page from the KernelSU manager'));
+  }
+  return new Promise((resolve, reject) => {
+    const name = 'erhaiCb' + Math.random().toString(36).slice(2);
+    window[name] = (code, stdout, stderr) => {
+      delete window[name];
+      (code === 0 ? resolve : reject)(
+        code === 0 ? stdout : new Error((stderr || stdout || '').trim() || ('exit ' + code)));
+    };
+    try {
+      api.exec(cmd, '{}', name);
+    } catch (err) {
+      delete window[name];
+      reject(err);
+    }
+  });
+}
+
+async function run(cmd, busy) {
+  for (const b of [go, check]) b.disabled = true;
+  out.textContent = busy;
+  try {
+    out.textContent = (await exec(cmd)).trim() || '(no output)';
+  } catch (err) {
+    out.textContent = 'failed: ' + err.message;
+  } finally {
+    for (const b of [go, check]) b.disabled = false;
+  }
+}
+
+// The switch reboots the tablet itself, so there is no success message to
+// wait for: the page simply goes away with the system.
+go.addEventListener('click', () => {
+  if (!confirm('Write the Ubuntu triplet into the active slot and reboot?')) return;
+  run('erhai-switch to-ubuntu', 'archiving Android, writing Ubuntu, verifying…');
+});
+check.addEventListener('click', () => run('erhai-switch status', 'reading…'));
+run('erhai-switch status', 'reading…');
+</script>
