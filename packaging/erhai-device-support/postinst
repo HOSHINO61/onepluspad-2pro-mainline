@@ -3,6 +3,7 @@
 set -e
 
 SLEEP_TARGETS='sleep.target suspend.target hibernate.target hybrid-sleep.target'
+BT_UNITS='erhai-bt-address-generate.service erhai-bt-address.service'
 ASIDE=/var/lib/erhai/switch/pre-deb
 
 case "$1" in
@@ -24,6 +25,20 @@ configure)
 		fi
 	done
 
+	# The Bluetooth address units. Both are WantedBy=bluetooth.service and
+	# ordered before it, because the management interface takes a public
+	# address only while the controller is still unconfigured and powered
+	# down. Nothing here starts bluetooth.service or changes its state.
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		for unit in $BT_UNITS; do
+			deb-systemd-helper unmask "$unit" >/dev/null 2>&1 || true
+			deb-systemd-helper enable "$unit" >/dev/null 2>&1 || true
+		done
+	elif command -v systemctl >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		systemctl enable --quiet $BT_UNITS || true
+	fi
+
 	# D19/D23: a suspend blanks this tablet until a long power-key press, and
 	# the idle blank does not come back on touch either. The gsettings override
 	# and the logind drop-in ship as files; the sleep targets have to be masked
@@ -41,6 +56,16 @@ configure)
 	fi
 	if command -v update-desktop-database >/dev/null 2>&1; then
 		update-desktop-database -q /usr/share/applications || true
+	fi
+
+	# Give the controller its address now rather than at the next boot: an
+	# install is also how a running system gets Bluetooth for the first time.
+	# Both units are oneshot and bounded, and neither pulls in or restarts
+	# bluetooth.service. A failure is not a reason to fail the transaction --
+	# the next boot runs them again.
+	if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		systemctl start $BT_UNITS || true
 	fi
 	;;
 esac

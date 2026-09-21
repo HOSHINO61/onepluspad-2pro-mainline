@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Hand the stored address to the controller before bluetoothd looks at it.
+# The management interface only accepts a public address while the controller
+# is still unconfigured and powered down, which is exactly the state the
+# kernel leaves it in -- so this has to happen before bluetooth.service, not
+# after it.
+#
+# Powering the controller up is deliberately not done here: BlueZ restores the
+# power state the user last chose, and a forced power-on at every boot would
+# quietly undo a user who turned Bluetooth off.  `erhai-bt-address --power-on`
+# is there for the case where BlueZ does not.
+#
+# TimeoutStartSec is set because a Type=oneshot service has no start timeout
+# of its own, and this one runs ahead of bluetooth.service: anything that
+# blocked here would block the Bluetooth stack for the whole session rather
+# than fail and let the boot carry on.  The program bounds its own waiting as
+# well; this is the backstop.
+[Unit]
+Description=Give this tablet's Bluetooth controller its address
+Before=bluetooth.service
+After=local-fs.target
+ConditionPathExists=/var/lib/erhai/bt-address
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=75
+ExecStart=/usr/sbin/erhai-bt-address --apply
+
+[Install]
+WantedBy=bluetooth.service

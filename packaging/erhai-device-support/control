@@ -5,14 +5,24 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: systemd
+Depends: systemd, python3, bluez
 Description: OnePlus Pad 2 Pro (erhai) device support
  Everything the mainline port needs in the running system that is neither a
  firmware blob nor a kernel: the dual-boot switcher that rotates the Android
  and Ubuntu boot triplets through the active A/B slot, the store it keeps
  under /var/lib/erhai/switch, a desktop entry and polkit action for the
- Android direction, and the power settings this port needs until
- suspend/resume works.
+ Android direction, the power settings this port needs until suspend/resume
+ works, and the Bluetooth address this unit answers to.
+ .
+ The combo chip's NVM carries one address for every tablet of this model, so
+ the kernel marks the controller unconfigured and BlueZ ignores it.
+ erhai-bt-address derives an address for this unit from hardware it already
+ carries, stores it in /var/lib/erhai/bt-address and hands it to the
+ controller through the kernel's management interface before bluetoothd
+ starts. The address is machine-specific data: it is written on the tablet at
+ first boot and is in no package. It speaks to the kernel directly rather than
+ running btmgmt, which waits forever for input it will never get when its
+ stdin is not a terminal, as it never is under systemd.
  .
  It also disables flash-kernel (/etc/flash-kernel/machine = "none", the tool's
  own documented switch). The distribution's initramfs hooks call it whenever a

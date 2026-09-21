@@ -1,0 +1,390 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Give this tablet's Bluetooth controller an address of its own.
+
+    erhai-bt-address --generate [--force]   derive and store the address
+    erhai-bt-address --apply                give it to the controller
+    erhai-bt-address --show                 print it and where it came from
+    erhai-bt-address --power-on             power the controller up by hand
+
+The WCN7860's NVM file ships one address for every unit that runs it, and
+nothing on this board hands the kernel a per-unit one: there is no
+local-bd-address in the device tree, the persist partition holds an empty
+BT.FLG and nothing else, and the modem's static partitions carry no Bluetooth
+record at all. btqca notices that the controller answers with the address its
+own NVM carries, sets HCI_QUIRK_USE_BDADDR_PROPERTY, and the core then marks
+the controller HCI_UNCONFIGURED -- so BlueZ reports "No default controller
+available" and the tablet has no Bluetooth at all.
+
+The address is machine-specific data, so by the porting rules it is injected
+into /var/lib/erhai at install or first boot and never built into the root
+tree, into a package, or into the kernel's device tree. This program is both
+ends of that: --generate derives one from hardware this unit already carries
+and writes /var/lib/erhai/bt-address, and --apply hands whatever that file
+holds to the controller.
+
+Pre-seed /var/lib/erhai/bt-address by hand -- one line, XX:XX:XX:XX:XX:XX --
+and --generate leaves it alone; that is the way to give a unit an address out
+of a block you actually own.
+
+Why this speaks to the kernel directly instead of running btmgmt: btmgmt is
+built on BlueZ's interactive shell and waits forever for input when its stdin
+is not a terminal. Under systemd it never has one, so `btmgmt info` alone
+hangs (measured on bluez 5.85), and a unit built on it would hang the boot
+rather than configure the controller. The management socket underneath it is a
+stable kernel interface, and setting a public address is four packets on it.
+"""
+import argparse
+import hashlib
+import os
+import re
+import socket
+import struct
+import sys
+import time
+from pathlib import Path
+
+STATE_DIR = Path('/var/lib/erhai')
+ADDRESS_FILE = STATE_DIR / 'bt-address'
+INDEX = 0
+
+# The Bluetooth management interface: an AF_BLUETOOTH socket bound to the
+# control channel, as documented in the kernel's mgmt-api.txt.
+AF_BLUETOOTH = 31
+BTPROTO_HCI = 1
+HCI_DEV_NONE = 0xffff
+HCI_CHANNEL_CONTROL = 3
+
+EV_CMD_COMPLETE = 0x0001
+EV_CMD_STATUS = 0x0002
+OP_READ_INDEX_LIST = 0x0003
+OP_READ_INFO = 0x0004
+OP_SET_POWERED = 0x0005
+OP_READ_UNCONF_INDEX_LIST = 0x0036
+OP_SET_PUBLIC_ADDRESS = 0x0039
+
+ADDRESS_RE = re.compile(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$')
+
+
+def say(message):
+    print(f'erhai-bt-address: {message}', file=sys.stderr, flush=True)
+
+
+class Failed(Exception):
+    """Something this program cannot fix; the caller prints it and exits 1."""
+
+
+# --------------------------------------------------------------------------
+# Deriving an address
+#
+# Sources, in the order they are tried. The UFS serial comes first because it
+# is the one this hardware actually has and it does not depend on which driver
+# exposes what: /sys/devices/soc0/serial_number is absent on the mainline
+# kernels this port runs on, and /etc/machine-id is a last resort because it
+# identifies an installation rather than a tablet.
+
+
+def read_identifier():
+    """(source, material) from the first per-unit identifier this unit has."""
+    for node in sorted(Path('/sys/class/block').glob('sd*/device/serial')):
+        try:
+            value = re.sub(r'[^0-9A-Za-z]', '', node.read_text())
+        except OSError:
+            continue
+        # A UFS serial is a run of hex digits; a blank or one-character read
+        # is the device answering with nothing, not an identity.
+        if len(value) >= 8:
+            return 'ufs-serial', value
+    for path, source, least in (
+            (Path('/sys/devices/soc0/serial_number'), 'soc-serial', 4),
+            (Path('/etc/machine-id'), 'machine-id', 8)):
+        try:
+            value = re.sub(r'[^0-9A-Za-z]', '', path.read_text())
+        except OSError:
+            continue
+        if len(value) >= least:
+            return source, value
+    raise Failed('no per-unit identifier on this system')
+
+
+def derive():
+    """(source, address) for this unit, the same on every run."""
+    source, material = read_identifier()
+    # Hash rather than reuse: the address is public -- every device scanning
+    # the room sees it -- and the serial it comes from should not be.
+    seed = f'erhai-bt-address v1\n{source}\n{material}\n'.encode()
+    digest = hashlib.sha256(seed).digest()[:6]
+    # Locally administered (bit 1 set) and unicast (bit 0 clear): this port
+    # has no claim on any other block. It also puts every result out of reach
+    # of the vendor default 78:55:..., whose first octet is even.
+    octets = [(digest[0] | 0x02) & 0xfe, *digest[1:]]
+    return source, ':'.join(f'{octet:02X}' for octet in octets)
+
+
+def usable(address):
+    """A device address: well formed, not a placeholder, and not multicast."""
+    if not ADDRESS_RE.match(address):
+        return False
+    if address in ('00:00:00:00:00:00', 'FF:FF:FF:FF:FF:FF'):
+        return False
+    # A multicast address is not a device address: the kernel would take it
+    # and the controller would be unreachable.
+    return not int(address[:2], 16) & 1
+
+
+def read_stored():
+    """The address in /var/lib/erhai/bt-address, or None."""
+    try:
+        text = ADDRESS_FILE.read_text()
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = re.sub(r'#.*', '', line).strip().upper()
+        if line:
+            return line
+    return None
+
+
+def generate(force):
+    if ADDRESS_FILE.exists() and not force:
+        say(f'{ADDRESS_FILE} already exists; leaving it alone')
+        return
+    source, address = derive()
+    if not usable(address):
+        raise Failed(f'derived an address that is not usable: {address}')
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = ADDRESS_FILE.with_suffix('.new')
+    temporary.write_text(address + '\n')
+    os.chmod(temporary, 0o644)
+    os.replace(temporary, ADDRESS_FILE)
+    say(f"derived this unit's address from {source} and wrote {ADDRESS_FILE}")
+
+
+# --------------------------------------------------------------------------
+# Handing it to the controller
+
+
+def pack_bdaddr(address):
+    """mgmt carries a bdaddr least significant octet first."""
+    return bytes(int(part, 16) for part in reversed(address.split(':')))
+
+
+def unpack_bdaddr(raw):
+    return ':'.join(f'{octet:02X}' for octet in reversed(raw[:6]))
+
+
+class Management:
+    """One conversation with the kernel's Bluetooth management interface."""
+
+    def __init__(self, timeout=10.0):
+        self.timeout = timeout
+        self.socket = socket.socket(AF_BLUETOOTH,
+                                    socket.SOCK_RAW | socket.SOCK_CLOEXEC,
+                                    BTPROTO_HCI)
+        self.socket.bind((HCI_DEV_NONE, HCI_CHANNEL_CONTROL))
+
+    def close(self):
+        self.socket.close()
+
+    def call(self, opcode, index=HCI_DEV_NONE, payload=b''):
+        """Send one command and return (status, parameters) for its reply.
+
+        Unsolicited events arrive on the same socket -- an index being added
+        or removed, which is exactly what setting an address causes -- so read
+        until the reply for this opcode turns up or the budget runs out.
+        """
+        self.socket.send(struct.pack('<HHH', opcode, index, len(payload)) + payload)
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Failed(f'the kernel did not answer mgmt command '
+                             f'0x{opcode:04x} within {self.timeout:g}s')
+            self.socket.settimeout(remaining)
+            try:
+                packet = self.socket.recv(4096)
+            except (TimeoutError, socket.timeout):
+                continue
+            if len(packet) < 6:
+                continue
+            event, _index, length = struct.unpack('<HHH', packet[:6])
+            body = packet[6:6 + length]
+            if event not in (EV_CMD_COMPLETE, EV_CMD_STATUS) or len(body) < 3:
+                continue
+            replied, status = struct.unpack('<HB', body[:3])
+            if replied == opcode:
+                return status, body[3:]
+
+    def index_list(self, opcode):
+        status, parameters = self.call(opcode)
+        if status != 0 or len(parameters) < 2:
+            return []
+        count, = struct.unpack('<H', parameters[:2])
+        return list(struct.unpack(f'<{count}H', parameters[2:2 + count * 2]))
+
+    def configured(self):
+        return self.index_list(OP_READ_INDEX_LIST)
+
+    def unconfigured(self):
+        return self.index_list(OP_READ_UNCONF_INDEX_LIST)
+
+    def info(self, index):
+        """(address, powered) for a configured controller, or None."""
+        status, parameters = self.call(OP_READ_INFO, index)
+        if status != 0 or len(parameters) < 17:
+            return None
+        settings, = struct.unpack('<I', parameters[13:17])
+        return unpack_bdaddr(parameters[:6]), bool(settings & 1)
+
+
+def wait_for_controller(mgmt, seconds):
+    """Where index 0 is: 'configured', 'unconfigured', or None.
+
+    Both index lists leave out a controller that is still in HCI_SETUP, so at
+    boot this waits through the firmware handshake -- a few seconds on this
+    tablet -- rather than finding nothing and giving up.
+    """
+    deadline = time.monotonic() + seconds
+    while True:
+        if INDEX in mgmt.configured():
+            return 'configured'
+        if INDEX in mgmt.unconfigured():
+            return 'unconfigured'
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.25)
+
+
+def apply_address(wait_seconds):
+    address = read_stored()
+    if address is None:
+        raise Failed(f'no address in {ADDRESS_FILE}; --generate writes one')
+    if not usable(address):
+        raise Failed(f'{ADDRESS_FILE} holds {address!r}, which is not a usable address')
+    if not int(address[:2], 16) & 2:
+        say(f'note: {address} is not locally administered; using it as given')
+
+    mgmt = Management()
+    try:
+        where = wait_for_controller(mgmt, wait_seconds)
+        if where is None:
+            raise Failed(f'no controller at index {INDEX} after {wait_seconds:g}s; '
+                         f'the Bluetooth controller never registered')
+        if where == 'configured':
+            current = mgmt.info(INDEX)
+            if current and current[0] == address:
+                say(f'hci{INDEX} already answers to {address}')
+                return
+            raise Failed(f'hci{INDEX} is already configured as '
+                         f'{current[0] if current else "unknown"}; a public address '
+                         f'can only be set while the controller is unconfigured')
+
+        status, _ = mgmt.call(OP_SET_PUBLIC_ADDRESS, INDEX, pack_bdaddr(address))
+        if status != 0:
+            # Both index lists already exclude a controller that is mid-setup,
+            # so reaching here means a real refusal rather than a race. Say
+            # where the kernel thinks the controller is: an INVALID_INDEX
+            # (0x11) for an index that is plainly listed is how a wrong
+            # opcode shows up, and it cost this port an afternoon once.
+            raise Failed(f'the controller refused the address '
+                         f'(mgmt status 0x{status:02x}); '
+                         f'configured={mgmt.configured()} '
+                         f'unconfigured={mgmt.unconfigured()}')
+
+        # Taking the address makes the kernel re-register the controller and
+        # run its firmware handshake again, which is seconds rather than
+        # milliseconds; until that lands, BlueZ still sees nothing.
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            current = mgmt.info(INDEX) if INDEX in mgmt.configured() else None
+            if current and current[0] == address:
+                say(f'hci{INDEX} answers to {address}')
+                return
+            if time.monotonic() >= deadline:
+                raise Failed(f'hci{INDEX} took the address but did not come back '
+                             f'configured within {wait_seconds:g}s')
+            time.sleep(0.5)
+    finally:
+        mgmt.close()
+
+
+def power_on():
+    """Power the controller up. BlueZ normally does this; see the unit."""
+    mgmt = Management()
+    try:
+        if INDEX not in mgmt.configured():
+            raise Failed(f'hci{INDEX} is not configured; --apply gives it an address first')
+        status, _ = mgmt.call(OP_SET_POWERED, INDEX, b'\x01')
+        if status != 0:
+            raise Failed(f'powering hci{INDEX} on failed (mgmt status 0x{status:02x})')
+        say(f'hci{INDEX} is powered on')
+    finally:
+        mgmt.close()
+
+
+def show():
+    address = read_stored()
+    if address is None:
+        raise Failed(f'no address stored in {ADDRESS_FILE} yet')
+    print(address)
+    try:
+        source, derived = derive()
+    except Failed:
+        source, derived = None, None
+    if derived == address:
+        say(f'derived from {source}')
+    else:
+        say(f"stored in {ADDRESS_FILE}; not what this unit's hardware derives")
+    mgmt = Management(timeout=5.0)
+    try:
+        if INDEX in mgmt.configured():
+            current = mgmt.info(INDEX)
+            state = 'powered' if current and current[1] else 'down'
+            say(f'hci{INDEX} answers to {current[0] if current else "unknown"} ({state})')
+        elif INDEX in mgmt.unconfigured():
+            say(f'hci{INDEX} is present but unconfigured; --apply gives it its address')
+        else:
+            say(f'hci{INDEX} is not present')
+    finally:
+        mgmt.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument('--generate', action='store_true',
+                        help="derive this unit's address and store it")
+    action.add_argument('--apply', action='store_true',
+                        help='hand the stored address to the controller (the default)')
+    action.add_argument('--power-on', action='store_true',
+                        help='power the controller up, for when BlueZ does not')
+    action.add_argument('--show', action='store_true',
+                        help='print the stored address and where it came from')
+    parser.add_argument('--force', action='store_true',
+                        help='with --generate, replace an address already stored')
+    parser.add_argument('--wait', type=float,
+                        default=float(os.environ.get('ERHAI_BT_WAIT', '20')),
+                        help='seconds to wait for the controller (default: 20)')
+    args = parser.parse_args()
+
+    try:
+        if args.generate:
+            generate(args.force)
+        elif args.power_on:
+            power_on()
+        elif args.show:
+            show()
+        else:
+            apply_address(args.wait)
+    except Failed as failure:
+        say(str(failure))
+        return 1
+    except OSError as error:
+        say(f'the Bluetooth management interface is unreachable: {error}')
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

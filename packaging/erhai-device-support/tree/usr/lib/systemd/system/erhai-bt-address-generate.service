@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# First boot only: decide what this unit's Bluetooth address is.  The vendor
+# NVM carries one address for every tablet of this model, so without this the
+# controller comes up HCI_UNCONFIGURED and BlueZ ignores it.  The address is
+# machine-specific data and lives under /var/lib/erhai, never in the root tree
+# or in a package.
+#
+# ConditionPathExists=! is what makes it first-boot-only, and it is also how an
+# address is pre-seeded: write the file by hand and this unit never runs.
+[Unit]
+Description=Derive this tablet's Bluetooth address
+ConditionPathExists=!/var/lib/erhai/bt-address
+Before=erhai-bt-address.service bluetooth.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=30
+ExecStart=/usr/sbin/erhai-bt-address --generate
+
+[Install]
+WantedBy=bluetooth.service
