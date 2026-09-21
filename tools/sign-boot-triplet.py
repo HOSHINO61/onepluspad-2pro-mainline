@@ -19,6 +19,12 @@ writes whole partitions.
 Partition sizes and rollback indices are read from the stock images of the
 firmware the device is running, so a mismatch is reported instead of guessed.
 
+The hash salt is derived from the image rather than left to avbtool's default
+of /dev/urandom, so signing the same triplet twice produces the same bytes.
+Packaging reads those bytes back as an identity: an image that changes only
+because it was signed again is an image nobody can tell apart from a real
+change.
+
     sign-boot-triplet.py --triplet out/mainline-gki-mNNN \\
         --stock cache/stock-c34/images --key private/avb/erhai-test-rsa4096.pem \\
         --output out/mainline-gki-mNNN-avb
@@ -119,10 +125,15 @@ def main():
             parser.error(f'{reference} carries no usable {name} hash footer')
         target = out / f'{name}.img'
         shutil.copyfile(source, target)
+        # Deterministic salt: avbtool would otherwise draw 32 random bytes and
+        # the same input would sign to a different image every time.
+        salt = hashlib.sha256(b'erhai-avb-salt\x00' + name.encode() + b'\x00'
+                              + bytes.fromhex(sha256_file(source))).hexdigest()
         avbtool(tool, 'add_hash_footer', '--image', str(target),
                 '--partition_name', name,
                 '--partition_size', str(stock['image_size']),
                 '--rollback_index', str(stock['rollback_index']),
+                '--salt', salt,
                 '--algorithm', args.algorithm, '--key', str(args.key))
         signed = info_image(tool, target)
         entry = {'input': str(source.name), 'input_sha256': sha256_file(source),
@@ -130,6 +141,7 @@ def main():
                  'footer': {'partition_name': name,
                             'partition_size': stock['image_size'],
                             'rollback_index': stock['rollback_index'],
+                            'salt': salt,
                             'algorithm': args.algorithm},
                  'stock_reference': {'file': str(reference.name),
                                      'sha256': sha256_file(reference),
