@@ -40,7 +40,7 @@ Versions
 --------
 
     <release>[~dbg]+g<kernel commit>.b<build id>
-    0.1.1+g1e4124bb816d.b3f2a9c41       0.1.1~dbg+g1e4124bb816d.b3f2a9c41
+    0.1.4+g1e4124bb816d.bf2655cee       0.1.4~dbg+g1e4124bb816d.b9a8a5a08
 
 <release> comes from packaging/VERSION and is bumped by hand for each release
 meant to install over the last one. It is the only part dpkg's ordering ever
