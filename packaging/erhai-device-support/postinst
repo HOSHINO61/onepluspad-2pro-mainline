@@ -57,6 +57,10 @@ configure)
 	# radio's next add event, not eventually.
 	if command -v udevadm >/dev/null 2>&1; then
 		udevadm control --reload-rules >/dev/null 2>&1 || true
+		# Apply the display retention workaround to an already-bound MDSS.
+		# Replaying only this platform change leaves network devices alone.
+		udevadm trigger --action=change --subsystem-match=platform \
+			--sysname-match=ae00000.display-subsystem || true
 	fi
 
 	# Suspend used to blank this tablet until a long power-key press, so an

@@ -15,7 +15,7 @@ for the exact baseline, branch and commit.
 | Area | State | Notes |
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
-| Display | DSI panel 3392x2400@120 native KMS, DPU-side verified pixel-exact | **visual confirmation pending** (kernel chain green; ktz8868 bias + DSC PPS fixes staged) |
+| Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS power collapse breaks later frame commits; device support keeps MDSS active as a temporary workaround. Blank/wake visual acceptance remains pending. |
 | Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
@@ -24,7 +24,11 @@ for the exact baseline, branch and commit.
 | Wi-Fi (WCN7860) | PCIe Gen3 x2 up, firmware loads, `wlp1s0` managed by NetworkManager | needs AP credentials for an actual connection |
 | Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell session runs | RAM-delivered squashfs, llvmpipe; NM/ssh tooling in s5 |
 
-Not yet: panel visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
+The display retention workaround increases power use while the screen is off.
+Automatic blanking and automatic suspend remain disabled by default; retaining
+MDSS at runtime does not establish working display recovery from system suspend.
+
+Not yet: blank/wake visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 (HCI transport unidentified on this unit), audio, persistent installation.
 
 ## Repository layout
