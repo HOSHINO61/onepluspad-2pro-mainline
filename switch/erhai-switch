@@ -240,18 +240,31 @@ check_set() {
 	return $cs_rc
 }
 
-# Which set is currently installed, judged by the boot partition alone: the
-# other two follow it and hashing 200 MB on every status call is wasteful.
+# Which complete set is installed. A ramdisk-only update leaves boot.img
+# unchanged, so its digest cannot prove that init_boot/vendor_boot followed.
 occupant() {
-	oc_dev=$(resolve_part "boot$SLOT") || { printf 'no-boot-partition'; return; }
-	oc_bytes=$(stat -c %s "$oc_dev" 2>/dev/null)
-	[ -n "$oc_bytes" ] && [ "$oc_bytes" != 0 ] || oc_bytes=$(blockdev --getsize64 "$oc_dev" 2>/dev/null)
-	[ -n "$oc_bytes" ] || { printf 'unreadable'; return; }
-	oc_live=$(sha_of_part "$oc_dev" "$oc_bytes")
+	oc_live_set=
+	for oc_name in $PARTS; do
+		oc_dev=$(resolve_part "$oc_name$SLOT") || { printf 'unknown'; return; }
+		oc_bytes=$(stat -c %s "$oc_dev" 2>/dev/null)
+		[ -n "$oc_bytes" ] && [ "$oc_bytes" != 0 ] || oc_bytes=$(blockdev --getsize64 "$oc_dev" 2>/dev/null)
+		[ -n "$oc_bytes" ] && [ "$oc_bytes" != 0 ] || { printf 'unknown'; return; }
+		oc_digest=$(sha_of_part "$oc_dev" "$oc_bytes")
+		oc_live_set="$oc_live_set$oc_name=$oc_digest
+"
+	done
 	for oc_candidate in ubuntu android; do
 		[ -f "$STORE/$oc_candidate/SHA256SUMS" ] || continue
-		oc_want=$(sums_lookup "$STORE/$oc_candidate" boot)
-		if [ -n "$oc_want" ] && [ "$oc_want" = "$oc_live" ]; then
+		oc_matches=1
+		for oc_name in $PARTS; do
+			oc_want=$(sums_lookup "$STORE/$oc_candidate" "$oc_name")
+			oc_live=$(printf '%s' "$oc_live_set" | sed -n "s/^$oc_name=//p")
+			if [ -z "$oc_want" ] || [ "$oc_want" != "$oc_live" ]; then
+				oc_matches=0
+				break
+			fi
+		done
+		if [ "$oc_matches" = 1 ]; then
 			printf '%s' "$oc_candidate"
 			return
 		fi
