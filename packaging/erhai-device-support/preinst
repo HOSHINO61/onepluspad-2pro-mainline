@@ -8,6 +8,11 @@ set -e
 # it is. dpkg has to be told, or the old conffile is left behind to fight the
 # new one.
 if command -v dpkg-maintscript-helper >/dev/null 2>&1; then
+	for file in /etc/dconf/profile/gdm \
+		/etc/dconf/db/erhai-greeter.d/00-power-key \
+		/etc/dconf/db/erhai-greeter.d/locks/power-key; do
+		dpkg-maintscript-helper rm_conffile "$file" 0.1.9~ -- "$@"
+	done
 	dpkg-maintscript-helper mv_conffile \
 		/etc/systemd/logind.conf.d/90-erhai-stopgap.conf \
 		/etc/systemd/logind.conf.d/90-erhai-power.conf \

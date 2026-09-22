@@ -16,6 +16,7 @@ for the exact baseline, branch and commit.
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
 | Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS power collapse breaks later frame commits; device support keeps MDSS active as a temporary workaround. Blank/wake visual acceptance remains pending. |
+| Power button | Device handler uses GNOME lock/blank and wake APIs | Repeated blank/wake tested on the login screen with injected key events. Physical-button and authenticated-session acceptance remain separate. |
 | Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
@@ -27,6 +28,13 @@ for the exact baseline, branch and commit.
 The display retention workaround increases power use while the screen is off.
 Automatic blanking and automatic suspend remain disabled by default; retaining
 MDSS at runtime does not establish working display recovery from system suspend.
+
+The tablet button locks a logged-in GNOME session before blanking its display;
+at the login screen it only blanks. Pressing it again lights the display without
+unlocking the session. The on-screen keyboard is enabled by default. The device
+package identifies the physical chassis as a tablet even when firmware exposes
+a hypervisor, avoiding GNOME's VM poweroff policy. Removing the package stops
+the input handler and releases the button; it does not change account passwords.
 
 Not yet: blank/wake visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 (HCI transport unidentified on this unit), audio, persistent installation.

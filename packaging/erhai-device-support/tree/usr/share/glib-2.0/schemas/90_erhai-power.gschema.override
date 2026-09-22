@@ -1,8 +1,8 @@
-# Conservative display policy while blank/wake visual acceptance is pending.
+# Tablet power button: lock and blank through GNOME, never suspend or power off.
 [org.gnome.settings-daemon.plugins.power]
-# Offer a dialog rather than suspending immediately. Display restoration
-# after full system suspend and power-key wake are not visually validated.
-power-button-action='interactive'
+# The device power-key service handles the button. Keep the desktop action
+# inert, including GNOME's unconditional poweroff fallback for VM chassis.
+power-button-action='nothing'
 sleep-inactive-ac-type='nothing'
 sleep-inactive-battery-type='nothing'
 idle-dim=true
@@ -13,5 +13,7 @@ idle-dim=true
 idle-delay=uint32 0
 
 [org.gnome.desktop.screensaver]
-# Keep unlocked until the on-screen keyboard is validated on the lock screen.
-lock-enabled=false
+lock-enabled=true
+
+[org.gnome.desktop.a11y.applications]
+screen-keyboard-enabled=true

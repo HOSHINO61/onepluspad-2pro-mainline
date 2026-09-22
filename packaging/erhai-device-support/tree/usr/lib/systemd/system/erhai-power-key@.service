@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Unit]
+Description=Tablet power-key display control (%I)
+BindsTo=dev-input-%i.device
+After=dev-input-%i.device systemd-logind.service
+JobTimeoutSec=15
+StartLimitIntervalSec=30
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/erhai-power-key /dev/input/%I
+Restart=on-failure
+RestartSec=1
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_DAC_READ_SEARCH
+DevicePolicy=closed
+DeviceAllow=char-input r
+DeviceAllow=/dev/uinput rw

@@ -1,0 +1,11 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+case "$1" in
+remove | deconfigure)
+	if [ -d /run/systemd/system ]; then
+		systemctl stop 'erhai-power-key@*.service' || true
+	fi
+	;;
+esac
+exit 0

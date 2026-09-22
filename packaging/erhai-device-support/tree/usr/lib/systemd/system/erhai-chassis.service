@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Unit]
+Description=Identify the tablet chassis to desktop services
+Wants=dbus.service
+After=dbus.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=15
+# The platform can run under a firmware hypervisor, but its physical form
+# factor is a tablet. hostnamed preserves the other machine-info fields.
+ExecStart=/usr/bin/hostnamectl set-chassis tablet
+
+[Install]
+WantedBy=multi-user.target

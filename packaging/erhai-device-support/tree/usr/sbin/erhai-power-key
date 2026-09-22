@@ -1,0 +1,168 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Route the tablet's physical power key to GNOME lock/blank and wake.
+
+Only the selected input device is grabbed. Authentication remains with GNOME;
+waking a locked session never calls ScreenSaver.SetActive(false).
+"""
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import pwd
+import re
+import select
+import struct
+import subprocess
+import time
+
+EVENT = struct.Struct('llHHi')
+KEY_POWER = 116
+KEY_LEFTCTRL = 29
+EVIOCGRAB = 0x40044590
+
+
+def command(argv, **kwargs):
+    result = subprocess.run(argv, text=True, capture_output=True, timeout=8, **kwargs)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or f'{argv[0]} failed')
+    return result.stdout.strip()
+
+
+def active_session():
+    sid = command(['loginctl', 'show-seat', 'seat0', '-p', 'ActiveSession', '--value'])
+    if not sid:
+        raise RuntimeError('no active graphical session')
+    text = command(['loginctl', 'show-session', sid, '-p', 'User', '-p', 'Class',
+                    '-p', 'Type', '-p', 'Active', '-p', 'LockedHint'])
+    info = dict(line.split('=', 1) for line in text.splitlines() if '=' in line)
+    if info.get('Active') != 'yes' or info.get('Type') not in ('wayland', 'x11'):
+        raise RuntimeError('active session is not a graphical desktop')
+    if info.get('Class') not in ('user', 'user-early', 'greeter'):
+        raise RuntimeError('unsupported graphical session class')
+    return info
+
+
+def call_session(info, dest, path, method, *args):
+    uid = int(info['User'])
+    account = pwd.getpwuid(uid)
+    runtime = f'/run/user/{uid}'
+    env = {'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'HOME': account.pw_dir,
+           'XDG_RUNTIME_DIR': runtime,
+           'DBUS_SESSION_BUS_ADDRESS': f'unix:path={runtime}/bus'}
+    return command(['gdbus', 'call', '--session', '--dest', dest, '--object-path',
+                    path, '--method', method, *args], user=uid, group=account.pw_gid,
+                   extra_groups=[], env=env)
+
+
+def screensaver(info, method, *args):
+    return call_session(info, 'org.gnome.ScreenSaver', '/org/gnome/ScreenSaver',
+                        f'org.gnome.ScreenSaver.{method}', *args)
+
+
+def power_mode(info, mode=None):
+    args = ['org.gnome.Mutter.DisplayConfig', 'PowerSaveMode']
+    if mode is None:
+        method = 'Get'
+    else:
+        method = 'Set'
+        args.append(f'<{mode}>')
+    result = call_session(info, 'org.gnome.Mutter.DisplayConfig',
+                          '/org/gnome/Mutter/DisplayConfig',
+                          f'org.freedesktop.DBus.Properties.{method}', *args)
+    if mode is not None:
+        return None
+    match = re.fullmatch(r'\(<(?:int32 )?(-?\d+)>,\)', result)
+    if not match:
+        raise RuntimeError(f'unexpected display power state: {result}')
+    return int(match[1])
+
+
+class WakeInput:
+    def __init__(self):
+        self.fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
+        try:
+            fcntl.ioctl(self.fd, 0x40045564, 1)  # UI_SET_EVBIT, EV_KEY
+            fcntl.ioctl(self.fd, 0x40045565, KEY_LEFTCTRL)
+            setup = struct.pack('HHHH80sI', 3, 0x1209, 4, 1, b'erhai-screen-wake', 0)
+            fcntl.ioctl(self.fd, 0x405c5503, setup)  # UI_DEV_SETUP
+            fcntl.ioctl(self.fd, 0x5501)  # UI_DEV_CREATE
+        except Exception:
+            os.close(self.fd)
+            raise
+
+    def wake(self):
+        # A modifier press carries no text and does not unlock the session.
+        # It clears the shell's black overlay and resets GNOME's idle state.
+        for value in (1, 0):
+            os.write(self.fd, EVENT.pack(0, 0, 1, KEY_LEFTCTRL, value))
+            os.write(self.fd, EVENT.pack(0, 0, 0, 0, 0))
+
+    def close(self):
+        os.close(self.fd)
+
+
+def toggle(wake_input):
+    info = active_session()
+    mode = power_mode(info)
+    if mode in (1, 2, 3):
+        power_mode(info, 0)
+        wake_input.wake()
+        print('power key: display on; authentication unchanged', flush=True)
+        return
+    if mode != 0:
+        raise RuntimeError('display power state is unknown')
+
+    if info['Class'] == 'greeter':
+        # GDM is already the login boundary and deliberately forbids Lock.
+        # Activating its screensaver blanks it without changing that policy.
+        screensaver(info, 'SetActive', 'true')
+    elif info.get('LockedHint') != 'yes':
+        screensaver(info, 'Lock')
+
+    deadline = time.monotonic() + 3
+    while screensaver(info, 'GetActive') != '(true,)':
+        if time.monotonic() >= deadline:
+            raise RuntimeError('GNOME did not activate the lock/greeter screen')
+        time.sleep(0.05)
+    power_mode(info, 3)
+    print(f'power key: display off ({info["Class"]})', flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('device', type=Path, help='Power-key evdev node')
+    args = parser.parse_args()
+    if not re.fullmatch(r'/dev/input/event\d+', str(args.device)):
+        parser.error('expected /dev/input/eventN')
+    fd = os.open(args.device, os.O_RDONLY | os.O_NONBLOCK)
+    wake_input = None
+    try:
+        fcntl.ioctl(fd, EVIOCGRAB, 1)
+        wake_input = WakeInput()
+        print(f'power key: listening on {args.device}', flush=True)
+        pressed = False
+        while True:
+            select.select([fd], [], [])
+            data = os.read(fd, EVENT.size * 16)
+            if not data:
+                return
+            for _seconds, _usec, kind, code, value in EVENT.iter_unpack(data):
+                if kind != 1 or code != KEY_POWER:
+                    continue
+                if value == 1:
+                    pressed = True
+                elif value == 0 and pressed:
+                    pressed = False
+                    try:
+                        toggle(wake_input)
+                    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+                        print(f'power key: {error}', flush=True)
+    finally:
+        if wake_input is not None:
+            wake_input.close()
+        os.close(fd)  # Releases the exclusive grab, including on service stop.
+
+
+if __name__ == '__main__':
+    main()
