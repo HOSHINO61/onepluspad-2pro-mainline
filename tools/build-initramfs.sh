@@ -52,17 +52,31 @@ ncm) init_src="$repo/initramfs/init-ncm"; usb_src="$repo/initramfs/usb-ncm"
 	fi
 	# Novatek NT36536 TDDI loses its RAM firmware on every panel prepare; the
 	# built-in touch driver requests it from the rootfs.
-	fw_files="$ws/out/nt36536-fw/nt36536-xn242.bin"
+	firmware="$repo/packaging/firmware"
+	# The initramfs and installed firmware package use the same original
+	# inputs. Never chain a new boot image from a previous OUT's blobs.
+	python3 - "$repo" <<'PY'
+import hashlib, json, pathlib, sys
+repo = pathlib.Path(sys.argv[1])
+manifest = json.loads((repo / 'packaging/firmware-manifest.json').read_text())
+for entry in manifest['files']:
+    path = repo / 'packaging/firmware' / entry['install']
+    data = path.read_bytes()
+    if len(data) != entry['size'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+        raise SystemExit(f'Firmware does not match manifest: {entry["install"]}')
+PY
+	fw_files="$firmware/novatek/nt36536-xn242.bin"
 	# ADSP PIL firmware: mdt container + sparsely numbered adsp.bNN segments,
 	# resolved by the loader next to firmware-name qcom/sm8750/erhai/adsp.mdt.
-	adsp_src="$ws/out/adsp-fw/modem-image"
+	adsp_src="$firmware/qcom/sm8750/erhai"
 	adsp_dst=/lib/firmware/qcom/sm8750/erhai
 	# Adreno 830 firmware (linux-firmware): SQE/GMU/AQE by catalog name, zap
 	# via DT firmware-name qcom/sm8750/gen80000_zap.mbn.
-	gpu_src="$ws/out/gpu-fw"
+	gpu_src="$firmware/qcom"
 	# WCN7860 (ath12k) firmware; not in upstream linux-firmware, sourced from
 	# the ROCKNIX extra-firmware pack (Odin 3 set, same chip family).
-	wifi_src="$ws/out/wifi-fw/hw2.0" ;;
+	wifi_src="$firmware/ath12k/WCN7860/hw2.0"
+	bt_src="$firmware/qca" ;;
 *) echo "Unknown PROFILE '$profile' (acm|ncm)." >&2; exit 1 ;;
 esac
 exec 9>"$out/.build.lock"
@@ -98,7 +112,7 @@ trap 'rm -rf -- "$stage"' EXIT
 		printf 'file /lib/firmware/novatek/%s %s 0644 0 0\n' "$(basename -- "$fw")" "$fw"
 	done
 	if [[ -n ${gpu_src:-} ]]; then
-		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw gen80000_zap.mbn; do
+		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw sm8750/gen80000_zap.mbn; do
 			[[ -f $gpu_src/$f ]] || { echo "GPU firmware not found: $gpu_src/$f" >&2; exit 1; }
 		done
 		printf 'dir /lib 0755 0 0\n'
@@ -108,7 +122,7 @@ trap 'rm -rf -- "$stage"' EXIT
 		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw; do
 			printf 'file /lib/firmware/qcom/%s %s 0644 0 0\n' "$f" "$gpu_src/$f"
 		done
-		printf 'file /lib/firmware/qcom/sm8750/gen80000_zap.mbn %s 0644 0 0\n' "$gpu_src/gen80000_zap.mbn"
+		printf 'file /lib/firmware/qcom/sm8750/gen80000_zap.mbn %s 0644 0 0\n' "$gpu_src/sm8750/gen80000_zap.mbn"
 	fi
 	if [[ -n ${wifi_src:-} ]]; then
 		for f in amss.bin m3.bin board-2.bin regdb.bin qdss.cfg aux_ucode.bin bdwlan.elf; do
@@ -121,7 +135,6 @@ trap 'rm -rf -- "$stage"' EXIT
 			printf 'file /lib/firmware/ath12k/WCN7860/hw2.0/%s %s 0644 0 0\n' "$f" "$wifi_src/$f"
 		done
 		# WCN7860 Bluetooth firmware (hci_qca loads qca/gngbtfwXX.mbn + gngbtnvXX.bin)
-		bt_src="$(dirname "$wifi_src")/qca"
 		for f in gngbtfw20.mbn gngbtnv20.bin; do
 			[[ -f $bt_src/$f ]] || { echo "BT firmware not found: $bt_src/$f" >&2; exit 1; }
 		done
