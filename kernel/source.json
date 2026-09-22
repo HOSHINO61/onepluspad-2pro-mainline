@@ -1,0 +1,19 @@
+{
+  "kernel": {
+    "repository_layout": "separate Git, checked out at kernel/linux next to this repo's parent workspace",
+    "upstream": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
+    "baseline_tag": "v7.2",
+    "branch": "erhai/dev",
+    "commit": "f939b5ed0e0577b866dc60c6a9af482e13340a20",
+    "board_dts": "arch/arm64/boot/dts/qcom/sm8750-erhai.dts",
+    "config_fragment": "arch/arm64/configs/erhai-firstboot.config",
+    "toolchain": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1)"
+  },
+  "tool_inputs": {
+    "busybox-arm64": "busybox-static 1:1.36.1-6ubuntu3.1 (Ubuntu), sha256 52151e7f322f926b64049cdaa1410dc3ea6485525e0624b05813791c219ae933",
+    "mkbootimg.py": "AOSP platform/system/tools/mkbootimg, sha256 37d84b3d162e0bc62e36c1f4e1c63c85ea0caa9f29be023eb2f8efe006ad948c",
+    "ubuntu-base": "ubuntu-base-26.04-base-arm64.tar.gz, sha256 b2b46a37324ea1954e93f293fe6d7c2241daf2fc298c4022e6e4caceeed74cab",
+    "stock-dtbo": "dtbo.img from the unit's stock OTA package (payload-dumper extraction)"
+  },
+  "device_firmware": "touch/ADSP blobs are extracted read-only from the unit's own stock partitions; see docs for the extraction procedure"
+}
