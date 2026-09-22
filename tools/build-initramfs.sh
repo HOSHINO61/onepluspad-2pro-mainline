@@ -31,7 +31,7 @@ acm) init_src="$repo/initramfs/init"; usb_src="$repo/initramfs/usb-acm"
 	apps='sh mount mkdir cat uname sleep setsid cttyhack getty ln ls dmesg poweroff reboot'
 	image_name=initramfs.cpio.gz ;;
 ncm) init_src="$repo/initramfs/init-ncm"; usb_src="$repo/initramfs/usb-ncm"
-	apps='sh mount mkdir cat cp uname sleep ip ln touch udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink timeout devmem'
+	apps='sh mount mkdir cat cp uname sleep ip ln touch udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink timeout devmem awk od grep'
 	image_name=initramfs-ncm.cpio.gz
 	# DRM writeback diagnostic (erhai.wb=1): statically linked against the
 	# workspace kernel uapi headers. Skipped in standalone checkouts that
@@ -65,6 +65,8 @@ for entry in manifest['files']:
     if len(data) != entry['size'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
         raise SystemExit(f'Firmware does not match manifest: {entry["install"]}')
 PY
+	identity_src="$repo/packaging/erhai-device-support/tree/usr/libexec/erhai-physical-platform"
+	extra_bins="${extra_bins:-} $identity_src"
 	fw_files="$firmware/novatek/nt36536-xn242.bin"
 	# ADSP PIL firmware: mdt container + sparsely numbered adsp.bNN segments,
 	# resolved by the loader next to firmware-name qcom/sm8750/erhai/adsp.mdt.
@@ -86,6 +88,7 @@ trap 'rm -rf -- "$stage"' EXIT
 {
 	sha256sum "$init_src" "$usb_src" | cut -d' ' -f1
 	[[ -z ${extra_bins:-} ]] || sha256sum "$wb_src" | cut -d' ' -f1
+	[[ -z ${identity_src:-} ]] || sha256sum "$identity_src" | cut -d' ' -f1
 	printf '%s\n' "$expected"
 } | sha256sum | cut -d' ' -f1 >"$stage/build-id"
 {

@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Unit]
+Description=Verify physical tablet identity before desktop startup
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target display-manager.service
+ConditionPathExists=/sys/firmware/devicetree/base
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=15
+ExecStart=/usr/libexec/erhai-physical-platform --verify
+
+[Install]
+WantedBy=sysinit.target

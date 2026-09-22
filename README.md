@@ -15,8 +15,9 @@ for the exact baseline, branch and commit.
 | Area | State | Notes |
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
-| Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS power collapse breaks later frame commits; device support keeps MDSS active as a temporary workaround. Blank/wake visual acceptance remains pending. |
-| Power button | Device handler uses GNOME lock/blank and wake APIs | Repeated blank/wake tested on the login screen with injected key events. Physical-button and authenticated-session acceptance remain separate. |
+| Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS retention avoids a frame-commit failure, but the physical panel can still stay black after blanking. |
+| Power button | Handler receives the physical key and requests GNOME lock/blank and wake | Injected events pass software checks; physical screen wake has failed user acceptance and remains under investigation. |
+| Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
@@ -29,12 +30,17 @@ The display retention workaround increases power use while the screen is off.
 Automatic blanking and automatic suspend remain disabled by default; retaining
 MDSS at runtime does not establish working display recovery from system suspend.
 
-The tablet button locks a logged-in GNOME session before blanking its display;
-at the login screen it only blanks. Pressing it again lights the display without
-unlocking the session. The on-screen keyboard is enabled by default. The device
-package identifies the physical chassis as a tablet even when firmware exposes
-a hypervisor, avoiding GNOME's VM poweroff policy. Removing the package stops
-the input handler and releases the button; it does not change account passwords.
+The button handler requests a GNOME lock before blanking a user session; at
+the login screen it only blanks. A subsequent press requests display wake,
+while authentication stays with GNOME. The on-screen keyboard is enabled by
+default. Physical wake and password-entry acceptance are not complete.
+
+The firmware's Gunyah HLOS description triggers a generic VM heuristic on this
+board. The initramfs covers that unused userspace export before PID1 starts;
+the kernel device tree and raw FDT remain intact. The policy is restricted to
+this tablet's model, HLOS VMID and unbound nodes, with a boot-time consistency
+check. Setting only the chassis name is insufficient because PID1 caches its
+own virtualization result.
 
 Not yet: blank/wake visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
 (HCI transport unidentified on this unit), audio, persistent installation.

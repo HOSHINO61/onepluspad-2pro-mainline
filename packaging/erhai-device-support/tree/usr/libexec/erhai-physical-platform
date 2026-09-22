@@ -1,0 +1,55 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Correct userspace's generic VM heuristic on this physical Qualcomm tablet.
+# ABL adds a Gunyah HLOS description to the live OF tree. systemd treats any
+# unrecognized /proc/device-tree/hypervisor/compatible as a generic guest.
+# Cover only the unused userspace export; kernel OF data and firmware/fdt
+# remain intact. Run before the real-root systemd caches its VM identity.
+set -eu
+
+if [ "${1:-}" = --verify ]; then
+	status=0
+	found=$(systemd-detect-virt --vm) || status=$?
+	[ "$found" = none ] && [ "$status" = 1 ] || {
+		echo "physical platform: VM detection is still '$found' (rc=$status)" >&2
+		exit 1
+	}
+	manager=$(systemctl show -p Virtualization --value)
+	[ -z "$manager" ] || {
+		echo "physical platform: PID1 cached '$manager'; early boot correction is missing" >&2
+		exit 1
+	}
+	echo 'physical platform: fresh detection and PID1 both report no virtualization'
+	exit 0
+fi
+
+sysroot=${1:-/sys}
+case "$sysroot" in /*) ;; *) echo 'expected an absolute sysfs mount path' >&2; exit 2;; esac
+base=$sysroot/firmware/devicetree/base
+hyper=$base/hypervisor
+model=$(tr '\0' '\n' <"$base/model")
+case "$model" in
+	*erhai*|'OnePlus Pad 2 Pro') ;;
+	*) echo "physical platform: unsupported board '$model'" >&2; exit 1;;
+esac
+[ "$(tr '\0' '\n' <"$base/chassis-type")" = tablet ]
+
+# Idempotence must not rely on the covered compatible property.
+if awk -v target="$hyper" '$1=="erhai-physical-platform" && $2==target && $3=="tmpfs" {found=1} END {exit !found}' /proc/self/mounts; then
+	exit 0
+fi
+[ -d "$hyper" ] || exit 0
+tr '\0' '\n' <"$hyper/compatible" | grep -qx qcom,gunyah-hypervisor
+# The platform's HLOS VMID is observed from its live FDT, not imported from
+# another board. Do not apply this policy to a secondary Gunyah guest.
+[ "$(od -An -tx1 "$hyper/qcom,gunyah-vm/qcom,vmid" | tr -d ' \n')" = 00000003 ]
+for device in "$sysroot"/bus/platform/devices/hypervisor*; do
+	[ ! -e "$device/driver" ] || {
+		echo "physical platform: $device has a driver; export policy needs review" >&2
+		exit 1
+	}
+done
+
+mount -t tmpfs -o ro,nosuid,nodev,noexec,size=4k,mode=0555 \
+	erhai-physical-platform "$hyper"
+echo "physical platform: isolated unused Gunyah export at $hyper"

@@ -162,6 +162,17 @@ EOF
 # collide with the debug services starting in the new root. udhcpd is left
 # running on purpose so the host keeps its NCM address across the switch.
 switch_to_newroot() {
+	# Correct the exported firmware identity before the real PID1's first
+	# virtualization query. A sysinit service alone is too late for its cache.
+	# Prepare the sysfs instance that survives switch_root; masking the old
+	# initramfs /sys would be lost when systemd mounts a fresh /sys.
+	mkdir -p /newroot/sys
+	if ! grep -q ' /newroot/sys sysfs ' /proc/mounts; then
+		mount -t sysfs -o nosuid,nodev,noexec sysfs /newroot/sys
+	fi
+	if ! /bin/erhai-physical-platform /newroot/sys >> "$1" 2>&1; then
+		echo PHYSICAL_IDENTITY_CORRECTION_FAILED >> "$1"
+	fi
 	kill "$WATCHDOG_PID" 2>/dev/null
 	kill "$TELNET_LOOP_PID" "$HEARTBEAT_PID" 2>/dev/null
 	for p in $(pidof telnetd httpd dd 2>/dev/null); do kill "$p" 2>/dev/null; done
