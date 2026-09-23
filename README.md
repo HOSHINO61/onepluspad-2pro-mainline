@@ -27,6 +27,9 @@ for the exact baseline, branch and commit.
 | Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell session runs | RAM-delivered squashfs, llvmpipe; NM/ssh tooling in s5 |
 
 The display retention workaround increases power use while the screen is off.
+The current diagnostic candidate also retains the fixed-mode bonded DSI link
+to avoid its failing restart path. It cannot change display modes while that
+link is retained, and still needs physical wake and touch validation.
 Automatic blanking and automatic suspend remain disabled by default; retaining
 MDSS at runtime does not establish working display recovery from system suspend.
 

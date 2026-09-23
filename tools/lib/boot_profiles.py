@@ -5,7 +5,7 @@ CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
 
 # Both profiles use the retained-panel kernel workaround. Its shared touch
 # controller must retain firmware too; remove both workarounds together.
-DISPLAY_EXTRA = 'nt36536_ts.retain_on_blank=1'
+DISPLAY_EXTRA = 'nt36536_ts.retain_on_blank=1 msm.retain_dsi_link=1'
 PROFILE_EXTRA = {
     'desktop': (
         'erhai.watchdog=900 erhai.session=5400 '
