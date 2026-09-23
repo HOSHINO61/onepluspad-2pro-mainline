@@ -52,9 +52,12 @@ class PowerKeyTest(unittest.TestCase):
 
     def test_greeter_keeps_its_login_policy(self):
         calls, _ = self.run_action(0, session_class='greeter')
-        self.assertIn(('SetActive', 'true'), calls)
-        self.assertNotIn(('Lock',), calls)
-        self.assertIn(('power', 3), calls)
+        self.assertEqual(calls, [('power', 3)])
+
+    def test_greeter_wake_leaves_its_blank_overlay(self):
+        calls, wake = self.run_action(3, session_class='greeter')
+        self.assertEqual(calls, [('SetActive', 'false'), ('power', 0)])
+        wake.wake.assert_called_once_with()
 
     def test_repeated_blank_of_locked_session(self):
         calls, _ = self.run_action(0, locked='yes')

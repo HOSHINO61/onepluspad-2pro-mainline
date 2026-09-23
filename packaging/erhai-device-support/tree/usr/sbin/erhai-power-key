@@ -3,7 +3,7 @@
 """Route the tablet's physical power key to GNOME lock/blank and wake.
 
 Only the selected input device is grabbed. Authentication remains with GNOME;
-waking a locked session never calls ScreenSaver.SetActive(false).
+waking a user's locked session never calls ScreenSaver.SetActive(false).
 """
 import argparse
 import fcntl
@@ -106,6 +106,11 @@ def toggle(wake_input):
     info = active_session()
     mode = power_mode(info)
     if mode in (1, 2, 3):
+        if info['Class'] == 'greeter':
+            # GDM retains its modal login dialog on deactivate. Clear its
+            # blank overlay so gsd-power does not blank it again in 30s.
+            # Never apply this to an authenticated user's screen shield.
+            screensaver(info, 'SetActive', 'false')
         power_mode(info, 0)
         wake_input.wake()
         print('power key: display on; authentication unchanged', flush=True)
@@ -114,10 +119,12 @@ def toggle(wake_input):
         raise RuntimeError('display power state is unknown')
 
     if info['Class'] == 'greeter':
-        # GDM is already the login boundary and deliberately forbids Lock.
-        # Activating its screensaver blanks it without changing that policy.
-        screensaver(info, 'SetActive', 'true')
-    elif info.get('LockedHint') != 'yes':
+        # GDM already is the authentication boundary. Blanking the display
+        # needs no ScreenSaver activation and must not enter its idle policy.
+        power_mode(info, 3)
+        print('power key: display off (greeter)', flush=True)
+        return
+    if info.get('LockedHint') != 'yes':
         screensaver(info, 'Lock')
 
     deadline = time.monotonic() + 3

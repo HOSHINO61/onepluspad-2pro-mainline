@@ -16,7 +16,7 @@ for the exact baseline, branch and commit.
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
 | Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS retention avoids a frame-commit failure, but the physical panel can still stay black after blanking. |
-| Power button | Handler receives the physical key and requests GNOME lock/blank and wake | Physical screen wake failed with the previous touch suspend path. The current candidate retains shared touch firmware; physical wake and touch acceptance are pending. |
+| Power button | Handler receives the physical key and requests GNOME lock/blank and wake | Physical wake also failed with touch firmware retention alone. The current candidate corrects GDM blank-state handling; physical wake and touch acceptance remain pending. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
