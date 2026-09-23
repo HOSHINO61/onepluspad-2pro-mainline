@@ -3,7 +3,7 @@
 """Route the tablet's physical power key to GNOME lock/blank and wake.
 
 Only the selected input device is grabbed. Authentication remains with GNOME;
-waking a user's locked session never calls ScreenSaver.SetActive(false).
+waking never calls ScreenSaver.SetActive(false), including in the greeter.
 """
 import argparse
 import fcntl
@@ -107,11 +107,9 @@ def toggle(wake_input):
     info = active_session()
     mode = power_mode(info)
     if mode in (1, 2, 3):
-        if info['Class'] == 'greeter':
-            # GDM retains its modal login dialog on deactivate. Clear its
-            # blank overlay so gsd-power does not blank it again in 30s.
-            # Never apply this to an authenticated user's screen shield.
-            screensaver(info, 'SetActive', 'false')
+        # Deactivating ScreenSaver slides GDM's login group offscreen too.
+        # Real input clears only the black lightbox, preserving the dialog
+        # and the authentication boundary in both greeter and user sessions.
         power_mode(info, 0)
         wake_input.wake()
         print('power key: display on; authentication unchanged', flush=True)

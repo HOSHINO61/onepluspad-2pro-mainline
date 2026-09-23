@@ -54,9 +54,9 @@ class PowerKeyTest(unittest.TestCase):
         calls, _ = self.run_action(0, session_class='greeter')
         self.assertEqual(calls, [('power', 3)])
 
-    def test_greeter_wake_leaves_its_blank_overlay(self):
+    def test_greeter_wake_does_not_hide_the_login_dialog(self):
         calls, wake = self.run_action(3, session_class='greeter')
-        self.assertEqual(calls, [('SetActive', 'false'), ('power', 0)])
+        self.assertEqual(calls, [('power', 0)])
         wake.wake.assert_called_once_with()
 
     def test_repeated_blank_of_locked_session(self):
