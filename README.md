@@ -15,10 +15,10 @@ for the exact baseline, branch and commit.
 | Area | State | Notes |
 |---|---|---|
 | Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
-| Display | DSI panel 3392x2400@120 native KMS; initial display visually verified | Idle blanking defaults off. MDSS retention avoids a frame-commit failure, but the physical panel can still stay black after blanking. |
-| Power button | Handler receives the physical key and requests GNOME lock/blank and wake | Physical wake also failed with touch firmware retention alone. The current candidate corrects GDM blank-state handling; physical wake and touch acceptance remain pending. |
+| Display | DSI panel 3392x2400@120 native KMS; display and backlight-only wake visually verified | Full display-link shutdown/recovery remains broken; blanking keeps KMS running and switches both backlights. |
+| Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
-| Touch (NT36536) | firmware app runs, resume green | cascade second-header download fix; finger acceptance pending |
+| Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
 | UFS | read-only evidence + GPT layout | no persistent writes anywhere |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
@@ -33,7 +33,7 @@ setter; the original daemon continues to manage battery policy and inhibitors.
 The adapter is loaded through a service drop-in, without overwriting Ubuntu
 files. It is scoped to the supported GNOME major version; a desktop major
 upgrade requires checking that generated setter ABI and updating the package.
-Physical wake, touch and authenticated-unlock acceptance are still pending.
+Physical wake, the main UI, touch and login were confirmed on 0.1.18.
 Keeping the display pipeline running increases screen-off power consumption.
 Automatic blanking and automatic suspend remain disabled by default; retaining
 MDSS at runtime does not establish working display recovery from system suspend.
@@ -41,7 +41,7 @@ MDSS at runtime does not establish working display recovery from system suspend.
 The button handler requests a GNOME lock before blanking a user session; at
 the login screen it only blanks. A subsequent press requests display wake,
 while authentication stays with GNOME. The on-screen keyboard is enabled by
-default. Physical wake and password-entry acceptance are not complete.
+default. A separate logged-in password-reentry test has not been recorded.
 
 The firmware's Gunyah HLOS description triggers a generic VM heuristic on this
 board. The initramfs covers that unused userspace export before PID1 starts;
@@ -50,7 +50,7 @@ this tablet's model, HLOS VMID and unbound nodes, with a boot-time consistency
 check. Setting only the chassis name is insufficient because PID1 caches its
 own virtualization result.
 
-Not yet: blank/wake visual confirmation, GPU-accelerated desktop (Mesa), Bluetooth
+Not yet: full display-link shutdown/recovery, GPU-accelerated desktop (Mesa), Bluetooth
 (HCI transport unidentified on this unit), audio, persistent installation.
 
 ## Repository layout
