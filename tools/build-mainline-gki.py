@@ -29,6 +29,8 @@ from pathlib import Path
 import struct
 import subprocess
 
+from lib.boot_profiles import CMDLINE, PROFILE_EXTRA
+
 REPO = Path(__file__).resolve().parent.parent
 if (REPO.parent.parent / 'AGENTS.md').is_file() and (REPO.parent.parent / 'kernel/linux').is_dir():
     WS = Path(os.environ.get('ERHAI_WORKSPACE', REPO.parent.parent)).resolve()
@@ -37,10 +39,6 @@ else:
 KERNEL_GIT = WS / 'kernel/linux'
 DEFAULT_OUT = WS / 'out/kernel-firstboot'
 MKBOOT = Path(os.environ.get('MKBOOTIMG', str(WS / 'cache/tools/mkbootimg.py')))
-
-CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
-# Same pinned persistent cmdline as the v2 profile; see build-mainline-boot.py.
-PERSIST_EXTRA = 'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4'
 
 # Partition capacities on this device, from `fastboot getvar partition-size:*`.
 CAPACITY = {
@@ -119,7 +117,7 @@ def main():
 
     cmdline = CMDLINE
     if args.profile == 'persistent':
-        cmdline += ' ' + PERSIST_EXTRA
+        cmdline += ' ' + PROFILE_EXTRA[args.profile]
     if args.cmdline_extra.strip():
         cmdline += ' ' + args.cmdline_extra.strip()
 

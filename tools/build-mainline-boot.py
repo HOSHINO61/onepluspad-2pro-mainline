@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import subprocess
 
+from lib.boot_profiles import CMDLINE, PROFILE_EXTRA
+
 REPO = Path(__file__).resolve().parent.parent
 # Workspace layout: when this repo is checked out at <workspace>/public/<name>,
 # shared inputs and build outputs live in the workspace root; standalone
@@ -25,24 +27,6 @@ KERNEL_GIT = WS / 'kernel/linux'
 DEFAULT_OUT = WS / 'out/kernel-firstboot'
 # AOSP mkbootimg, vendored at cache/tools/mkbootimg.py (see README inputs).
 MKBOOT = Path(os.environ.get('MKBOOTIMG', str(WS / 'cache/tools/mkbootimg.py')))
-CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
-# The one authoritative desktop-session cmdline. Everything beyond the base
-# contract lives here, not in per-invocation shell history: bump the rootfs
-# name when the default layer advances.
-DESKTOP_EXTRA = ('erhai.watchdog=900 erhai.session=5400 '
-                 'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
-                 'erhai.switchroot=1')
-# The persistent-install cmdline: boot the ext4 root installed on UFS, resolved
-# by partition label. The watchdog only bounds the initramfs phase; once the
-# installed system takes over it runs unattended like any other install, so no
-# session expiry is armed.
-PERSIST_EXTRA = 'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4'
-# The retained-panel kernel workaround requires the shared touch controller
-# to retain its firmware too. Remove both workarounds together once the panel
-# can be powered down and reinitialized normally.
-DISPLAY_EXTRA = 'nt36536_ts.retain_on_blank=1'
-PROFILE_EXTRA = {'desktop': DESKTOP_EXTRA + ' ' + DISPLAY_EXTRA,
-                 'persistent': PERSIST_EXTRA + ' ' + DISPLAY_EXTRA}
 
 
 def sha(path):
