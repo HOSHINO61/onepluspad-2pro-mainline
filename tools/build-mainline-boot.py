@@ -37,7 +37,12 @@ DESKTOP_EXTRA = ('erhai.watchdog=900 erhai.session=5400 '
 # installed system takes over it runs unattended like any other install, so no
 # session expiry is armed.
 PERSIST_EXTRA = 'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4'
-PROFILE_EXTRA = {'desktop': DESKTOP_EXTRA, 'persistent': PERSIST_EXTRA}
+# The retained-panel kernel workaround requires the shared touch controller
+# to retain its firmware too. Remove both workarounds together once the panel
+# can be powered down and reinitialized normally.
+DISPLAY_EXTRA = 'nt36536_ts.retain_on_blank=1'
+PROFILE_EXTRA = {'desktop': DESKTOP_EXTRA + ' ' + DISPLAY_EXTRA,
+                 'persistent': PERSIST_EXTRA + ' ' + DISPLAY_EXTRA}
 
 
 def sha(path):
