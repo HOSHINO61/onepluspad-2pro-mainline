@@ -1,0 +1,11 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+if [ "$1" = configure ]; then
+    deb-systemd-helper unmask erhai-display-power.socket >/dev/null || true
+    deb-systemd-helper enable erhai-display-power.socket >/dev/null
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl start erhai-display-power.socket
+    fi
+fi

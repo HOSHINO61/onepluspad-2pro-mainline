@@ -98,7 +98,7 @@ MANIFEST = PACKAGING / 'firmware-manifest.json'
 VERSION_FILE = PACKAGING / 'VERSION'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
 DEBIAN_SCRIPTS = ('preinst', 'postinst', 'prerm', 'postrm')
-PACKAGES = ('erhai-device-support', 'erhai-firmware', 'erhai-kernel', 'erhai-device')
+PACKAGES = ('erhai-display-power', 'erhai-device-support', 'erhai-firmware', 'erhai-kernel', 'erhai-device')
 PARTS = ('boot', 'init_boot', 'vendor_boot')
 SWITCHER_PROGRAMS = ('erhai-switch', 'erhai-switch-install-ubuntu-images')
 
@@ -383,6 +383,16 @@ def stage_device_support(root):
     # What lives inside is state -- the triplets, the log, state.json -- and
     # belongs to the switcher and to erhai-kernel's postinst.
     (root / 'var/lib/erhai/switch').mkdir(parents=True, exist_ok=True)
+
+
+def stage_display_power(root):
+    copy_tree(PACKAGING / 'erhai-display-power/tree', root)
+    target = root / 'usr/lib/aarch64-linux-gnu/erhai/gsd-backlight-compat.so'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    run(['aarch64-linux-gnu-gcc', '-std=c11', '-D_GNU_SOURCE', '-O2', '-Wall',
+         '-Wextra', '-Werror', '-shared', '-fPIC', '-Wl,-z,relro,-z,now',
+         '-Wl,-z,defs', '-o', str(target),
+         str(PACKAGING / 'erhai-display-power/gsd-backlight-compat.c')])
 
 
 def stage_firmware(root, manifest):
@@ -692,6 +702,8 @@ def main():
             root.mkdir(parents=True)
             if package == 'erhai-device-support':
                 stage_device_support(root)
+            elif package == 'erhai-display-power':
+                stage_display_power(root)
             elif package == 'erhai-firmware':
                 stage_firmware(root, manifest)
             elif package == 'erhai-kernel':
@@ -721,7 +733,7 @@ def main():
         epoch = source_date_epoch(args.kernel_out)
         built = []
         for package in wanted:
-            architecture = 'arm64' if package in ('erhai-kernel', 'erhai-device') else 'all'
+            architecture = 'arm64' if package in ('erhai-kernel', 'erhai-device', 'erhai-display-power') else 'all'
             write_control(roots[package], package, version, substitutions)
             built.append(pack(roots[package], package, version, architecture, out_dir, epoch))
 

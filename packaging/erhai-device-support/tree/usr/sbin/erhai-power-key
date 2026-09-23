@@ -12,6 +12,7 @@ from pathlib import Path
 import pwd
 import re
 import select
+import socket
 import struct
 import subprocess
 import time
@@ -61,20 +62,20 @@ def screensaver(info, method, *args):
 
 
 def power_mode(info, mode=None):
-    args = ['org.gnome.Mutter.DisplayConfig', 'PowerSaveMode']
-    if mode is None:
-        method = 'Get'
-    else:
-        method = 'Set'
-        args.append(f'<{mode}>')
-    result = call_session(info, 'org.gnome.Mutter.DisplayConfig',
-                          '/org/gnome/Mutter/DisplayConfig',
-                          f'org.freedesktop.DBus.Properties.{method}', *args)
-    if mode is not None:
-        return None
-    match = re.fullmatch(r'\(<(?:int32 )?(-?\d+)>,\)', result)
+    request = 'GET' if mode is None else f'KEY {mode}'
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(5)
+        connection.connect('/run/erhai-display-power/control')
+        connection.sendall((request + '\n').encode('ascii'))
+        result = b''
+        while b'\n' not in result and len(result) < 64:
+            data = connection.recv(64 - len(result))
+            if not data:
+                break
+            result += data
+    match = re.fullmatch(rb'OK ([03])\n', result)
     if not match:
-        raise RuntimeError(f'unexpected display power state: {result}')
+        raise RuntimeError('backlight power service did not acknowledge the request')
     return int(match[1])
 
 

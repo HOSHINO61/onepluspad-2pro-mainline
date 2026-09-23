@@ -26,10 +26,15 @@ for the exact baseline, branch and commit.
 | Wi-Fi (WCN7860) | PCIe Gen3 x2 up, firmware loads, `wlp1s0` managed by NetworkManager | needs AP credentials for an actual connection |
 | Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell session runs | RAM-delivered squashfs, llvmpipe; NM/ssh tooling in s5 |
 
-The display retention workaround increases power use while the screen is off.
-The current diagnostic candidate also retains the fixed-mode bonded DSI link
-to avoid its failing restart path. It cannot change display modes while that
-link is retained, and still needs physical wake and touch validation.
+The current blanking workaround switches both backlights while keeping KMS
+running. The failed touch/DSI retention diagnostics have been reverted.
+`erhai-display-power` adapts only the GNOME Settings Daemon 50 display-power
+setter; the original daemon continues to manage battery policy and inhibitors.
+The adapter is loaded through a service drop-in, without overwriting Ubuntu
+files. It is scoped to the supported GNOME major version; a desktop major
+upgrade requires checking that generated setter ABI and updating the package.
+Physical wake, touch and authenticated-unlock acceptance are still pending.
+Keeping the display pipeline running increases screen-off power consumption.
 Automatic blanking and automatic suspend remain disabled by default; retaining
 MDSS at runtime does not establish working display recovery from system suspend.
 

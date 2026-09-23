@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    systemctl stop erhai-display-power.service erhai-display-power.socket || true
+fi

@@ -3,6 +3,8 @@
 Description=Tablet power-key display control (%I)
 BindsTo=dev-input-%i.device
 After=dev-input-%i.device systemd-logind.service
+Requires=erhai-display-power.socket
+After=erhai-display-power.socket
 JobTimeoutSec=15
 StartLimitIntervalSec=30
 StartLimitBurst=3

@@ -3,18 +3,16 @@
 
 CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
 
-# Both profiles use the retained-panel kernel workaround. Its shared touch
-# controller must retain firmware too; remove both workarounds together.
-DISPLAY_EXTRA = 'nt36536_ts.retain_on_blank=1 msm.retain_dsi_link=1'
+# Display blanking is backlight-only in the device package. No experimental
+# touch or DSI retention kernel parameters are needed.
 PROFILE_EXTRA = {
     'desktop': (
         'erhai.watchdog=900 erhai.session=5400 '
         'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
-        'erhai.switchroot=1 ' + DISPLAY_EXTRA
+        'erhai.switchroot=1'
     ),
     # The watchdog bounds initramfs. Persistent sessions do not expire.
     'persistent': (
-        'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4 '
-        + DISPLAY_EXTRA
+        'erhai.watchdog=600 erhai.root=PARTLABEL=linux_rootfs loglevel=4'
     ),
 }
