@@ -70,6 +70,7 @@ The AVB signing key and avbtool stay on the build host. They are inputs to the
 build, never contents of a package.
 """
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -134,11 +135,13 @@ def run(command, **kwargs):
 # the ROM cache or the network.
 #
 # --refresh-from-rom is the other direction, for a later ROM version: extract
-# the closure again from the pinned inputs and diff it against the tree. Four
+# the closure again from the pinned inputs and diff it against the tree. Five
 # kinds of input, none of them a previous build's output:
 #   archive  an upstream tarball, by member path
 #   fat      a stock ROM partition image (FAT), read with mtools, no mount and
 #            so no privileges
+#   erofs    a stock ROM partition image, extracted with fsck.erofs as the
+#            current user into a temporary directory; no mount or privileges
 #   dtb      an Android dtbo image; the touch firmware is a property inside one
 #            of its overlays, which is where the vendor keeps it
 #   url      a single upstream file, cached under cache/ by its pinned hash
@@ -258,24 +261,40 @@ def firmware_sources(manifest, adopt):
 
 def extract_firmware(manifest, sources, base, adopt):
     """Extract the closure from the pinned inputs into <base>."""
-    for spec in manifest['files']:
-        source = sources[spec['from']]
-        target = base / spec['install']
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if source['kind'] == 'archive':
-            extract_from_archive(source['resolved_path'], spec, target)
-        elif source['kind'] == 'fat':
-            extract_from_fat(source['resolved_path'], spec, target)
-        elif source['kind'] == 'dtb':
-            extract_from_dtb(source['resolved_path'], spec, target)
-        elif source['kind'] == 'url-base':
-            cached = WS / source['cache'] / spec['member']
-            fetch_url(source['base_url'] + spec['member'], cached,
-                      None if adopt else spec.get('sha256'))
-            shutil.copyfile(cached, target)
-        else:
-            die(f'unknown firmware input kind: {source["kind"]}')
-        target.chmod(0o644)
+    with ExitStack() as temporary:
+        erofs_roots = {}
+        for spec in manifest['files']:
+            source = sources[spec['from']]
+            target = base / spec['install']
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if source['kind'] == 'archive':
+                extract_from_archive(source['resolved_path'], spec, target)
+            elif source['kind'] == 'fat':
+                extract_from_fat(source['resolved_path'], spec, target)
+            elif source['kind'] == 'erofs':
+                if shutil.which('fsck.erofs') is None:
+                    die('erofs-utils (fsck.erofs) is required to refresh EROFS firmware')
+                if spec['from'] not in erofs_roots:
+                    root = Path(temporary.enter_context(
+                        tempfile.TemporaryDirectory(prefix='erhai-erofs.')))
+                    run(['fsck.erofs', '--no-preserve', f'--extract={root}',
+                         str(source['resolved_path'])], timeout=300)
+                    erofs_roots[spec['from']] = root
+                root = erofs_roots[spec['from']]
+                member = (root / spec['member']).resolve()
+                if not member.is_relative_to(root) or not member.is_file():
+                    die(f'no regular EROFS member inside the image: {spec["member"]}')
+                shutil.copyfile(member, target)
+            elif source['kind'] == 'dtb':
+                extract_from_dtb(source['resolved_path'], spec, target)
+            elif source['kind'] == 'url-base':
+                cached = WS / source['cache'] / spec['member']
+                fetch_url(source['base_url'] + spec['member'], cached,
+                          None if adopt else spec.get('sha256'))
+                shutil.copyfile(cached, target)
+            else:
+                die(f'unknown firmware input kind: {source["kind"]}')
+            target.chmod(0o644)
 
 
 def tracked_firmware():

@@ -6,9 +6,9 @@
     "zstd-suffixed copies in linux-firmware are unreadable to it even where the",
     "same content exists, and every path below is a plain file no other package",
     "owns -- nothing is diverted and nothing is overwritten.",
-    "No binary here is in the source tree. tools/build-debs.py extracts each one",
-    "from the pinned input named in `from` and refuses to pack a file whose",
-    "sha256 is not the one recorded here."
+    "Binaries are stored in packaging/firmware/. Normal builds copy and verify",
+    "the recorded SHA-256 and size without reading a ROM or using the network.",
+    "Only --refresh-from-rom extracts the original inputs named in `from`."
   ],
   "inputs": {
     "rocknix-extra-firmware": {
@@ -39,13 +39,24 @@
       "sha256": "7f2e8f6c81b00e32615639c823f28072dc1585c0bcf5e02b16639bf228650fb8",
       "license": "vendor firmware, extracted read-only from this unit's own ROM; not redistributable",
       "origin": "the same stock OTA package; read with mtools, so the build needs no privileges"
+    },
+    "stock-odm": {
+      "kind": "erofs",
+      "path": "cache/stock-c34-full/images/odm.img",
+      "sha256": "66178408a76a657e0ad5309b2730fe06eb98e972a7663eccd6fe0251b5752eac",
+      "url": "https://gauss-compota-c-cn.allawnfs.com/remove-b0608b3ac0ca59a1e916aec540e6a9f5/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/07/07/1d5489232fd6471cbdd222dd701e771a.zip",
+      "archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
+      "release": "OPD2413_11.C.34_1340_202607031844",
+      "license": "vendor firmware; redistribution permission not established",
+      "origin": "Official OnePlus OTA payload, odm partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
     }
   },
   "notes": {
     "novatek/nt36536-xn242.bin": "the vendor keeps the touch application firmware as a property inside a dtbo overlay (nt36536@0/firmware-data-0); the driver loses it on every panel prepare and requests it again, so the installed root has to carry it",
     "qca/gngbtfw20.mbn": "what mainline hci_qca asks a WCN7860 for (qca/gngbtfw%02x.mbn plus a gngbtnv name built from the board id). Confirmed on this unit on 2026-09-22, once BT_EN was wired to the right PMIC: the driver requests exactly these two names and the controller comes up on them -- \"QCA Downloading qca/gngbtfw20.mbn\", then \"qca/gngbtnv20.bin\", then \"QCA FW build version: BTFW.GANGES.2.0.0-00440-PATCHZ-1_DEF\". No board-id variant is needed: btqca reads this unit's board id as 0 and so asks for the plain gngbtnv20.bin rather than a gngbtnv20.b<id>. The stock stack uses a different set entirely -- brhbtfw10.tlv and brhbtnv10.b* in bluetooth.img -- which this port does not use.",
     "qcom/sm8750/gen80000_zap.mbn": "signed for Qualcomm reference devices; this retail unit's TZ rejects it and the GPU comes up through the SECVID_TRUST_CNTL fallback instead. Shipped because a unit whose TZ accepts it needs it",
-    "qcom/sm8750/erhai/": "the ADSP PIL set is per-firmware-build; it is the modem_a content of the ColorOS build this tablet runs, and the DT points remoteproc at adsp.mdt and adsp_dtb.mdt under this directory"
+    "qcom/sm8750/erhai/": "the ADSP PIL set is per-firmware-build; it is the modem_a content of the ColorOS build this tablet runs, and the DT points remoteproc at adsp.mdt and adsp_dtb.mdt under this directory",
+    "awinic/erhai/aw88261_acf.bin": "Unmodified /odm/firmware/aw882xx_acf.bin, verified against the running stock system. AW88261 V0 ACF; the codec firmware-name must select this board-specific path. Channel profiles are ROM data, not per-unit factory calibration. Codec supply and sound-card routes are not yet enabled."
   },
   "files": [
     {
@@ -552,6 +563,13 @@
       "member": "::/image/adsp_dtb.mdt",
       "sha256": "4c472279c7f1c29ba5eef171592e9325e47e4d398e35280c511d827406ca3336",
       "size": 4044
+    },
+    {
+      "install": "awinic/erhai/aw88261_acf.bin",
+      "from": "stock-odm",
+      "member": "firmware/aw882xx_acf.bin",
+      "sha256": "97ae5a34df87637eb7b68e92dbfedf1930253a1843c0140389d9fb0ae09d1ac7",
+      "size": 4976
     }
   ]
 }

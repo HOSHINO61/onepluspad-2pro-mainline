@@ -264,10 +264,10 @@ These development tools and images are not a finished production release.
 GPL-2.0-only (see LICENSE), matching the integration scripts' SPDX headers.
 Kernel and third-party inputs keep their own licenses and authors.
 
-`packaging/firmware/` is the exception worth naming out loud: 72 proprietary
-Qualcomm and OnePlus binaries, redistributed here exactly as they came so that
+`packaging/firmware/` contains 73 proprietary
+Qualcomm, OnePlus and Awinic binaries, redistributed here exactly as they came so that
 the port builds from one tree. The project claims no copyright and grants no
-license over them, and GPL-2.0-only does not reach them. 59 of them were
+license over them, and GPL-2.0-only does not reach them. 60 of them were
 extracted from this unit's stock OnePlus OTA, for which no redistribution
 permission from OnePlus or Qualcomm has been established. Per-file provenance
 is in `packaging/firmware-manifest.json` and the terms are spelled out in
