@@ -14,17 +14,19 @@ for the exact baseline, branch and commit.
 
 | Area | State | Notes |
 |---|---|---|
-| Boot | `fastboot boot` with ABL-rebuilt DTB | watchdog-bounded RAM sessions, auto-recovery to Android |
+| Boot | Temporary RAM boot and installed GKI triplet verified | Installed Ubuntu and Android switch through the established active-slot layout; temporary installed-root tests use an explicit expiry. |
 | Display | DSI panel 3392x2400@120 native KMS; display and backlight-only wake visually verified | Full display-link shutdown/recovery remains broken; blanking keeps KMS running and switches both backlights. |
 | Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
-| UFS | read-only evidence + GPT layout | no persistent writes anywhere |
+| UFS | Installed Ubuntu root and active-slot boot-image updates verified | Boot, init_boot and vendor_boot are checked together; destructive layout changes require separate approval. |
+| Battery | Charge level/status and full-charge capacity available | The protocol-unit fix restores UPower energy and runtime estimates; net charging performance and control thresholds need separate validation. |
+| Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | kernel-side up: GMU v5.1.25, render node answers, no zap needed on this retail unit | Mesa in Ubuntu 26.04 lacks the A830 chipid -> GNOME stays llvmpipe |
-| Wi-Fi (WCN7860) | PCIe Gen3 x2 up, firmware loads, `wlp1s0` managed by NetworkManager | needs AP credentials for an actual connection |
-| Desktop | Ubuntu 26.04 systemd as PID1, GNOME Shell session runs | RAM-delivered squashfs, llvmpipe; NM/ssh tooling in s5 |
+| Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
+| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | Graphics still use llvmpipe; hardware GPU rendering is not yet validated. |
 
 The current blanking workaround switches both backlights while keeping KMS
 running. The failed touch/DSI retention diagnostics have been reverted.
@@ -50,8 +52,9 @@ this tablet's model, HLOS VMID and unbound nodes, with a boot-time consistency
 check. Setting only the chassis name is insufficient because PID1 caches its
 own virtualization result.
 
-Not yet: full display-link shutdown/recovery, GPU-accelerated desktop (Mesa), Bluetooth
-(HCI transport unidentified on this unit), audio, persistent installation.
+Not yet: full display-link shutdown/recovery and deep-suspend display recovery,
+GPU-accelerated desktop, audio, pogo keyboard, automatic rotation and USB-host
+peripheral acceptance.
 
 ## Repository layout
 
@@ -93,7 +96,7 @@ PROFILE=ncm tools/build-initramfs.sh   # RAM userspace with the NCM evidence cha
 tools/build-erhai-abl-symbols.py       # packaging DTB ABL will accept
 tools/build-mainline-boot.py --output out/mainline-boot            # minimal session
 # add `--profile desktop` for the pinned RAM Ubuntu desktop cmdline
-fastboot boot out/mainline-boot/boot-mainline.img
+fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
 ```
 
 The session comes up with a USB NCM link (device `192.168.77.2`, telnet 2323,
@@ -123,9 +126,10 @@ that even an unlocked bootloader refuses. See `switch/README.md`.
 
 ## Device packages
 
-The installed system is Canonical's Ubuntu, unpacked as it ships and free to
-follow upstream through apt. Everything this tablet needs on top of it is a
-package, and each package owns exactly what it installs:
+The installed system is Canonical's Ubuntu, unpacked as it ships. The
+functional device layer is packaged separately; the GNOME adapter's major
+version constraint and the legacy debug-file ownership limitation are noted
+above and under Safety.
 
 ```sh
 tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
@@ -136,7 +140,8 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-device-support` | `/usr/sbin/erhai-switch{,-install-ubuntu-images}`, the store directory and its logrotate snippet, the "Switch to Android" desktop entry and its polkit action, the power settings this port needs until suspend/resume works, and the two programs that give this unit its own Bluetooth and Wi-Fi addresses (`erhai-bt-address` with its units, `erhai-wifi-address` with its udev rule and NetworkManager drop-in). The addresses themselves live in `/var/lib/erhai/` and are in **no** package: they are machine-specific data, written on the tablet at first boot |
 | `erhai-kernel` | the signed boot triplet under `/usr/lib/erhai/boot/<release>/`; its postinst hands the set to the switcher's installer, so **a kernel update is an apt upgrade** |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-device` | a metapackage depending on the three |
+| `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
+| `erhai-device` | a metapackage depending on the four device packages |
 
 The build needs no root (`dpkg-deb --root-owner-group` on a staged tree) and
 takes its firmware from `packaging/firmware/`, checking every file against the
@@ -148,28 +153,29 @@ that against the tree, which is how a later ROM version gets in. Neither the
 AVB signing key nor avbtool ever enters a package.
 
 Two builds of the same inputs produce the same bytes: the version carries a
-build id derived from the packaged content (`0.1.0+b<8 hex>`), the AVB footers
+build id derived from payload and package metadata (`<release>[~dbg]+g<kernel>.b<id>`), the AVB footers
 use a salt derived from the image instead of avbtool's random default, and the
 archive timestamps are pinned to the kernel commit.
 
-`--debug` builds the triplet with the RAM session's debug channel enabled and
-marks the version `+dbg`. The default is off: see Safety.
+`--debug` includes `erhai.debug=1` in the triplet and marks the version `~dbg`.
+The normal build omits that flag; an existing debug root has the transition
+limitation described under Safety.
 
 ## Safety
 
-RAM sessions write nothing to flash. Anything beyond that — partitioning,
-flashing, persistent installs — is out of scope for this tree and requires
-explicit separate steps and authorization. The switcher in `switch/` is the
-one exception, and it writes only the three boot partitions of the slot that
-is already active.
+`fastboot boot` does not replace boot partitions. A temporary kernel using an
+installed root still permits normal filesystem/journal writes there. The
+switcher and kernel-package installer write the established active slot's
+three boot partitions. Formatting, repartitioning and layout changes require
+separate, explicit authorization.
 
-The RAM session's debug channel is an **unauthenticated root telnet** on the
-USB NCM link by design (it is the only bring-up channel on this device). It
-lives only inside the bounded RAM session with a watchdog that reboots back
-to Android; never carry it into a persistent install or a shipped image.
-`tools/build-debs.py` therefore leaves it out of `erhai-kernel` unless it is
-asked for explicitly with `--debug`, which also marks the version `+dbg` so an
-installed debug build is visible in `dpkg -l`.
+The debug channel is an **unauthenticated root telnet** on USB NCM. Debug
+images are intended for controlled development. A fresh ordinary persistent
+boot does not install the debug service, but a root previously booted in debug
+mode can retain the generated service files. Merely removing the kernel flag
+is not yet a verified way to retire that legacy service. Package ownership,
+startup gating and debug-to-production transition validation remain release
+work; do not treat the current development root as a production image.
 
 ## License
 
