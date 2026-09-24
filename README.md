@@ -25,6 +25,8 @@ for the exact baseline, branch and commit.
 | Board temperature | Two PMIC die and three thermistor channels verified through native IIO reads | Uses the upstream ADC5 Gen3 driver. These measurements do not reproduce the OEM's estimated enclosure temperatures or establish a complete thermal policy. |
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
+| Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
+| Speakers | Not enabled | Amplifier control buses and firmware are identified; supplies and DSP routes remain under development. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
@@ -192,7 +194,7 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-audio` | the board AudioReach topology, compiled from pinned upstream sources; capture bring-up is in progress and playback is not enabled |
+| `erhai-audio` | the board AudioReach capture topology and UCM profile for the two internal microphones; playback is not enabled |
 | `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the required device packages |
@@ -208,9 +210,10 @@ and the switcher's current/previous selections from automatic package removal;
 unreferenced kernels can be removed normally. Immutable kernel identity is kept
 in the store's `kernel.json`, separate from deployment information in `meta.json`.
 Module autoload, SCMI CPU frequency, installed upgrade and booting the previous
-unversioned kernel have been verified on hardware. The actual installer and APT
-parser also pass isolated store-rotation tests. A future upgrade between two
-different versioned module ABIs still needs its own device validation.
+unversioned kernel have been verified on hardware. Booting and returning between
+two versioned module ABIs has also been verified. The actual installer and APT
+parser pass isolated store-rotation tests; removal of unreferenced old payloads
+remains separate acceptance work.
 
 When installing a complete local deb set explicitly, mark the versioned payload
 as an automatic dependency after verifying the selector. The selector's exact
