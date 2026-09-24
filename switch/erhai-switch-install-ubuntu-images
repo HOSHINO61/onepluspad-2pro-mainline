@@ -63,6 +63,13 @@ for name in $PARTS; do
 done
 cp "$SOURCE/SHA256SUMS" "$staging/SHA256SUMS" || die 'cannot copy SHA256SUMS'
 [ -f "$SOURCE/manifest.json" ] && cp "$SOURCE/manifest.json" "$staging/manifest.json"
+# Keep immutable kernel/package identity separate from installation metadata.
+# A rollback source may itself be a previously archived store directory.
+if [ -f "$SOURCE/kernel.json" ]; then
+	cp "$SOURCE/kernel.json" "$staging/kernel.json" || die 'cannot copy kernel identity'
+elif [ -f "$SOURCE/meta.json" ]; then
+	cp "$SOURCE/meta.json" "$staging/kernel.json" || die 'cannot copy package identity'
+fi
 {
 	printf '{\n'
 	printf '  "set": "ubuntu",\n'

@@ -74,17 +74,40 @@ while IFS= read -r setting; do
 done <"$fragment"
 
 printf 'Building %s with %s (%s jobs)\n' "$head" "$toolchain" "$jobs"
-make "${args[@]}" -j"$jobs" Image qcom/sm8750-erhai.dtb 2>&1 | tee "$out/build.log"
+# Each source/configuration/compiler combination needs a distinct module ABI
+# directory. Package upgrades must never replace modules for a running kernel
+# with a different build that happens to use the same local version string.
+compiler_sha=$(sha256sum "$(command -v "${cross}gcc")" | cut -d' ' -f1)
+config_sha=$(sha256sum "$out/.config" | cut -d' ' -f1)
+abi=$(printf '%s\n' "$head" "$config_sha" "$toolchain" "$compiler_sha" | sha256sum | cut -d' ' -f1)
+localversion="-g${head:0:12}-a${abi:0:8}"
+args+=("LOCALVERSION=$localversion")
+make "${args[@]}" -j"$jobs" Image qcom/sm8750-erhai.dtb modules 2>&1 | tee "$out/build.log"
 [[ $(git -C "$src" rev-parse HEAD) == "$head" && -z $(git -C "$src" status --porcelain --untracked-files=no) ]] || {
 	echo 'Source changed during build; output must not be used.' >&2; exit 1;
 }
-python3 - "$out" "$head" "$toolchain" <<'PY'
+python3 - "$out" "$head" "$toolchain" "$compiler_sha" "$localversion" <<'PY'
 import hashlib, json, pathlib, sys
-out, head, compiler = pathlib.Path(sys.argv[1]), *sys.argv[2:]
+out, head, compiler, compiler_sha, localversion = pathlib.Path(sys.argv[1]), *sys.argv[2:]
 files = ['arch/arm64/boot/Image', 'arch/arm64/boot/dts/qcom/sm8750-erhai.dtb', '.config']
+sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+modules = {}
+for name in (out / 'modules.order').read_text().splitlines():
+    path = pathlib.Path(name)
+    if path.suffix == '.o':
+        path = path.with_suffix('.ko')
+    assert not path.is_absolute() and '..' not in path.parts, name
+    modules[str(path)] = sha(out / path)
+assert modules, 'configured module build produced no modules'
 result = {'status': 'OFFLINE_BUILD_ONLY', 'kernel_commit': head, 'compiler': compiler,
+          'compiler_sha256': compiler_sha, 'localversion': localversion,
+          'kernel_release': (out / 'include/config/kernel.release').read_text().strip(),
           'note': 'Mutable development output; package with build-mainline-boot.py before boot.',
-          'files': {f: hashlib.sha256((out / f).read_bytes()).hexdigest() for f in files}}
+          'files': {f: sha(out / f) for f in files},
+          'modules': modules,
+          'module_metadata': {name: sha(out / name) for name in
+                              ('modules.order', 'modules.builtin', 'modules.builtin.modinfo',
+                               'Module.symvers', 'System.map')}}
 (out / 'build-result.json').write_text(json.dumps(result, indent=2) + '\n')
 PY
 echo "Platform build complete: $out/build-result.json (not a tablet boot image)"

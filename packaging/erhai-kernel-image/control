@@ -1,0 +1,14 @@
+Package: @KERNEL_PACKAGE@
+Version: @VERSION@
+Architecture: arm64
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Section: kernel
+Priority: optional
+Depends: kmod
+Description: OnePlus Pad 2 Pro kernel and modules @KERNEL_RELEASE@
+ Contains matching, signed boot images and the complete configured module
+ tree. Standard kmod indices support module dependencies and modalias loading.
+ Installing this payload only installs files and refreshes module indices;
+ it does not select a boot image or write boot partitions. The erhai-kernel
+ selector activates it when ready. Previous payloads remain for rollback.

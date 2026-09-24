@@ -52,7 +52,7 @@ tests/switch-selftest.sh             decision-logic self-test (files, not a devi
 
 On the Ubuntu side these are not copied by hand: `erhai-device-support`
 installs both scripts into `/usr/sbin` and owns the store directory, and
-`erhai-kernel`'s postinst calls the installer with the triplet it just shipped
+`erhai-kernel`'s postinst selects the triplet from its versioned payload dependency
 (see the main README). The package's postinst also moves any pre-package copy
 in `/usr/local/sbin` aside -- that directory comes first on root's PATH, so a
 leftover there would keep shadowing the packaged switcher. On the Android side
@@ -65,7 +65,7 @@ mounts it for the duration of a switch and unmounts it afterwards.
 
 ```
 /var/lib/erhai/switch/
-  ubuntu/       boot.img init_boot.img vendor_boot.img SHA256SUMS meta.json
+  ubuntu/       boot.img init_boot.img vendor_boot.img SHA256SUMS meta.json kernel.json
   ubuntu.prev/  the previous Ubuntu triplet, for a rollback without a host
   android/      refreshed from the live slot before every switch to Ubuntu
   state.json    what is in the slot, which slot, when, which hashes
@@ -74,6 +74,11 @@ mounts it for the duration of a switch and unmounts it afterwards.
 
 `android/` is never shipped and never hand-maintained: it is re-read from the
 slot each time, so an Android OTA or a KernelSU change needs no manual sync.
+
+`kernel.json` preserves the package's kernel release and input identity across
+store rotation; `meta.json` records the deployment. Kernel retention reads the
+former. Restoring an archived set through the image installer preserves that
+identity before moving the source directory.
 
 ## Use
 

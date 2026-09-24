@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+case "$1" in
+remove|purge)
+    directory=/usr/lib/modules/@KERNEL_RELEASE@
+    for name in modules.dep modules.dep.bin modules.alias modules.alias.bin \
+        modules.softdep modules.weakdep modules.symbols modules.symbols.bin \
+        modules.devname modules.builtin.bin modules.builtin.alias.bin; do
+        rm -f "$directory/$name"
+    done
+    # Preserve any separately owned external modules.
+    rmdir "$directory" 2>/dev/null || true
+    ;;
+esac

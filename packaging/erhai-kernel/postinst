@@ -21,6 +21,7 @@ configure)
 		# active slot in here, and /dev belongs to whatever is doing the build.
 		"$INSTALLER" "$IMAGES" --no-activate
 	fi
+	/usr/libexec/erhai-kernel-retention "$RELEASE"
 	;;
 esac
 

@@ -3,19 +3,11 @@ Version: @VERSION@
 Architecture: arm64
 Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
-Section: kernel
+Section: metapackages
 Priority: optional
-Depends: erhai-device-support (= @VERSION@)
-Description: OnePlus Pad 2 Pro (erhai) mainline boot triplet @KERNEL_RELEASE@
- The signed boot / init_boot / vendor_boot set this tablet's bootloader needs,
- built from the mainline kernel, the ABL-compatible device tree and the port's
- initramfs. Every image carries an AVB hash footer: vbmeta lists boot as a
- chain partition, so an image without one is malformed metadata that even an
- unlocked bootloader refuses.
- .
- Installing the package hands the set to erhai-switch-install-ubuntu-images,
- which puts it in the switcher's store, rotates the previous set to
- ubuntu.prev/ and -- when Ubuntu is the system occupying the slot -- rewrites
- the slot in place. Nothing reboots: the new kernel runs at the next boot.
- So a kernel update is an apt upgrade, and a kernel that does not boot is one
- `erhai-switch` away from the previous one.
+Depends: @KERNEL_PACKAGE@ (= @VERSION@), erhai-device-support (>= 0.1.22~)
+Description: Current OnePlus Pad 2 Pro (erhai) kernel
+ Depends on the selected versioned kernel payload. Each payload owns its
+ matching signed boot images and module tree, so upgrades preserve the
+ modules needed by the running and rollback kernels. Configuring this
+ selector activates the matching boot triplet without restarting the device.
