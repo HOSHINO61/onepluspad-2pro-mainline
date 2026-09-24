@@ -1,0 +1,11 @@
+Package: erhai-audio
+Version: @VERSION@
+Architecture: all
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Section: sound
+Priority: optional
+Description: OnePlus Pad 2 Pro (erhai) audio topology and configuration
+ Device-specific AudioReach topology built from pinned upstream sources.
+ The current candidate provides the internal microphone capture graph.
+ Speaker playback and USB headset support are still under development.

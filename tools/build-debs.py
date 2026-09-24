@@ -14,7 +14,8 @@ is a package, and each package owns exactly what it installs:
                           postinst hands the set to the switcher's installer,
                           so a kernel update is an apt upgrade
     erhai-firmware        the firmware closure the mainline drivers ask for
-    erhai-device          a metapackage depending on the three
+    erhai-audio           the board AudioReach topology and audio configuration
+    erhai-device          a metapackage depending on the required device layer
 
 Inputs are pinned, never inherited: the kernel comes from a clean checkout at a
 named commit and the firmware from packaging/firmware/, every file of which is
@@ -79,6 +80,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -99,7 +101,7 @@ MANIFEST = PACKAGING / 'firmware-manifest.json'
 VERSION_FILE = PACKAGING / 'VERSION'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
 DEBIAN_SCRIPTS = ('preinst', 'postinst', 'prerm', 'postrm')
-PACKAGES = ('erhai-display-power', 'erhai-device-support', 'erhai-firmware',
+PACKAGES = ('erhai-display-power', 'erhai-device-support', 'erhai-firmware', 'erhai-audio',
             'erhai-kernel', 'erhai-debug', 'erhai-device')
 PARTS = ('boot', 'init_boot', 'vendor_boot')
 SWITCHER_PROGRAMS = ('erhai-switch', 'erhai-switch-install-ubuntu-images')
@@ -446,6 +448,46 @@ def stage_firmware(root, manifest):
           f'{FIRMWARE.relative_to(REPO)}')
 
 
+def stage_audio(root, archive):
+    inputs = PACKAGING / 'audio'
+    source = json.loads((inputs / 'source.json').read_text())
+    archive = archive or WS / 'cache' / source['archive']
+    if not archive.is_file() or sha256_file(archive) != source['sha256']:
+        die(f'audio source archive missing or mismatched: {archive}; '
+            f'download {source["url"]}')
+    tools = {}
+    for name in ('m4', 'alsatplg'):
+        path = shutil.which(name)
+        if not path:
+            die(f'{name} is required to build the audio topology')
+        tools[name] = {'sha256': sha256_file(path),
+                       'version': run([path, '--version']).splitlines()}
+    with tempfile.TemporaryDirectory(prefix='erhai-audio.') as directory:
+        work = Path(directory)
+        with tarfile.open(archive) as tar:
+            tar.extractall(work, filter='data')
+        upstream = work / source['directory']
+        recipe = inputs / (source['model'] + '.m4')
+        conf = work / 'topology.conf'
+        conf.write_text(run(['m4', '-I', str(upstream), str(recipe)]))
+        target = root / 'usr/lib/firmware/qcom' / source['driver'] / (source['model'] + '-tplg.bin')
+        target.parent.mkdir(parents=True)
+        run(['alsatplg', '-c', str(conf), '-o', str(target)])
+        target.chmod(0o644)
+        run(['alsatplg', '-d', str(target), '-o', str(work / 'decoded.conf')])
+        doc = root / 'usr/share/doc/erhai-audio'
+        install_file(upstream / 'LICENSE.BSD-3-Clause', doc / 'copyright', 0o644)
+        install_file(recipe, doc / recipe.name, 0o644)
+        provenance = {'source': source, 'tools': tools,
+                      'builder_sha256': sha256_file(Path(__file__)),
+                      'recipe_sha256': sha256_file(recipe),
+                      'topology_sha256': sha256_file(target)}
+        (doc / 'build.json').write_text(json.dumps(provenance, indent=2) + '\n')
+    tree = PACKAGING / 'erhai-audio/tree'
+    if tree.is_dir():
+        copy_tree(tree, root)
+
+
 def build_triplet(args, work):
     """Kernel Image + ABL device tree + initramfs -> a signed boot triplet."""
     if args.triplet_signed:
@@ -698,6 +740,8 @@ def main():
     parser.add_argument('--debug', action='store_true',
                         help='Enable the debug channel in the packaged kernel command '
                              'line and mark the version ~dbg')
+    parser.add_argument('--audio-source', type=Path,
+                        help='Pinned audioreach-topology source archive (defaults to the cache)')
     parser.add_argument('--refresh-from-rom', action='store_true',
                         help='Re-extract the firmware closure from the pinned ROM and '
                              'upstream inputs and diff it against packaging/firmware')
@@ -746,6 +790,8 @@ def main():
                 copy_tree(PACKAGING / 'erhai-debug/tree', root)
             elif package == 'erhai-firmware':
                 stage_firmware(root, manifest)
+            elif package == 'erhai-audio':
+                stage_audio(root, args.audio_source)
             elif package == 'erhai-kernel':
                 image_root = work / image_package / 'root'
                 image_root.mkdir(parents=True)

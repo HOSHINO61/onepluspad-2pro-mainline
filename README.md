@@ -192,9 +192,10 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
+| `erhai-audio` | the board AudioReach topology, compiled from pinned upstream sources; capture bring-up is in progress and playback is not enabled |
 | `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
-| `erhai-device` | a metapackage depending on the four device packages |
+| `erhai-device` | a metapackage depending on the required device packages |
 
 The kernel build includes all configured modules and records their hashes.
 Its release suffix identifies the source, configuration and compiler so that
@@ -224,6 +225,14 @@ and no network. `--refresh-from-rom` runs the other direction: it extracts the
 closure from the pinned stock ROM images and upstream archives again and diffs
 that against the tree, which is how a later ROM version gets in. Neither the
 AVB signing key nor avbtool ever enters a package.
+
+Building `erhai-audio` also requires GNU m4, `alsatplg` from alsa-utils, and the
+original archive pinned in `packaging/audio/source.json`. Pass its path with
+`--audio-source`; the default is `cache/audioreach-topology-993a17dc.tar.gz` in
+the workspace. The builder verifies the archive, compiles the board source and
+decodes the result as a format check. Tool versions, hashes, source identity
+and the upstream BSD license are included in the audio package. No prebuilt
+reference-board topology is renamed or used as a build input.
 
 Two builds of the same inputs produce the same bytes: the version carries a
 build id derived from payload and package metadata (`<release>[~dbg]+g<kernel>.b<id>`), the AVB footers
