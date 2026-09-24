@@ -1,0 +1,12 @@
+[Unit]
+Description=USB NCM diagnostic root shell
+ConditionKernelCommandLine=erhai.debug=1
+Requires=erhai-debug.service
+After=erhai-debug.service
+PartOf=erhai-debug.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/busybox telnetd -F -b 192.168.77.2:2323 -l /bin/bash
+Restart=on-failure
+TimeoutStopSec=5

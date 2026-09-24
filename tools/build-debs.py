@@ -98,7 +98,8 @@ MANIFEST = PACKAGING / 'firmware-manifest.json'
 VERSION_FILE = PACKAGING / 'VERSION'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
 DEBIAN_SCRIPTS = ('preinst', 'postinst', 'prerm', 'postrm')
-PACKAGES = ('erhai-display-power', 'erhai-device-support', 'erhai-firmware', 'erhai-kernel', 'erhai-device')
+PACKAGES = ('erhai-display-power', 'erhai-device-support', 'erhai-firmware',
+            'erhai-kernel', 'erhai-debug', 'erhai-device')
 PARTS = ('boot', 'init_boot', 'vendor_boot')
 SWITCHER_PROGRAMS = ('erhai-switch', 'erhai-switch-install-ubuntu-images')
 
@@ -681,7 +682,8 @@ def main():
 
     if shutil.which('dpkg-deb') is None:
         die('dpkg-deb is required')
-    wanted = tuple(args.only) if args.only else PACKAGES
+    wanted = tuple(args.only) if args.only else tuple(
+        package for package in PACKAGES if args.debug or package != 'erhai-debug')
 
     release_file = Path(args.kernel_out) / 'include/config/kernel.release'
     release = release_file.read_text().strip() if release_file.is_file() else None
@@ -704,6 +706,8 @@ def main():
                 stage_device_support(root)
             elif package == 'erhai-display-power':
                 stage_display_power(root)
+            elif package == 'erhai-debug':
+                copy_tree(PACKAGING / 'erhai-debug/tree', root)
             elif package == 'erhai-firmware':
                 stage_firmware(root, manifest)
             elif package == 'erhai-kernel':

@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+case "$1" in
+remove) deb-systemd-helper mask erhai-debug.service >/dev/null || true ;;
+purge)
+    deb-systemd-helper purge erhai-debug.service >/dev/null || true
+    deb-systemd-helper unmask erhai-debug.service >/dev/null || true
+    ;;
+esac
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+# Archived legacy files are operator recovery data. Never reactivate their
+# unconditional services on removal, and do not erase the archive on purge.

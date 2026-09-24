@@ -1,0 +1,12 @@
+[Unit]
+Description=USB NCM diagnostic filesystem access
+ConditionKernelCommandLine=erhai.debug=1
+Requires=erhai-debug.service
+After=erhai-debug.service
+PartOf=erhai-debug.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/busybox httpd -f -p 192.168.77.2:8081 -h /
+Restart=on-failure
+TimeoutStopSec=5

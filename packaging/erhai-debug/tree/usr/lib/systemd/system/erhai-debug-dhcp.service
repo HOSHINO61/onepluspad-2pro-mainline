@@ -1,0 +1,13 @@
+[Unit]
+Description=USB NCM diagnostic host address
+ConditionKernelCommandLine=erhai.debug=1
+Requires=erhai-debug.service
+After=erhai-debug.service
+PartOf=erhai-debug.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/touch /run/erhai-debug/udhcpd.leases
+ExecStart=/usr/bin/busybox udhcpd -f /usr/lib/erhai/debug/udhcpd.conf
+Restart=on-failure
+TimeoutStopSec=5

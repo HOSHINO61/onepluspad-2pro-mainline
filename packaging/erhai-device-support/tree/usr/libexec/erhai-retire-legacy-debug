@@ -1,0 +1,49 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+# Before device packages owned this channel, initramfs generated these exact
+# unowned files in the installed root. Archive recognized files; never replace
+# an administrator's edited unit or a distribution-owned file.
+legacy_files() {
+    cat <<'EOF'
+e8f2288d54783e53564fee3585972c453d7e612000a8a94c7e69e540002777a4 /etc/systemd/system/erhai-debug.service
+7db575484a6a62538e06823d3000dd67d2f888f5fb228b784858dd0cbf40fd76 /etc/systemd/network/10-erhai-ncm.link
+f066c6fc9cb0a0b3ad16e775c742e616156e0e0377e954a7f9f63a4306466f50 /etc/NetworkManager/conf.d/99-erhai-ncm.conf
+52151e7f322f926b64049cdaa1410dc3ea6485525e0624b05813791c219ae933 /usr/local/sbin/busybox-erhai
+EOF
+}
+
+    # Validate the complete migration before moving its first file.
+    legacy_files | while read -r digest path; do
+        [ -e "$path" ] || [ -L "$path" ] || continue
+        # A package/admin mask is not a generated legacy service.
+        if [ -L "$path" ] && [ "$(readlink "$path")" = /dev/null ]; then continue; fi
+        if [ -L "$path" ] || dpkg-query -S "$path" >/dev/null 2>&1 ||
+           ! printf '%s  %s\n' "$digest" "$path" | sha256sum -c --status; then
+            echo "erhai-device-support: refusing to replace an unknown legacy file: $path" >&2
+            exit 1
+        fi
+        backup="/var/lib/erhai/debug/legacy$path"
+        if [ -e "$backup" ] && ! cmp -s "$path" "$backup"; then
+            echo "erhai-device-support: legacy backup differs: $backup" >&2
+            exit 1
+        fi
+    done
+    legacy_files | while read -r digest path; do
+        [ -f "$path" ] || continue
+        backup="/var/lib/erhai/debug/legacy$path"
+        mkdir -p "$(dirname "$backup")"
+        if [ -e "$backup" ]; then rm "$path"; else mv "$path" "$backup"; fi
+        echo "erhai-device-support: archived $path at $backup"
+    done
+    link=/etc/systemd/system/multi-user.target.wants/erhai-debug.service
+    if [ -L "$link" ] && [ "$(readlink "$link")" = ../erhai-debug.service ]; then
+        if [ -f /usr/lib/systemd/system/erhai-debug.service ]; then
+            # Preserve the enabled intent. Removing this link makes
+            # deb-systemd-helper treat an upgrade as an explicit disable.
+            ln -sfn /usr/lib/systemd/system/erhai-debug.service "$link"
+        else
+            rm "$link"
+        fi
+    fi

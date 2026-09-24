@@ -15,9 +15,9 @@
 #   erhai.weston=1              autostart weston in the RAM session
 #   erhai.root=PARTLABEL=<name> mount that partition rw and boot it as the
 #                               persistent root (no expiry unless explicitly set)
-#   erhai.debug=1               install the NCM debug channel into that
-#                               persistent root (off by default: an installed
-#                               system must not serve a root shell over USB)
+#   erhai.debug=1               enable USB NCM diagnostics; desktop handoff
+#                               requires the optional erhai-debug package.
+#                               Ordinary installed boots expose no channel.
 export PATH=/bin
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -33,11 +33,18 @@ WATCHDOG_SECONDS=600
 SESSION_SECONDS=
 SESSION_EXPLICIT=0
 WB=0
+ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0; ROOT_SPEC=; DEBUG_CHANNEL=0
 for arg in $(cat /proc/cmdline); do
 	case "$arg" in
 	erhai.watchdog=*) WATCHDOG_SECONDS=${arg#erhai.watchdog=} ;;
 	erhai.session=*) SESSION_SECONDS=${arg#erhai.session=}; SESSION_EXPLICIT=1 ;;
 	erhai.wb=1) WB=1 ;;
+	erhai.rootfs=*) ROOTFS_URL=${arg#erhai.rootfs=} ;;
+	erhai.switchroot=1) SWITCHROOT=1 ;;
+	erhai.rootfs.sha256=*) ROOTFS_SHA=${arg#erhai.rootfs.sha256=} ;;
+	erhai.weston=1) WESTON=1 ;;
+	erhai.root=*) ROOT_SPEC=${arg#erhai.root=} ;;
+	erhai.debug=1) DEBUG_CHANNEL=1 ;;
 	esac
 done
 # erhai.watchdog bounds the initramfs phase only (a boot that wedges before the
@@ -52,9 +59,11 @@ echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
 # The timer sleeps in the background and the subshell waits on it, so a
 # SIGTERM from the hand-off ends the subshell at once; a foreground sleep
 # would only be reaped after it expired and the reboot would still run.
-( trap 'exit 0' TERM
+( timer_pid=
+  trap 'kill "$timer_pid" 2>/dev/null; wait "$timer_pid" 2>/dev/null; exit 0' TERM
   sleep "$WATCHDOG_SECONDS" &
-  wait $!
+  timer_pid=$!
+  wait "$timer_pid"
   echo "WATCHDOG_FIRED uptime=$(cat /proc/uptime)" > /run/evidence/watchdog.txt
   sync; sleep 1; reboot -f
   sleep 15; echo s > /proc/sysrq-trigger; echo b > /proc/sysrq-trigger ) &
@@ -120,50 +129,20 @@ find_partlabel() {
 	return 1
 }
 
-# Migrate the NCM debug channel into the root at $1. The kernel keeps the usb0
-# gadget and its address across switch_root, so the service only re-arms the
-# address (idempotent) and serves telnet/http from the new userspace; the .link
-# file stops udev's predictable naming from renaming usb0 out from under it and
-# the NetworkManager drop-in stops a desktop from taking the interface over.
-# The daemons come from the initramfs' own static BusyBox, copied in as
-# busybox-erhai: a stock distribution root has neither busybox nor sshd, and
-# this channel is the only way back in when there is no console.
-install_debug_channel() {
-	mkdir -p "$1/etc/systemd/system/multi-user.target.wants" \
-		"$1/etc/systemd/network" "$1/etc/NetworkManager/conf.d" \
-		"$1/usr/local/sbin"
-	cp /bin/busybox "$1/usr/local/sbin/busybox-erhai"
-	cat > "$1/etc/systemd/system/erhai-debug.service" <<'EOF'
-[Unit]
-Description=erhai NCM debug channel
-After=local-fs.target
-[Service]
-Type=simple
-ExecStart=/usr/local/sbin/busybox-erhai sh -c 'ip link set usb0 up 2>/dev/null; ip addr add 192.168.77.2/24 dev usb0 2>/dev/null; /usr/local/sbin/busybox-erhai httpd -p 192.168.77.2:8081 -h /; exec /usr/local/sbin/busybox-erhai telnetd -F -b 192.168.77.2:2323 -l /bin/bash'
-Restart=always
-[Install]
-WantedBy=multi-user.target
-EOF
-	ln -sf ../erhai-debug.service \
-		"$1/etc/systemd/system/multi-user.target.wants/erhai-debug.service"
-	cat > "$1/etc/systemd/network/10-erhai-ncm.link" <<'EOF'
-[Match]
-MACAddress=02:00:00:77:00:02
-[Link]
-Name=usb0
-EOF
-	cat > "$1/etc/NetworkManager/conf.d/99-erhai-ncm.conf" <<'EOF'
-[keyfile]
-unmanaged-devices=interface-name:usb0
-EOF
-}
-
 # Hand PID1 to systemd in /newroot, recording the hand-off in $1. The initramfs
 # watchdog is disarmed here, and the initramfs daemons must die BEFORE the
 # switch: their deleted binaries keep serving sockets that would otherwise
-# collide with the debug services starting in the new root. udhcpd is left
-# running on purpose so the host keeps its NCM address across the switch.
+# collide with the package-owned services in the new root. The host keeps
+# its lease while the package takes over DHCP on the existing USB interface.
 switch_to_newroot() {
+	# Never manufacture persistent service files here. An explicit debug
+	# desktop needs the package that owns its services and dependencies.
+	if [ "$DEBUG_CHANNEL" = 1 ] &&
+	   { [ ! -f /newroot/usr/lib/systemd/system/erhai-debug.service ] ||
+	     [ ! -x /newroot/usr/bin/busybox ]; }; then
+		echo DEBUG_PACKAGE_MISSING >> "$1"
+		return 1
+	fi
 	# Correct the exported firmware identity before the real PID1's first
 	# virtualization query. A sysinit service alone is too late for its cache.
 	# Prepare the sysfs instance that survives switch_root; masking the old
@@ -209,7 +188,7 @@ EOF
 	fi
 	kill "$WATCHDOG_PID" 2>/dev/null
 	kill "$TELNET_LOOP_PID" "$HEARTBEAT_PID" 2>/dev/null
-	for p in $(pidof telnetd httpd dd 2>/dev/null); do kill "$p" 2>/dev/null; done
+	for p in $(pidof telnetd httpd udhcpd dd 2>/dev/null); do kill "$p" 2>/dev/null; done
 	echo "SWITCHROOT systemd $(cat /proc/uptime)" >> "$1"
 	sync
 	exec switch_root /newroot /sbin/init
@@ -308,31 +287,25 @@ if [ "$WB" = 1 ] && [ -x /bin/wb-capture ]; then
 		echo "wb-capture rc=$?" >> /run/evidence/wb-info.txt
 fi
 
-if /bin/usb-ncm; then
-	dmesg > /run/evidence/dmesg.txt
-	cat /proc/mounts > /run/evidence/mounts.txt
-	httpd -p 192.168.77.2:8080 -h /run/evidence
-	# Respawn telnetd: one crashed daemon must not orphan the session.
-	( while :; do telnetd -b 192.168.77.2:2323 -l /bin/sh; sleep 2; done ) &
-	TELNET_LOOP_PID=$!
-	echo ERHAI_MAINLINE_READY
+# A plain installed boot must not expose an early root shell either. A
+# rootless initramfs session is itself the explicitly selected rescue profile.
+EARLY_DEBUG=$DEBUG_CHANNEL
+[ -n "$ROOT_SPEC" ] || EARLY_DEBUG=1
+if [ "$EARLY_DEBUG" = 0 ] || /bin/usb-ncm; then
+	if [ "$EARLY_DEBUG" = 1 ]; then
+		dmesg > /run/evidence/dmesg.txt
+		cat /proc/mounts > /run/evidence/mounts.txt
+		httpd -p 192.168.77.2:8080 -h /run/evidence
+		# Respawn only inside the bounded diagnostic initramfs session.
+		( while :; do telnetd -b 192.168.77.2:2323 -l /bin/sh; sleep 2; done ) &
+		TELNET_LOOP_PID=$!
+		echo ERHAI_MAINLINE_READY
+	else
+		echo ERHAI_DEBUG_DISABLED > /dev/kmsg
+	fi
 
-	# Optional RAM desktop rootfs: erhai.rootfs=<url> fetches a zstd squashfs
-	# over NCM, mounts it under an overlay at /newroot, and records the
-	# result in rootfs.txt; erhai.switchroot=1 later hands PID1 to systemd.
-	# erhai.root=PARTLABEL=<name> boots an installed system from UFS
-	# instead; it is handled below and never combined with the RAM overlay.
-	ROOTFS_URL=; SWITCHROOT=0; ROOTFS_SHA=; WESTON=0; ROOT_SPEC=; DEBUG_CHANNEL=0
-	for arg in $(cat /proc/cmdline); do
-		case "$arg" in
-		erhai.rootfs=*) ROOTFS_URL=${arg#erhai.rootfs=} ;;
-		erhai.switchroot=1) SWITCHROOT=1 ;;
-		erhai.rootfs.sha256=*) ROOTFS_SHA=${arg#erhai.rootfs.sha256=} ;;
-		erhai.weston=1) WESTON=1 ;;
-		erhai.root=*) ROOT_SPEC=${arg#erhai.root=} ;;
-		erhai.debug=1) DEBUG_CHANNEL=1 ;;
-		esac
-	done
+	# Optional RAM root or installed root, selected before starting any
+	# network services. Root construction and diagnostics are separate.
 	if [ -n "$ROOTFS_URL" ]; then
 		{
 			echo "url=$ROOTFS_URL"
@@ -405,7 +378,6 @@ WantedBy=timers.target
 EOF
 		ln -sf ../erhai-session-expiry.timer \
 			/newroot/etc/systemd/system/timers.target.wants/erhai-session-expiry.timer
-		install_debug_channel /newroot
 		# Early boot observability without a console: an alive marker as
 		# soon as local-fs is up, then a live journal stream to the host.
 		cat > /newroot/etc/systemd/system/erhai-alive.service <<'EOF'
@@ -501,11 +473,8 @@ EOF
 	fi
 	if [ -n "$ROOT_SPEC" ] && grep -q ' /newroot ext4 ' /proc/mounts &&
 		[ -x /newroot/usr/lib/systemd/systemd ]; then
-		# An installed system keeps the distribution's own services; the
-		# unauthenticated debug channel is opt-in (erhai.debug=1) and is
-		# never left behind by a plain persistent boot. A RAM session is a
-		# debug session by definition and always gets it, above.
-		[ "$DEBUG_CHANNEL" = 1 ] && install_debug_channel /newroot
+		# Device packages own the installed system's optional services;
+		# their conditions are evaluated on every boot, including debug-off.
 		switch_to_newroot /run/evidence/root.txt
 	fi
 else

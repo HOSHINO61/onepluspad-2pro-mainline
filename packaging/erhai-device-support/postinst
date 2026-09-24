@@ -23,6 +23,8 @@ fi
 
 case "$1" in
 configure)
+	# This migration also runs on ordinary upgrades that omit erhai-debug.
+	/usr/libexec/erhai-retire-legacy-debug
 	# Before there was a package the switcher was copied into /usr/local/sbin
 	# by hand, and /usr/local/sbin comes first on root's PATH. A copy left
 	# there would keep shadowing the packaged one, so an upgrade would install

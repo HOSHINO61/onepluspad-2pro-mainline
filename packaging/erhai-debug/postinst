@@ -1,0 +1,10 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+if [ "$1" = configure ]; then
+    deb-systemd-helper unmask erhai-debug.service >/dev/null || true
+    deb-systemd-helper enable erhai-debug.service >/dev/null
+    if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+    # Do not kill a running installation inside the old diagnostic session.
+    # The new, conditional units take over on the next boot.
+fi
