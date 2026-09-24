@@ -13,10 +13,11 @@ for the exact baseline, branch and commit.
 ## Status and validation boundaries
 
 The installed audio baseline is 0.1.31. This development candidate adds a native
-eight-channel speaker graph and its kernel prerequisites; those additions have
-offline validation only. Speaker supplies, board links, stereo routing and
-physical playback remain incomplete. The microphone UCM remains the only enabled
-audio profile.
+eight-channel speaker graph and its kernel prerequisites. The kernel passed a
+bounded RAM microphone regression with the installed capture configuration;
+the new speaker graph has offline validation only. Speaker supplies, board links,
+stereo routing and physical playback remain incomplete. The microphone UCM
+remains the only enabled audio profile.
 
 | Area | State | Notes |
 |---|---|---|
