@@ -17,11 +17,21 @@ def main():
     root = args.root.resolve()
     releases = {args.release}
     for name in ('ubuntu', 'ubuntu.prev'):
-        path = root / 'var/lib/erhai/switch' / name / 'meta.json'
+        directory = root / 'var/lib/erhai/switch' / name
+        path = directory / 'kernel.json'
         if path.is_file():
             release = json.loads(path.read_text()).get('kernel_release')
             if release:
                 releases.add(release)
+                continue
+        # Pre-versioned installers recorded only the canonical payload path.
+        # Do not mistake that installation record for the package metadata.
+        legacy = directory / 'meta.json'
+        if legacy.is_file():
+            source = json.loads(legacy.read_text()).get('source', '')
+            match = re.fullmatch(r'/usr/lib/erhai/boot/([a-z0-9.+-]{1,64})', source)
+            if match:
+                releases.add(match[1])
     if root == Path('/') and (root / 'run/systemd/system').is_dir():
         releases.add(os.uname().release)
     if any(not re.fullmatch(r'[a-z0-9.+-]{1,64}', release) for release in releases):
