@@ -24,9 +24,9 @@ for the exact baseline, branch and commit.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
-| GPU (A830) | kernel-side up: GMU v5.1.25, render node answers, no zap needed on this retail unit | Mesa in Ubuntu 26.04 lacks the A830 chipid -> GNOME stays llvmpipe |
+| GPU (A830) | Native GLES rendering and pixel readback verified with isolated Mesa 26.2.3 plus the upstream A830v1 device entry | Installed Ubuntu Mesa 26.0.3 still falls back to llvmpipe. The current kernel bypasses rejected zap loading; its lifecycle and sustained-load behavior remain unverified. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
-| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | Graphics still use llvmpipe; hardware GPU rendering is not yet validated. |
+| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The installed desktop still uses llvmpipe; the isolated GLES result does not establish a GPU-accelerated desktop. |
 
 The current blanking workaround switches both backlights while keeping KMS
 running. The failed touch/DSI retention diagnostics have been reverted.
@@ -113,6 +113,40 @@ userspace starts, it returns the tablet to the bootloader after that bound.
 Normal persistent boots omit this parameter and do not expire. The runtime
 marker `/run/erhai-test-session.started` distinguishes a running userspace
 watchdog from a boot that never reached the service.
+
+## Isolated Mesa development build
+
+`packaging/mesa/source.json` pins the original Mesa archive and one unmodified
+upstream A830v1 device-table patch. `tools/build-mesa.py` checks both hashes and
+builds natively on ARM64. It installs only into an output staging tree; it does
+not replace the host's graphics libraries or produce an installable device package.
+The patch retains its original author and the affected file's MIT license;
+Mesa's own `docs/license.rst` and per-file notices govern the source archive.
+This repository's GPL license applies to its build tooling, not to Mesa.
+
+On an Ubuntu ARM64 development system, the build dependencies are:
+
+```sh
+apt install build-essential meson ninja-build pkg-config libdrm-dev \
+  libexpat1-dev python3-mako python3-ply python3-yaml bison flex \
+  zlib1g-dev libzstd-dev libelf-dev libwayland-dev libwayland-egl-backend-dev \
+  wayland-protocols libx11-dev libx11-xcb-dev libxcb-dri2-0-dev \
+  libxcb-dri3-dev libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev \
+  libxcb-xfixes0-dev libxcb-glx0-dev libxcb-shm0-dev libxshmfence-dev \
+  libxxf86vm-dev libxrandr-dev libglvnd-dev
+tools/build-mesa.py --source-archive mesa-26.2.3.tar.xz \
+  --profile desktop --output out/mesa-desktop --jobs 2
+```
+
+The `probe` profile supplies minimal GBM/EGL/GLES; `desktop` also builds the
+Wayland, X11 and GLVND interfaces. Both build Freedreno only, without Vulkan or
+a software renderer. These are development profiles, not a complete supported
+desktop package. The manifest records build inputs, native package versions,
+staged file hashes and symlinks. Compatible outputs are incremental and locked
+against concurrent writers; changed inputs require a fresh output directory.
+Keep the distribution's working desktop available while validating the staged
+driver. Hardware drawing, compositor correctness and physical display output
+are separate checks.
 
 ## Dual boot
 
