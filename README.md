@@ -22,6 +22,7 @@ for the exact baseline, branch and commit.
 | UFS | Installed Ubuntu root and active-slot boot-image updates verified | Boot, init_boot and vendor_boot are checked together; destructive layout changes require separate approval. |
 | Battery | Charge level/status and full-charge capacity available | The protocol-unit fix restores UPower energy and runtime estimates; net charging performance and control thresholds need separate validation. |
 | CPU frequency | SCMI policies and short per-cluster frequency transitions verified | Matching CPUCP mailbox modules are required. Governors and firmware OPPs are unchanged; sustained-load thermal control remains unverified. |
+| Board temperature | Two PMIC die and three thermistor channels verified through native IIO reads | Uses the upstream ADC5 Gen3 driver. These measurements do not reproduce the OEM's estimated enclosure temperatures or establish a complete thermal policy. |
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
