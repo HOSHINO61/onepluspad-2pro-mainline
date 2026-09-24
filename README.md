@@ -171,11 +171,24 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | Package | Owns |
 |---|---|
 | `erhai-device-support` | `/usr/sbin/erhai-switch{,-install-ubuntu-images}`, the store directory and its logrotate snippet, the "Switch to Android" desktop entry and its polkit action, the power settings this port needs until suspend/resume works, and the two programs that give this unit its own Bluetooth and Wi-Fi addresses (`erhai-bt-address` with its units, `erhai-wifi-address` with its udev rule and NetworkManager drop-in). The addresses themselves live in `/var/lib/erhai/` and are in **no** package: they are machine-specific data, written on the tablet at first boot |
-| `erhai-kernel` | the signed boot triplet under `/usr/lib/erhai/boot/<release>/`; its postinst hands the set to the switcher's installer, so **a kernel update is an apt upgrade** |
+| `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
+| `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
 | `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the four device packages |
+
+The kernel build includes all configured modules and records their hashes.
+Its release suffix identifies the source, configuration and compiler so that
+different builds use different module directories. Runtime modules are staged
+with Kbuild's `modules_install`; the target's kmod generates dependency indices.
+Build/source symlinks into a developer workspace are excluded.
+
+Versioned payload packages coexist. The selector protects the running kernel
+and the switcher's current/previous selections from automatic package removal;
+unreferenced kernels can be removed normally. The module delivery path has
+passed build, staging, ABI, modalias and package-layout checks only. Loading,
+upgrade and rollback behavior still require device validation.
 
 The build needs no root (`dpkg-deb --root-owner-group` on a staged tree) and
 takes its firmware from `packaging/firmware/`, checking every file against the

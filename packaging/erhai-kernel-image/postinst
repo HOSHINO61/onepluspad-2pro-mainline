@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+if [ "$1" = configure ]; then
+    depmod -a '@KERNEL_RELEASE@'
+fi

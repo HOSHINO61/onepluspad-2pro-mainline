@@ -52,7 +52,7 @@ tests/switch-selftest.sh             decision-logic self-test (files, not a devi
 
 On the Ubuntu side these are not copied by hand: `erhai-device-support`
 installs both scripts into `/usr/sbin` and owns the store directory, and
-`erhai-kernel`'s postinst calls the installer with the triplet it just shipped
+`erhai-kernel`'s postinst selects the triplet from its versioned payload dependency
 (see the main README). The package's postinst also moves any pre-package copy
 in `/usr/local/sbin` aside -- that directory comes first on root's PATH, so a
 leftover there would keep shadowing the packaged switcher. On the Android side

@@ -462,7 +462,26 @@ def build_triplet(args, work):
 
 
 def stage_kernel(root, args, work, release):
+    if args.triplet_signed:
+        die('versioned module payloads require a fresh source-bound triplet')
+    modules_stage = work / 'modules'
+    run([sys.executable, REPO / 'tools/stage-kernel-modules.py',
+         '--kernel-source', WS / 'kernel/linux', '--kernel-out', args.kernel_out,
+         '--output', modules_stage])
+    module_meta = json.loads((modules_stage / 'modules-manifest.json').read_text())
+    if module_meta['kernel_release'] != release:
+        die('module tree and boot images have different releases')
+    # Depmod indices are generated on the target by its own kmod version.
+    # The package owns immutable modules and Kbuild metadata only.
+    for name in module_meta['files_sha256']:
+        install_file(modules_stage / name, root / name, 0o644)
+    module_record = root / 'usr/lib/erhai/boot' / release / 'modules.json'
+    install_file(modules_stage / 'modules-manifest.json', module_record, 0o644)
     signed, unsigned_manifest = build_triplet(args, work)
+    build = json.loads((Path(args.kernel_out) / 'build-result.json').read_text())
+    if (unsigned_manifest['kernel_commit'] != module_meta['kernel_commit']
+            or unsigned_manifest['inputs_sha256']['Image'] != build['files']['arch/arm64/boot/Image']):
+        die('signed images do not match the module build')
     signed_manifest = json.loads((signed / 'manifest.json').read_text())
     images = root / 'usr/lib/erhai/boot' / release
     images.mkdir(parents=True, exist_ok=True)
@@ -470,23 +489,16 @@ def stage_kernel(root, args, work, release):
         install_file(signed / f'{name}.img', images / f'{name}.img', 0o644)
     install_file(signed / 'SHA256SUMS', images / 'SHA256SUMS', 0o644)
 
-    # A module tree only if the kernel actually builds modules. This
-    # configuration builds none -- every driver this tablet needs is built in,
-    # because the initramfs has no module loader -- and shipping an empty
-    # /lib/modules/<release> would only invite depmod to disagree.
-    modules = sorted(Path(args.kernel_out).rglob('*.ko'))
-    if modules:
-        die(f'the kernel built {len(modules)} modules; erhai-kernel does not '
-            f'package a module tree yet')
-
     cmdline = (unsigned_manifest or {}).get('cmdline')
     meta = {
-        'package': 'erhai-kernel',
+        'package': 'erhai-kernel-image-' + release,
         'kernel_release': release,
         'kernel_commit': (unsigned_manifest or {}).get('kernel_commit'),
         'cmdline': cmdline,
         'debug_channel': bool(cmdline and 'erhai.debug=1' in cmdline),
-        'kernel_modules': 'none; every driver this tablet needs is built in',
+        'kernel_modules': {'count': module_meta['module_count'],
+                           'vermagic': module_meta['vermagic'],
+                           'manifest_sha256': sha256_file(module_record)},
         'inputs_sha256': (unsigned_manifest or {}).get('inputs_sha256'),
         'avb': {
             'algorithm': signed_manifest.get('algorithm'),
@@ -525,6 +537,10 @@ def tree_digest(root):
     return digest.hexdigest()
 
 
+def package_template(package):
+    return 'erhai-kernel-image' if package.startswith('erhai-kernel-image-') else package
+
+
 def metadata_digest(package, substitutions):
     """A canonical digest of what a package says about itself.
 
@@ -536,7 +552,7 @@ def metadata_digest(package, substitutions):
     """
     digest = hashlib.sha256()
     for name in ('control', *DEBIAN_SCRIPTS):
-        source = PACKAGING / package / name
+        source = PACKAGING / package_template(package) / name
         if source.is_file():
             digest.update(f'{name} {sha256_file(source)}\n'.encode())
     for key in sorted(substitutions):
@@ -574,7 +590,7 @@ def installed_size_kib(root):
 def write_control(root, package, version, substitutions):
     debian = root / 'DEBIAN'
     debian.mkdir(parents=True, exist_ok=True)
-    text = (PACKAGING / package / 'control').read_text()
+    text = (PACKAGING / package_template(package) / 'control').read_text()
     values = {'@VERSION@': version,
               '@INSTALLED_SIZE@': str(installed_size_kib(root)), **substitutions}
     for key, value in values.items():
@@ -586,7 +602,7 @@ def write_control(root, package, version, substitutions):
     (debian / 'control').chmod(0o644)
 
     for script in DEBIAN_SCRIPTS:
-        source = PACKAGING / package / script
+        source = PACKAGING / package_template(package) / script
         if not source.is_file():
             continue
         text = source.read_text()
@@ -690,8 +706,9 @@ def main():
     if 'erhai-kernel' in wanted:
         if not release:
             die(f'no kernel release at {release_file}; build the kernel first')
-        if re.search(r'[^A-Za-z0-9._+-]', release):
+        if not re.fullmatch(r'[a-z0-9.+-]{1,64}', release):
             die(f'unsafe kernel release string: {release}')
+    image_package = 'erhai-kernel-image-' + release if release else ''
 
     out_dir = args.output.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -711,10 +728,14 @@ def main():
             elif package == 'erhai-firmware':
                 stage_firmware(root, manifest)
             elif package == 'erhai-kernel':
-                kernel_meta = stage_kernel(root, args, work, release)
+                image_root = work / image_package / 'root'
+                image_root.mkdir(parents=True)
+                kernel_meta = stage_kernel(image_root, args, work, release)
+                roots[image_package] = image_root
             roots[package] = root
 
         substitutions = {'@KERNEL_RELEASE@': release or '',
+                         '@KERNEL_PACKAGE@': image_package,
                          '@MAINTAINER@': MAINTAINER}
 
         # One build id for the set, derived from everything the set contains:
@@ -736,8 +757,8 @@ def main():
 
         epoch = source_date_epoch(args.kernel_out)
         built = []
-        for package in wanted:
-            architecture = 'arm64' if package in ('erhai-kernel', 'erhai-device', 'erhai-display-power') else 'all'
+        for package in roots:
+            architecture = 'arm64' if package in ('erhai-kernel', 'erhai-device', 'erhai-display-power', image_package) else 'all'
             write_control(roots[package], package, version, substitutions)
             built.append(pack(roots[package], package, version, architecture, out_dir, epoch))
 
