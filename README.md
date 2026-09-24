@@ -24,9 +24,9 @@ for the exact baseline, branch and commit.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
-| GPU (A830) | Native GLES rendering and pixel readback verified with isolated Mesa 26.2.3 plus the upstream A830v1 device entry | Installed Ubuntu Mesa 26.0.3 still falls back to llvmpipe. The current kernel bypasses rejected zap loading; its lifecycle and sustained-load behavior remain unverified. |
+| GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
-| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The installed desktop still uses llvmpipe; the isolated GLES result does not establish a GPU-accelerated desktop. |
+| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The optional erhai-mesa package enables hardware rendering for GNOME; application coverage and physical interaction acceptance are tracked separately. |
 
 The current blanking workaround switches both backlights while keeping KMS
 running. The failed touch/DSI retention diagnostics have been reverted.
@@ -53,7 +53,7 @@ check. Setting only the chassis name is insufficient because PID1 caches its
 own virtualization result.
 
 Not yet: full display-link shutdown/recovery and deep-suspend display recovery,
-GPU-accelerated desktop, audio, pogo keyboard, automatic rotation and USB-host
+complete graphics/application validation, audio, pogo keyboard, automatic rotation and USB-host
 peripheral acceptance.
 
 ## Repository layout
@@ -114,12 +114,13 @@ Normal persistent boots omit this parameter and do not expire. The runtime
 marker `/run/erhai-test-session.started` distinguishes a running userspace
 watchdog from a boot that never reached the service.
 
-## Isolated Mesa development build
+## Mesa build and device package
 
 `packaging/mesa/source.json` pins the original Mesa archive and one unmodified
 upstream A830v1 device-table patch. `tools/build-mesa.py` checks both hashes and
 builds natively on ARM64. It installs only into an output staging tree; it does
-not replace the host's graphics libraries or produce an installable device package.
+not replace the host's graphics libraries. `tools/package-mesa.py` turns a verified
+desktop build into the separately removable `erhai-mesa` package.
 The patch retains its original author and the affected file's MIT license;
 Mesa's own `docs/license.rst` and per-file notices govern the source archive.
 This repository's GPL license applies to its build tooling, not to Mesa.
@@ -136,7 +137,22 @@ apt install build-essential meson ninja-build pkg-config libdrm-dev \
   libxxf86vm-dev libxrandr-dev libglvnd-dev
 tools/build-mesa.py --source-archive mesa-26.2.3.tar.xz \
   --profile desktop --output out/mesa-desktop --jobs 2
+tools/package-mesa.py --build-output out/mesa-desktop --output out/mesa-debs
 ```
+
+The package owns libraries under `/usr/lib/erhai/mesa`, an `environment.d` file
+for systemd user applications and a GNOME Shell service drop-in (including GDM).
+It changes no Ubuntu-owned library or vendor configuration file. Dependencies
+are derived with the native distribution's `dpkg-shlibdeps`; source/build hashes,
+package checksums and the input recipe are recorded in its manifest. Increment
+`packaging/erhai-mesa/VERSION` for each new installable revision.
+
+Install the resulting deb with `apt install ./erhai-mesa_*.deb`, then cold boot:
+restarting the running compositor is unsafe while display-link recovery remains
+unfixed. Removal with `apt remove erhai-mesa` restores the distribution selection
+after the next cold boot. Ubuntu Mesa currently lacks this chip entry, so removal
+restores software rendering. Sandboxed applications with their own graphics
+runtimes need separate validation; this package does not replace their runtimes.
 
 The `probe` profile supplies minimal GBM/EGL/GLES; `desktop` also builds the
 Wayland, X11 and GLVND interfaces. Both build Freedreno only, without Vulkan or

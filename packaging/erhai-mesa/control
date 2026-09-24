@@ -1,0 +1,13 @@
+Package: erhai-mesa
+Version: @VERSION@
+Architecture: arm64
+Maintainer: Erwin <yzddmr7@gmail.com>
+Section: libs
+Priority: optional
+Depends: @DEPENDS@
+Description: Freedreno desktop driver for the OnePlus Pad 2 Pro
+ Private Mesa libraries with the upstream Adreno 830v1 device entry.
+ GNOME and systemd user sessions select this driver at their next start;
+ distribution libraries remain owned and updated by Ubuntu. Includes desktop
+ OpenGL and GLES, without Vulkan or a software renderer. Removing this package
+ restores distribution driver selection at the next session start.
