@@ -25,6 +25,8 @@ for the exact baseline, branch and commit.
 | Board temperature | Two PMIC die and three thermistor channels verified through native IIO reads | Uses the upstream ADC5 Gen3 driver. These measurements do not reproduce the OEM's estimated enclosure temperatures or establish a complete thermal policy. |
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
+| Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
+| Speakers | Not enabled | Amplifier control buses and firmware are identified; supplies and DSP routes remain under development. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
@@ -192,9 +194,10 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
+| `erhai-audio` | the board AudioReach capture topology and UCM profile for the two internal microphones; playback is not enabled |
 | `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
-| `erhai-device` | a metapackage depending on the four device packages |
+| `erhai-device` | a metapackage depending on the required device packages |
 
 The kernel build includes all configured modules and records their hashes.
 Its release suffix identifies the source, configuration and compiler so that
@@ -207,9 +210,10 @@ and the switcher's current/previous selections from automatic package removal;
 unreferenced kernels can be removed normally. Immutable kernel identity is kept
 in the store's `kernel.json`, separate from deployment information in `meta.json`.
 Module autoload, SCMI CPU frequency, installed upgrade and booting the previous
-unversioned kernel have been verified on hardware. The actual installer and APT
-parser also pass isolated store-rotation tests. A future upgrade between two
-different versioned module ABIs still needs its own device validation.
+unversioned kernel have been verified on hardware. Booting and returning between
+two versioned module ABIs has also been verified. The actual installer and APT
+parser pass isolated store-rotation tests; removal of unreferenced old payloads
+remains separate acceptance work.
 
 When installing a complete local deb set explicitly, mark the versioned payload
 as an automatic dependency after verifying the selector. The selector's exact
@@ -224,6 +228,14 @@ and no network. `--refresh-from-rom` runs the other direction: it extracts the
 closure from the pinned stock ROM images and upstream archives again and diffs
 that against the tree, which is how a later ROM version gets in. Neither the
 AVB signing key nor avbtool ever enters a package.
+
+Building `erhai-audio` also requires GNU m4, `alsatplg` from alsa-utils, and the
+original archive pinned in `packaging/audio/source.json`. Pass its path with
+`--audio-source`; the default is `cache/audioreach-topology-993a17dc.tar.gz` in
+the workspace. The builder verifies the archive, compiles the board source and
+decodes the result as a format check. Tool versions, hashes, source identity
+and the upstream BSD license are included in the audio package. No prebuilt
+reference-board topology is renamed or used as a build input.
 
 Two builds of the same inputs produce the same bytes: the version carries a
 build id derived from payload and package metadata (`<release>[~dbg]+g<kernel>.b<id>`), the AVB footers
@@ -264,10 +276,10 @@ These development tools and images are not a finished production release.
 GPL-2.0-only (see LICENSE), matching the integration scripts' SPDX headers.
 Kernel and third-party inputs keep their own licenses and authors.
 
-`packaging/firmware/` is the exception worth naming out loud: 72 proprietary
-Qualcomm and OnePlus binaries, redistributed here exactly as they came so that
+`packaging/firmware/` contains 73 proprietary
+Qualcomm, OnePlus and Awinic binaries, redistributed here exactly as they came so that
 the port builds from one tree. The project claims no copyright and grants no
-license over them, and GPL-2.0-only does not reach them. 59 of them were
+license over them, and GPL-2.0-only does not reach them. 60 of them were
 extracted from this unit's stock OnePlus OTA, for which no redistribution
 permission from OnePlus or Qualcomm has been established. Per-file provenance
 is in `packaging/firmware-manifest.json` and the terms are spelled out in

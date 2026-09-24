@@ -1,0 +1,11 @@
+{
+  "url": "https://github.com/linux-msm/audioreach-topology/archive/993a17dcb672357998a463a73f120064d6c74f4f.tar.gz",
+  "commit": "993a17dcb672357998a463a73f120064d6c74f4f",
+  "sha256": "58e0fa0ab9702c5237b4bea1f0486bcc8af7470fafd2d4ad8d508754fd269b17",
+  "archive": "audioreach-topology-993a17dc.tar.gz",
+  "directory": "audioreach-topology-993a17dcb672357998a463a73f120064d6c74f4f",
+  "license": "BSD-3-Clause",
+  "template": "SM8550-HDK.m4",
+  "model": "OnePlus-Pad-2-Pro",
+  "driver": "sm8750"
+}

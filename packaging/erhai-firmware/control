@@ -9,7 +9,8 @@ Description: OnePlus Pad 2 Pro (erhai) firmware closure
  The firmware this unit's mainline drivers ask for by name and the
  distribution does not ship under that name: the NT36536 touch controller's
  application firmware, the Adreno 830 SQE/GMU/AQE microcode and its zap
- shader, the WCN7860 Wi-Fi and Bluetooth images, and the ADSP PIL set.
+ shader, the WCN7860 Wi-Fi and Bluetooth images, the ADSP PIL set, and
+ the board's AW88261 amplifier profiles prepared for audio bring-up.
  .
  This kernel is built without CONFIG_FW_LOADER_COMPRESS, so the zstd-suffixed
  copies in linux-firmware are unreadable to it even where the same file
@@ -20,5 +21,5 @@ Description: OnePlus Pad 2 Pro (erhai) firmware closure
  from this unit's stock ROM images and from pinned upstream archives, and each
  one is checked against the sha256 and size recorded in
  packaging/firmware-manifest.json before it is packed. They are proprietary
- Qualcomm and OnePlus binaries under their own terms, not the packaging's
+ Qualcomm, OnePlus and Awinic binaries under their own terms, not the packaging's
  GPL-2.0-only; packaging/firmware/README.md says where each came from.
