@@ -6,14 +6,15 @@
 #
 # Cmdline knobs:
 #   erhai.watchdog=<s>          bound the initramfs phase (default 600)
-#   erhai.session=<s>           length of the session installed at switch_root
+#   erhai.session=<s>           bound a test session after switch_root; with an
+#                               installed root, 60..3600s then return to fastboot
 #   erhai.wb=1                  DRM writeback capture before the NCM bring-up
 #   erhai.rootfs=<url>          fetch a squashfs over NCM, mount it as an overlay
 #   erhai.rootfs.sha256=<hash>  verify that image
 #   erhai.switchroot=1          hand PID1 to systemd in the RAM overlay
 #   erhai.weston=1              autostart weston in the RAM session
 #   erhai.root=PARTLABEL=<name> mount that partition rw and boot it as the
-#                               persistent root (no session-expiry timer)
+#                               persistent root (no expiry unless explicitly set)
 #   erhai.debug=1               install the NCM debug channel into that
 #                               persistent root (off by default: an installed
 #                               system must not serve a root shell over USB)
@@ -30,11 +31,12 @@ mkdir -p /run/evidence
 
 WATCHDOG_SECONDS=600
 SESSION_SECONDS=
+SESSION_EXPLICIT=0
 WB=0
 for arg in $(cat /proc/cmdline); do
 	case "$arg" in
 	erhai.watchdog=*) WATCHDOG_SECONDS=${arg#erhai.watchdog=} ;;
-	erhai.session=*) SESSION_SECONDS=${arg#erhai.session=} ;;
+	erhai.session=*) SESSION_SECONDS=${arg#erhai.session=}; SESSION_EXPLICIT=1 ;;
 	erhai.wb=1) WB=1 ;;
 	esac
 done
@@ -172,6 +174,38 @@ switch_to_newroot() {
 	fi
 	if ! /bin/erhai-physical-platform /newroot/sys >> "$1" 2>&1; then
 		echo PHYSICAL_IDENTITY_CORRECTION_FAILED >> "$1"
+	fi
+	# A temporary kernel may use the installed root. An explicit session
+	# bound must survive the handoff too, without leaving files in /etc.
+	# Mount the new root's /run now so PID1 sees these runtime units.
+	if [ -n "$ROOT_SPEC" ] && [ "$SESSION_EXPLICIT" = 1 ]; then
+		case "$SESSION_SECONDS" in
+			''|*[!0-9]*) echo INVALID_TEST_SESSION >> "$1"; return 1 ;;
+		esac
+		if [ "$SESSION_SECONDS" -lt 60 ] || [ "$SESSION_SECONDS" -gt 3600 ]; then
+			echo INVALID_TEST_SESSION >> "$1"
+			return 1
+		fi
+		mkdir -p /newroot/run || return 1
+		if ! grep -q ' /newroot/run ' /proc/mounts; then
+			mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /newroot/run || return 1
+		fi
+		mkdir -p /newroot/run/systemd/system/sysinit.target.wants || return 1
+		cat > /newroot/run/systemd/system/erhai-test-session.service <<EOF || return 1
+[Unit]
+Description=Bound a temporary kernel test on the installed root
+DefaultDependencies=no
+After=local-fs.target
+Before=basic.target
+IgnoreOnIsolate=yes
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'echo started > /run/erhai-test-session.started; echo ERHAI_TEST_SESSION_STARTED > /dev/kmsg; sleep $SESSION_SECONDS; echo ERHAI_TEST_SESSION_EXPIRED > /dev/kmsg; sync; /sbin/reboot -f bootloader'
+TimeoutStopSec=5
+EOF
+		ln -sf ../erhai-test-session.service \
+			/newroot/run/systemd/system/sysinit.target.wants/erhai-test-session.service || return 1
+		echo "TEST_SESSION_ARMED=$SESSION_SECONDS" >> "$1"
 	fi
 	kill "$WATCHDOG_PID" 2>/dev/null
 	kill "$TELNET_LOOP_PID" "$HEARTBEAT_PID" 2>/dev/null
@@ -439,8 +473,8 @@ EOF
 	fi
 
 	# Persistent root (erhai.root=PARTLABEL=<name>): mount an installed ext4
-	# system from UFS and boot it. No session-expiry timer is installed --
-	# this is the real system, not a bounded demo session. Anything that
+	# system from UFS and boot it. A normal persistent boot has no expiry;
+	# an explicitly bounded test gets a runtime-only service at handoff. Anything that
 	# fails here falls through to the evidence loop below, so the initramfs
 	# watchdog still returns the tablet on its own.
 	if [ -n "$ROOT_SPEC" ]; then

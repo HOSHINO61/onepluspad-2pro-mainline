@@ -103,6 +103,14 @@ expires. Optional kernel cmdline flags: `erhai.watchdog=NN` (session length),
 `erhai.switchroot=1` (hand PID1 to systemd with a matching expiry timer),
 `erhai.weston=1` (autostart the pixman weston desktop).
 
+For a temporary kernel using an already installed root, use the persistent
+profile with an explicit `erhai.session=90` (valid range 60–3600 seconds).
+The initramfs places an expiry service only in the new root's `/run`; once
+userspace starts, it returns the tablet to the bootloader after that bound.
+Normal persistent boots omit this parameter and do not expire. The runtime
+marker `/run/erhai-test-session.started` distinguishes a running userspace
+watchdog from a boot that never reached the service.
+
 ## Dual boot
 
 `switch/` holds the persistent-install half: Android and Ubuntu take turns in
