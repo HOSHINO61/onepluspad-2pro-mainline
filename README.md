@@ -1,8 +1,8 @@
 # onepluspad-2pro-mainline
 
 Mainline Linux and Ubuntu on the OnePlus Pad 2 Pro (OPD2413, Qualcomm SM8750P,
-board codename `erhai`), driven by fastboot RAM-boot sessions that never touch
-the internal flash.
+board codename `erhai`), with bounded fastboot RAM-boot sessions and an
+installed Ubuntu/Android switching path for the established device layout.
 
 This repository is the **integration tooling**: kernel build, initramfs
 profiles, ABL-compatible image packaging and the RAM-rooted Ubuntu desktop
@@ -10,7 +10,13 @@ delivery. The kernel itself lives in a separate Git (`linux-sm8750-erhai`,
 checked out at `kernel/linux` in the workspace); see `kernel/source.json`
 for the exact baseline, branch and commit.
 
-## Status (device-verified)
+## Status and validation boundaries
+
+The installed audio baseline is 0.1.31. This development candidate adds a native
+eight-channel speaker graph and its kernel prerequisites; those additions have
+offline validation only. Speaker supplies, board links, stereo routing and
+physical playback remain incomplete. The microphone UCM remains the only enabled
+audio profile.
 
 | Area | State | Notes |
 |---|---|---|
@@ -26,7 +32,7 @@ for the exact baseline, branch and commit.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
-| Speakers | Not enabled | Amplifier control buses and firmware are identified; supplies and DSP routes remain under development. |
+| Speakers | Not enabled | Original legacy TDM parameters and per-amplifier slots are identified. The native eight-channel graph and backend support are prepared; supplies, board links, stereo routing and physical playback remain incomplete. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
@@ -194,7 +200,7 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-audio` | the board AudioReach capture topology and UCM profile for the two internal microphones; playback is not enabled |
+| `erhai-audio` | the board AudioReach topology, including an inactive native speaker graph, and UCM for the two internal microphones; speaker playback is not enabled |
 | `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the required device packages |
@@ -233,7 +239,8 @@ Building `erhai-audio` also requires GNU m4, `alsatplg` from alsa-utils, and the
 original archive pinned in `packaging/audio/source.json`. Pass its path with
 `--audio-source`; the default is `cache/audioreach-topology-993a17dc.tar.gz` in
 the workspace. The builder verifies the archive, compiles the board source and
-decodes the result as a format check. Tool versions, hashes, source identity
+decodes the result as a format check. Local topology helpers under `packaging/audio/`
+are tracked with the board recipe. Tool versions, hashes, source identity
 and the upstream BSD license are included in the audio package. No prebuilt
 reference-board topology is renamed or used as a build input.
 

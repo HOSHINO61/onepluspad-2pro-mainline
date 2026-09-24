@@ -461,7 +461,8 @@ def stage_audio(root, archive):
         if not path:
             die(f'{name} is required to build the audio topology')
         tools[name] = {'sha256': sha256_file(path),
-                       'version': run([path, '--version']).splitlines()}
+                       'version': [line.replace(path, name) for line in
+                                   run([path, '--version']).splitlines()]}
     with tempfile.TemporaryDirectory(prefix='erhai-audio.') as directory:
         work = Path(directory)
         with tarfile.open(archive) as tar:
@@ -469,7 +470,7 @@ def stage_audio(root, archive):
         upstream = work / source['directory']
         recipe = inputs / (source['model'] + '.m4')
         conf = work / 'topology.conf'
-        conf.write_text(run(['m4', '-I', str(upstream), str(recipe)]))
+        conf.write_text(run(['m4', '-I', str(inputs), '-I', str(upstream), str(recipe)]))
         target = root / 'usr/lib/firmware/qcom' / source['driver'] / (source['model'] + '-tplg.bin')
         target.parent.mkdir(parents=True)
         run(['alsatplg', '-c', str(conf), '-o', str(target)])
@@ -477,10 +478,15 @@ def stage_audio(root, archive):
         run(['alsatplg', '-d', str(target), '-o', str(work / 'decoded.conf')])
         doc = root / 'usr/share/doc/erhai-audio'
         install_file(upstream / 'LICENSE.BSD-3-Clause', doc / 'copyright', 0o644)
-        install_file(recipe, doc / recipe.name, 0o644)
+        local_sources = {}
+        for path in sorted(inputs.rglob('*.m4')):
+            relative = path.relative_to(inputs)
+            install_file(path, doc / relative, 0o644)
+            local_sources[str(relative)] = sha256_file(path)
         provenance = {'source': source, 'tools': tools,
                       'builder_sha256': sha256_file(Path(__file__)),
                       'recipe_sha256': sha256_file(recipe),
+                      'recipe_sources': local_sources,
                       'topology_sha256': sha256_file(target)}
         (doc / 'build.json').write_text(json.dumps(provenance, indent=2) + '\n')
     tree = PACKAGING / 'erhai-audio/tree'
