@@ -1,0 +1,217 @@
+# SPDX-License-Identifier: GPL-2.0-only
+"""erhai-sensors: sample gate, registry import and recipe consistency."""
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+import unittest
+
+REPO = Path(__file__).resolve().parents[1]
+TREE = REPO / 'packaging/erhai-sensors/tree'
+INPUTS = REPO / 'packaging/sensors'
+GATE = TREE / 'usr/libexec/erhai-sensors/ssc-sample-gate'
+IMPORT = TREE / 'usr/sbin/erhai-sensors-import-registry'
+
+
+def load(path, name):
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+def sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+class GateTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.registry = self.dir / 'registry'
+        self.registry.mkdir()
+        (self.registry / 'bmi3x0_0_platform.accel.config').write_text('{}')
+        self.state = self.dir / 'run'
+
+    def tearDown(self):
+        subprocess.run(['rm', '-rf', str(self.dir)], check=True)
+
+    def fake(self, body):
+        path = self.dir / 'ssccli'
+        path.write_text('#!/bin/sh\n' + body)
+        path.chmod(0o755)
+        return path
+
+    def gate(self, ssccli, bound=5):
+        env = dict(os.environ, ERHAI_SENSORS_REGISTRY=str(self.registry),
+                   ERHAI_SENSORS_SSCCLI=str(ssccli), ERHAI_SENSORS_STATE=str(self.state),
+                   ERHAI_SENSORS_BOUND=str(bound), LC_ALL='C')
+        result = subprocess.run([str(GATE)], env=env, capture_output=True, text=True)
+        return result, (self.state / 'accel-gate.result').read_text()
+
+    @staticmethod
+    def samples(*vectors):
+        return ''.join(f"echo 'Accelerometer sensor measurement: X={x:f} Y={y:f} Z={z:f} m/s²'\n"
+                       for x, y, z in vectors)
+
+    def test_gravity_passes(self):
+        cli = self.fake(self.samples((0.1, -9.78, 0.4), (0.2, -9.80, 0.3), (0.1, -9.81, 0.2)))
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('result=pass', record)
+        self.assertIn('samples=3 gravity=3', record)
+
+    def test_wrong_scale_fails(self):
+        cli = self.fake(self.samples((0.0, -1.0, 0.0), (0.0, -1.0, 0.0), (0.0, -1.0, 0.0)))
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('do not measure gravity', record)
+
+    def test_too_few_samples_fail(self):
+        cli = self.fake(self.samples((0.0, -9.81, 0.0)))
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('result=fail', record)
+
+    def test_init_failure_fails(self):
+        cli = self.fake("echo 'Unable to initialize accelerometer sensor: UNKNOWN'\nexit 254\n")
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('ssccli exit 254', record)
+
+    def test_hang_is_bounded(self):
+        cli = self.fake('exec sleep 60\n')
+        start = time.monotonic()
+        result, record = self.gate(cli, bound=1)
+        self.assertLess(time.monotonic() - start, 10)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no accelerometer sample', record)
+
+    def test_missing_registry_fails_before_sampling(self):
+        marker = self.dir / 'ran'
+        cli = self.fake(f'touch {marker}\n' + self.samples((0, -9.81, 0)) * 3)
+        for path in self.registry.iterdir():
+            path.unlink()
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('is empty', record)
+        self.registry.rmdir()
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no imported sensor registry', record)
+        self.assertFalse(marker.exists())
+
+
+class ImportTest(unittest.TestCase):
+    def setUp(self):
+        self.tool = load(IMPORT, 'erhai_sensors_import')
+        self.dir = Path(tempfile.mkdtemp())
+        self.source = self.dir / 'sensors'
+        (self.source / 'registry/registry').mkdir(parents=True)
+        for name in ('bmi3x0_0_platform.accel.config', 'sns_reg_config_ver'):
+            (self.source / 'registry/registry' / name).write_text(name)
+        (self.source / 'registry/sns_reg_version').write_bytes(b'version=2\0')
+        self.soc = self.dir / 'soc0'
+        self.soc.mkdir()
+        (self.soc / 'hw_platform').write_text('MTP\n')
+        (self.soc / 'soc_id').write_text('618\n')
+        (self.soc / 'serial_number').write_text('12345\n')
+        self.root = self.dir / 'root'
+
+    def tearDown(self):
+        subprocess.run(['rm', '-rf', str(self.dir)], check=True)
+
+    def run_tool(self, *extra):
+        return self.tool.main(['--root', str(self.root), *extra, str(self.source)])
+
+    def test_import_copies_registry_and_known_socinfo(self):
+        self.assertEqual(self.run_tool('--socinfo', str(self.soc)), 0)
+        state = self.root / 'var/lib/erhai/sensors'
+        self.assertEqual(sorted(p.name for p in (state / 'persist/registry').iterdir()),
+                         ['bmi3x0_0_platform.accel.config', 'sns_reg_config_ver'])
+        self.assertEqual((state / 'persist/sns_reg_version').read_bytes(), b'version=2\0')
+        self.assertEqual(sorted(p.name for p in (state / 'socinfo').iterdir()),
+                         ['hw_platform', 'soc_id'])
+        record = json.loads((state / 'import.json').read_text())
+        self.assertEqual(record['socinfo']['soc_id'], '618')
+        self.assertEqual(len(record['registry']), 2)
+        self.assertEqual([p.name for p in state.iterdir() if p.name.startswith('.import')], [])
+
+    def test_reimport_replaces_previous_set(self):
+        self.assertEqual(self.run_tool('--socinfo', str(self.soc)), 0)
+        (self.source / 'registry/registry/sns_reg_config_ver').unlink()
+        self.assertEqual(self.run_tool(), 0)
+        state = self.root / 'var/lib/erhai/sensors'
+        self.assertEqual([p.name for p in (state / 'persist/registry').iterdir()],
+                         ['bmi3x0_0_platform.accel.config'])
+        self.assertFalse((state / 'socinfo').exists())
+
+    def test_rejects_symlink_entries(self):
+        (self.source / 'registry/registry/link').symlink_to('/etc/passwd')
+        self.assertEqual(self.run_tool(), 1)
+        self.assertFalse((self.root / 'var/lib/erhai/sensors/persist').exists())
+
+    def test_rejects_unexpected_names_and_layout(self):
+        (self.source / 'registry/registry/.hidden').write_text('x')
+        self.assertEqual(self.run_tool(), 1)
+        (self.source / 'registry/registry/.hidden').unlink()
+        empty = self.dir / 'empty'
+        (empty / 'registry/registry').mkdir(parents=True)
+        self.assertEqual(self.tool.main(['--root', str(self.root), str(empty)]), 1)
+        self.assertEqual(self.tool.main(['--root', str(self.root), str(self.dir / 'soc0')]), 1)
+
+    def test_rejects_binary_socinfo(self):
+        (self.soc / 'revision').write_bytes(b'\xff\xfe')
+        self.assertEqual(self.run_tool('--socinfo', str(self.soc)), 1)
+
+
+class RecipeTest(unittest.TestCase):
+    def test_pinned_patches_and_rom_config(self):
+        lock = json.loads((INPUTS / 'sources.json').read_text())
+        for source in lock['sources']:
+            for patch in source['patches']:
+                self.assertEqual(sha256(INPUTS / patch['file']), patch['sha256'], patch['file'])
+        rom = json.loads((INPUTS / 'rom-config.json').read_text())
+        installs = set()
+        for entry in rom['files']:
+            path = INPUTS / entry['file']
+            self.assertEqual((path.stat().st_size, sha256(path)), (entry['size'], entry['sha256']))
+            installs.add(entry['install'])
+        self.assertIn('sensors/sns_reg.conf', installs)
+        self.assertIn('sensors/config/json.lst', installs)
+        self.assertIn('sensors/odm-config/json_list', installs)
+
+    def test_units_point_at_packaged_paths(self):
+        builder = load(REPO / 'tools/build-sensors.py', 'build_sensors')
+        units = TREE / 'usr/lib/systemd/system'
+        rpcd = (units / 'erhai-sensors-rpcd.service').read_text()
+        self.assertIn(f'/{builder.PREFIX}/bin/hexagonrpcd ', rpcd)
+        self.assertIn(f'-R /{builder.RPCD_ROOT}', rpcd)
+        self.assertIn('-d adsp -s', rpcd)
+        self.assertIn('Restart=no', rpcd)
+        self.assertIn(f'ConditionDirectoryNotEmpty={builder.STATE}/persist/registry', rpcd)
+        gate = (units / 'erhai-sensors-gate.service').read_text()
+        self.assertIn('ExecStart=/usr/libexec/erhai-sensors/ssc-sample-gate', gate)
+        self.assertIn('AF_QIPCRTR', gate)
+        dropin = (units / 'iio-sensor-proxy.service.d/80-erhai-ssc.conf').read_text()
+        self.assertIn(f'ExecStart=/{builder.PREFIX}/libexec/iio-sensor-proxy', dropin)
+        self.assertIn('libexec/iio-sensor-proxy', builder.PAYLOAD)
+        self.assertIn('bin/ssccli', builder.PAYLOAD)
+        self.assertIn(f'/{builder.PREFIX}/bin/ssccli', GATE.read_text())
+
+    def test_udev_rule_limits_proxy_to_accelerometer(self):
+        rule = (TREE / 'usr/lib/udev/rules.d/81-erhai-sensors.rules').read_text()
+        self.assertIn('ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel"', rule)
+        self.assertIn('ENV{ACCEL_MOUNT_MATRIX}="0, 1, 0; -1, 0, 0; 0, 0, 1"', rule)
+        self.assertIn('SYMLINK+="erhai-sensors-fastrpc"', rule)
+        # Sensor interrupt lines belong to the DSP; nothing here claims a GPIO.
+        self.assertNotIn('gpio', rule.lower())
+
+
+if __name__ == '__main__':
+    unittest.main()
