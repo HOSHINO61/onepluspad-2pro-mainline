@@ -13,11 +13,13 @@ for the exact baseline, branch and commit.
 ## Status and validation boundaries
 
 The installed audio baseline is 0.1.31. This development candidate adds a native
-eight-channel speaker graph and its kernel prerequisites. The kernel passed a
-bounded RAM microphone regression with the installed capture configuration;
-the new speaker graph has offline validation only. Speaker supplies, board links,
-stereo routing and physical playback remain incomplete. The microphone UCM
-remains the only enabled audio profile.
+eight-channel speaker graph, its kernel prerequisites, and a board description of
+the six speaker amplifiers and their secondary TDM link. An earlier kernel with
+the graph prerequisites passed a bounded RAM microphone regression; the amplifier
+and link description has offline checks only and has not been booted. The
+amplifier supply is a placeholder because the real rail is unknown. Stereo routing
+and physical playback remain incomplete. The microphone UCM remains the only
+enabled audio profile.
 
 | Area | State | Notes |
 |---|---|---|
@@ -33,7 +35,7 @@ remains the only enabled audio profile.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
-| Speakers | Not enabled | Original legacy TDM parameters and per-amplifier slots are identified. The native eight-channel graph and backend support are prepared; supplies, board links, stereo routing and physical playback remain incomplete. |
+| Speakers | Not enabled (offline candidate) | The six AW88261 amplifiers and the secondary TDM link with per-amplifier slots are described, with a placeholder amplifier supply because the real rail is unknown; not yet booted. There is no UCM playback device, so the desktop does not route sound to them. Stereo routing and physical playback remain incomplete. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
