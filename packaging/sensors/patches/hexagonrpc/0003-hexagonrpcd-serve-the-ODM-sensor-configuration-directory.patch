@@ -1,0 +1,197 @@
+From 7034b80364a392f61bb35c34d18e059d39d6fbcb Mon Sep 17 00:00:00 2001
+From: Erwin <yzddmr7@gmail.com>
+Date: Fri, 25 Sep 2026 10:00:00 +0800
+Subject: [PATCH] hexagonrpcd: serve the ODM sensor configuration directory
+
+Some vendor sensor firmware reads device-specific registry JSON from
+/odm/etc/sensor/config (listed in a file named json_list) in addition to
+the generic /vendor/etc/sensors/config tree. The SM8750 ADSP sensor image
+on the OnePlus Pad 2 Pro names both directories, and its sns_reg_config
+points the configuration directory at the ODM path.
+
+Map /odm/etc/sensor/config to <root>/sensors/odm-config. Like the vendor
+configuration directory it reads as empty when the host directory is
+absent, so devices without ODM sensor files are unaffected. Cover both
+the absent and the populated case with a host test.
+
+Assisted-by: LLM
+---
+ hexagonrpcd/hexagonrpcd.1      |  1 +
+ hexagonrpcd/rpcd_builder.c     | 22 +++++++++++--
+ tests/meson.build              | 13 ++++++++
+ tests/test_odm_sensor_config.c | 58 ++++++++++++++++++++++++++++++++++
+ 4 files changed, 92 insertions(+), 2 deletions(-)
+ create mode 100644 tests/test_odm_sensor_config.c
+
+diff --git a/hexagonrpcd/hexagonrpcd.1 b/hexagonrpcd/hexagonrpcd.1
+index 54c77bb..5d85d48 100644
+--- a/hexagonrpcd/hexagonrpcd.1
++++ b/hexagonrpcd/hexagonrpcd.1
+@@ -42,6 +42,7 @@ HexagonRPCD file/dir    Android file/dir
+ acdb                    /vendor/etc/acdbdata
+ dsp                     /vendor/dsp
+ sensors/config          /vendor/etc/sensors/config
++sensors/odm-config      /odm/etc/sensor/config
+ sensors/registry        /mnt/vendor/persist/sensors/registry/registry
+ sensors/sns_reg.conf    /vendor/etc/sensors/sns_reg_config
+ socinfo                 /sys/devices/soc0
+diff --git a/hexagonrpcd/rpcd_builder.c b/hexagonrpcd/rpcd_builder.c
+index 1d28b0a..09664ee 100644
+--- a/hexagonrpcd/rpcd_builder.c
++++ b/hexagonrpcd/rpcd_builder.c
+@@ -32,6 +32,7 @@
+ #define SENSORS_REGISTRY	"/sensors/registry/"
+ #define SNS_REG_VERSION		"/sensors/sns_reg_version"
+ #define SNS_REG_CONFIG		"/sensors/sns_reg.conf"
++#define ODM_SENSORS_CONFIG	"/sensors/odm-config/"
+ #define SYSFS_SOCINFO		"/socinfo/"
+ 
+ static struct hexagonfs_dirent *hfs_mkdir(const char *name, size_t n_ents, ...)
+@@ -113,7 +114,7 @@ static struct hexagonfs_dirent *hfs_map_or_empty(const char *name, const char *p
+ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ {
+ 	char *acdbdata, *dsp_libs, *sns_cfg, *sns_reg, *sns_reg_version,
+-	     *sns_reg_config, *socinfo;
++	     *sns_reg_config, *odm_sns_cfg, *socinfo;
+ 	size_t n_prefix;
+ 	struct hexagonfs_dirent *persist_dir, *vendor_dir;
+ 
+@@ -124,6 +125,7 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 	sns_reg = malloc(n_prefix + strlen(SENSORS_REGISTRY) + 1);
+ 	sns_reg_version = malloc(n_prefix + strlen(SNS_REG_VERSION) + 1);
+ 	sns_reg_config = malloc(n_prefix + strlen(SNS_REG_CONFIG) + 1);
++	odm_sns_cfg = malloc(n_prefix + strlen(ODM_SENSORS_CONFIG) + 1);
+ 	socinfo = malloc(n_prefix + strlen(SYSFS_SOCINFO) + 1);
+ 
+ 	dsp_libs = malloc(n_prefix + strlen(DSP_LIBS) + strlen(dsp) + 1);
+@@ -153,6 +155,11 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 		strcat(sns_reg_config, SNS_REG_CONFIG);
+ 	}
+ 
++	if (odm_sns_cfg != NULL) {
++		strcpy(odm_sns_cfg, prefix);
++		strcat(odm_sns_cfg, ODM_SENSORS_CONFIG);
++	}
++
+ 	if (socinfo != NULL) {
+ 		strcpy(socinfo, prefix);
+ 		strcat(socinfo, SYSFS_SOCINFO);
+@@ -191,13 +198,24 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 				)
+ 			);
+ 
+-	return hfs_mkdir("/", 6,
++	/*
++	 * Some vendor sensor firmware reads a second, device-specific JSON
++	 * directory from the ODM partition in addition to the vendor one.
++	 */
++	return hfs_mkdir("/", 7,
+ 			hfs_mkdir("mnt", 1,
+ 				hfs_mkdir("vendor", 1,
+ 					persist_dir
+ 				)
+ 			),
+ 			persist_dir,
++			hfs_mkdir("odm", 1,
++				hfs_mkdir("etc", 1,
++					hfs_mkdir("sensor", 1,
++						hfs_map_or_empty("config", odm_sns_cfg)
++					)
++				)
++			),
+ 			hfs_mkdir("sys", 1,
+ 				hfs_mkdir("devices", 1,
+ 					hfs_map_or_empty("soc0", socinfo)
+diff --git a/tests/meson.build b/tests/meson.build
+index a646f26..1646800 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -42,6 +42,17 @@ test_registry_version_contract = executable('test_registry_version_contract',
+   include_directories : include,
+ )
+ 
++test_odm_sensor_config = executable('test_odm_sensor_config',
++  'test_odm_sensor_config.c',
++  '../hexagonrpcd/rpcd_builder.c',
++  '../hexagonrpcd/hexagonfs.c',
++  '../hexagonrpcd/hexagonfs_mapped.c',
++  '../hexagonrpcd/hexagonfs_plat_subtype_name.c',
++  '../hexagonrpcd/hexagonfs_virt_dir.c',
++  c_args : cflags,
++  include_directories : include,
++)
++
+ test_sns_registry = executable('test_sns_registry',
+   'test_sns_registry.c',
+   '../hexagonrpcd/interface/adsp_listener.c',
+@@ -58,4 +69,6 @@ test('hexagonfs', test_hexagonfs, args : [sample_file])
+ test('hexagonrpc', test_hexagonrpc)
+ test('registry-version-contract', test_registry_version_contract,
+   args : [meson.current_build_dir()])
++test('odm-sensor-config', test_odm_sensor_config,
++  args : [meson.current_build_dir() / 'odm-sensor-config'])
+ test('sns-registry', test_sns_registry)
+diff --git a/tests/test_odm_sensor_config.c b/tests/test_odm_sensor_config.c
+new file mode 100644
+index 0000000..c6c429e
+--- /dev/null
++++ b/tests/test_odm_sensor_config.c
+@@ -0,0 +1,58 @@
++#include <fcntl.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#include "../hexagonrpcd/hexagonfs.h"
++#include "../hexagonrpcd/rpcd_builder.h"
++
++/*
++ * The firmware reads its device-specific JSON list from
++ * /odm/etc/sensor/config. It must resolve to <prefix>/sensors/odm-config,
++ * and an absent host directory must still read as an empty directory.
++ */
++int main(int argc, char **argv)
++{
++	struct hexagonfs_fd *fds[HEXAGONFS_MAX_FD] = { 0 };
++	struct hexagonfs_dirent *root;
++	char sensors[4096], odm[4096], list[4096];
++	int rootfd, fd, hostfd, n;
++
++	if (argc != 2)
++		return 2;
++	if (mkdir(argv[1], 0700) && access(argv[1], F_OK))
++		return 3;
++
++	root = construct_root_dir(argv[1], "adsp");
++	rootfd = hexagonfs_open_root(fds, root);
++	if (rootfd < 0)
++		return 4;
++
++	fd = hexagonfs_openat(fds, rootfd, rootfd, "/odm/etc/sensor/config");
++	printf("odm_config_absent_open=%d\n", fd);
++	if (fd < 0)
++		return 5;
++
++	n = snprintf(sensors, sizeof(sensors), "%s/sensors", argv[1]);
++	if (n < 0 || (size_t)n >= sizeof(sensors))
++		return 6;
++	n = snprintf(odm, sizeof(odm), "%s/odm-config", sensors);
++	if (n < 0 || (size_t)n >= sizeof(odm))
++		return 6;
++	n = snprintf(list, sizeof(list), "%s/json_list", odm);
++	if (n < 0 || (size_t)n >= sizeof(list))
++		return 6;
++	if (mkdir(sensors, 0700) && access(sensors, F_OK))
++		return 7;
++	if (mkdir(odm, 0700) && access(odm, F_OK))
++		return 7;
++	hostfd = open(list, O_WRONLY | O_CREAT | O_TRUNC, 0600);
++	if (hostfd < 0 || write(hostfd, "a.json\n", 7) != 7 || close(hostfd))
++		return 8;
++
++	fd = hexagonfs_openat(fds, rootfd, rootfd,
++			      "/odm/etc/sensor/config/json_list");
++	printf("odm_json_list_open=%d\n", fd);
++	return fd < 0;
++}

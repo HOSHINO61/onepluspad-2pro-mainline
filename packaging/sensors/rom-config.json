@@ -1,0 +1,1282 @@
+{
+  "comment": [
+    "Sensor registry configuration of the stock OnePlus firmware, copied",
+    "byte for byte from the vendor and odm partitions. The ADSP sensor",
+    "image reads these through hexagonrpcd; `install` is relative to the",
+    "hexagonrpcd root. They are ROM data common to every unit of the model,",
+    "not per-unit calibration: the per-unit registry is imported at install",
+    "time and never packaged."
+  ],
+  "release": "OPD2413_11.C.34_1340_202607031844",
+  "ota_archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
+  "extraction": "fsck.erofs --extract of each partition image, no mount; see packaging/firmware-manifest.json for the same OTA",
+  "distribution": "Original vendor files redistributed unmodified, on the same basis as packaging/firmware/",
+  "images": {
+    "stock-vendor": {
+      "image": "vendor.img",
+      "sha256": "e632b0ff3ad829a805e4dbb61c798eba2c22e79fd2331d273494fd979e12919a"
+    },
+    "stock-odm": {
+      "image": "odm.img",
+      "sha256": "66178408a76a657e0ad5309b2730fe06eb98e972a7663eccd6fe0251b5752eac"
+    }
+  },
+  "files": [
+    {
+      "file": "rom/odm/etc/sensor/config/json_list",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/json_list",
+      "install": "sensors/odm-config/json_list",
+      "sha256": "70ffb3183a25bbb114a02a9112c15b78195ad0b23d7c6f0236cc1353a685e2d2",
+      "size": 249
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_bu52053nvx_0.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_bu52053nvx_0.json",
+      "install": "sensors/odm-config/pakala_bu52053nvx_0.json",
+      "sha256": "3315f32322e8cfcfc1610ea589d8e059d2009e539f71362162d230aba0407494",
+      "size": 2034
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_alsps.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_alsps.json",
+      "install": "sensors/odm-config/pakala_mtp_alsps.json",
+      "sha256": "0c12415bd85c47ca3bacbcfe69abee955dadca3008952d6607578a9bb2173f19",
+      "size": 3825
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_alsps_hw_stk3b6x.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_alsps_hw_stk3b6x.json",
+      "install": "sensors/odm-config/pakala_mtp_alsps_hw_stk3b6x.json",
+      "sha256": "9606425b0b5e3d8dca6b6099deda5063b203248c98ff9d19c78098818501b41b",
+      "size": 8539
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_bmi3x0_0.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_bmi3x0_0.json",
+      "install": "sensors/odm-config/pakala_mtp_bmi3x0_0.json",
+      "sha256": "c917c7521c76f24f8cbb2ad1299145c377522048e1be3979f1d98b0972cc7b28",
+      "size": 8513
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_freefall.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_freefall.json",
+      "install": "sensors/odm-config/pakala_mtp_freefall.json",
+      "sha256": "3b7b55e04f52ae3a684c83922da07aeda3bff02ed56823a262f3f05c6f789039",
+      "size": 1619
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_motion_recognition.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_motion_recognition.json",
+      "install": "sensors/odm-config/pakala_mtp_motion_recognition.json",
+      "sha256": "84ac26742c15888d6f24fb18d1d59d5e634b61dfda336e44f1efb2f6f0b61fa7",
+      "size": 338
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_mxg4300_0.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_mxg4300_0.json",
+      "install": "sensors/odm-config/pakala_mtp_mxg4300_0.json",
+      "sha256": "35560161e5a82c9de3d1abcb60ecd45840c42565a947fdcd31e4cd8a44d98744",
+      "size": 3965
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/pakala_mtp_pedometer_minute.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/pakala_mtp_pedometer_minute.json",
+      "install": "sensors/odm-config/pakala_mtp_pedometer_minute.json",
+      "sha256": "81a9f8d1576d99069b513fd1d3e5044c95edfe441f9ce3dc769a4584a2515973",
+      "size": 425
+    },
+    {
+      "file": "rom/odm/etc/sensor/config/sns_gyro_cal.json",
+      "from": "stock-odm",
+      "member": "etc/sensor/config/sns_gyro_cal.json",
+      "install": "sensors/odm-config/sns_gyro_cal.json",
+      "sha256": "3f8b970338efba3ad5d23d3f4cb834dd169cd069be6e6d3074e54197039f2d76",
+      "size": 583
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_bu52053nvx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_bu52053nvx_0.json",
+      "install": "sensors/config/bonito_bu52053nvx_0.json",
+      "sha256": "4fa2cfaeef1a484fc971b6714f28381c0679655be0773f250a95ff0cfd1ec817",
+      "size": 1868
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_ccd_base.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_ccd_base.json",
+      "install": "sensors/config/bonito_ccd_base.json",
+      "sha256": "32c1096ab9a6bbbc408eae24446a59c65c77acb70ca23859dc5f008310b062d6",
+      "size": 360
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_default_sensors.json",
+      "install": "sensors/config/bonito_default_sensors.json",
+      "sha256": "e1c61f5ebf0f1caf1d8da84fcd96b759673c040ff3c029f696c3f777f877e51e",
+      "size": 5994
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_dynamic_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_dynamic_sensors.json",
+      "install": "sensors/config/bonito_dynamic_sensors.json",
+      "sha256": "b9449fc46f95e6267b2a0a8b58402640a8349b42c6e3fe8d302043d91f139216",
+      "size": 924
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_dynamic_sensors_template.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_dynamic_sensors_template.json",
+      "install": "sensors/config/bonito_dynamic_sensors_template.json",
+      "sha256": "a248f6aebb52f1e08311a1150449b72040dbd2697e33e99bf6b4dbdbf5bddc60",
+      "size": 556
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_fcal_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_fcal_mmc56x3x_0.json",
+      "install": "sensors/config/bonito_fcal_mmc56x3x_0.json",
+      "sha256": "1c2e34f1a3af32fc3b455557af7057537b8af5274c90a86a7446cc8305cbdc55",
+      "size": 2643
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_hdk_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_hdk_lsm6dso_0.json",
+      "install": "sensors/config/bonito_hdk_lsm6dso_0.json",
+      "sha256": "4e5c3bc0ee9f9f5056ea68ea3286ed65cdef24488253af521368a81b92877d90",
+      "size": 393
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_hdk_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_hdk_lsm6dso_1.json",
+      "install": "sensors/config/bonito_hdk_lsm6dso_1.json",
+      "sha256": "0296c624cb266dd46f4a98c421b91cc6358942c0f08f2753fe96b101f38f2c88",
+      "size": 393
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_irq.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_irq.json",
+      "install": "sensors/config/bonito_irq.json",
+      "sha256": "277de3614dc7f7a6a351714e7b2ffd1fbe3ec0ba4dfdc6b386733121c0b22cc2",
+      "size": 158
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_lps22df_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_lps22df_0.json",
+      "install": "sensors/config/bonito_lps22df_0.json",
+      "sha256": "543118aee344b8b60b0caeedc08a448891c3624030380c727c7fc81b0aae3853",
+      "size": 3346
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_lsm6dso_0.json",
+      "install": "sensors/config/bonito_lsm6dso_0.json",
+      "sha256": "3ea31f7d9d23228404b40c9f1d7561086fe68b898138dc683b1a2ec4290c5e82",
+      "size": 7807
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_lsm6dso_1.json",
+      "install": "sensors/config/bonito_lsm6dso_1.json",
+      "sha256": "5dae3c061ebc779bff6a32c52e1124f0025f052e7e6d9cb6f79b53e2ad2b4fa7",
+      "size": 7809
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_mmc56x3x_0.json",
+      "install": "sensors/config/bonito_mmc56x3x_0.json",
+      "sha256": "ea75b88d60a358e2566519aad203b3f037a2a772316f41ee1e964bc69ed141c0",
+      "size": 1672
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_mtp_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_mtp_lsm6dso_0.json",
+      "install": "sensors/config/bonito_mtp_lsm6dso_0.json",
+      "sha256": "9308e437e9fd69463da0174b1cc633ccf4bea02ae8257995039034e3804955d3",
+      "size": 393
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_mtp_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_mtp_lsm6dso_1.json",
+      "install": "sensors/config/bonito_mtp_lsm6dso_1.json",
+      "sha256": "d44cbd9d1ddfbde2830002a3309e7ed3d438a3c254258e3ecb6c4895589884ba",
+      "size": 393
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_mtp_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_mtp_mmc56x3x_0.json",
+      "install": "sensors/config/bonito_mtp_mmc56x3x_0.json",
+      "sha256": "8fc6ff2bcbdfd7e43d3558dc9be9f434d16042651aade7879db6938eb2c99d8d",
+      "size": 404
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_power_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_power_0.json",
+      "install": "sensors/config/bonito_power_0.json",
+      "sha256": "81cc571cfe3a984128e11d2bae302bdacd0da3b836951f53afc4d24d70a75728",
+      "size": 730
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_qrd_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_qrd_default_sensors.json",
+      "install": "sensors/config/bonito_qrd_default_sensors.json",
+      "sha256": "36b1e010059935f8304ea8fd1db659bb6f60866165c631a7f64dc91c34ad2093",
+      "size": 5892
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_qrd_icm4x6xx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_qrd_icm4x6xx_0.json",
+      "install": "sensors/config/bonito_qrd_icm4x6xx_0.json",
+      "sha256": "4730f861caa4d492d19b5f6dcf90c516db13be118a8a1ec113e544ef0d75860d",
+      "size": 7660
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_qrd_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_qrd_mmc56x3x_0.json",
+      "install": "sensors/config/bonito_qrd_mmc56x3x_0.json",
+      "sha256": "a004776e71293899e8730a3e93b5f43784f69cc171d39e713dc4765e58fc7ec4",
+      "size": 3010
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_qrd_tmd3765_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_qrd_tmd3765_0.json",
+      "install": "sensors/config/bonito_qrd_tmd3765_0.json",
+      "sha256": "bef44cf218167fcc0a45ab7cc5282d3e6c7d09fc57b950b96dc4ef0cd1d56e9c",
+      "size": 6075
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_sht4x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_sht4x_0.json",
+      "install": "sensors/config/bonito_sht4x_0.json",
+      "sha256": "d5ac3bdfca2054cd9ebf8022f8efa14dbc6bc04373cdf62025782be60c0b5695",
+      "size": 2874
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_sx932x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_sx932x_0.json",
+      "install": "sensors/config/bonito_sx932x_0.json",
+      "sha256": "f976f0c266339bd91065e06d81e554664adc4f606c8d55fc4972ca1b639401ee",
+      "size": 6998
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_tmd3765_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_tmd3765_0.json",
+      "install": "sensors/config/bonito_tmd3765_0.json",
+      "sha256": "ebb05149619251e01947350502375e007443b3f0303ae196c2513800d0d3b899",
+      "size": 6093
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_vertigo_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_vertigo_lsm6dso_0.json",
+      "install": "sensors/config/bonito_vertigo_lsm6dso_0.json",
+      "sha256": "9dfb7e8f91d93a2155496a849438a4243892eb008ebb47da37f4bb4430711a91",
+      "size": 401
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_vertigo_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_vertigo_lsm6dso_1.json",
+      "install": "sensors/config/bonito_vertigo_lsm6dso_1.json",
+      "sha256": "b062fb9718a65de44eff57ca84fab8be2cac94e15abb7b88eea3727144936e5c",
+      "size": 401
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/bonito_vertigo_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/bonito_vertigo_mmc56x3x_0.json",
+      "install": "sensors/config/bonito_vertigo_mmc56x3x_0.json",
+      "sha256": "41e0e65ba5e957fdd3733e06507c149e56c8f12e6b0de45ae69a42c6f7da627a",
+      "size": 412
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/chre_dynamic_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/chre_dynamic_sensors.json",
+      "install": "sensors/config/chre_dynamic_sensors.json",
+      "sha256": "0e9f3147d8945b4c89d05ea62727248e5490b97a51c23e47c3f2c541986512ea",
+      "size": 935
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_bu52053nvx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_bu52053nvx_0.json",
+      "install": "sensors/config/eliza_bu52053nvx_0.json",
+      "sha256": "3acde15f5be33184ba0256adf53a0a6388915ad1ea325f9d70c42c87ebec44f1",
+      "size": 1853
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_ccd_base.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_ccd_base.json",
+      "install": "sensors/config/eliza_ccd_base.json",
+      "sha256": "6c37894faa35545b47e6d08be4f81320e529b54e39dc0971d37bed01e9f63da3",
+      "size": 353
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_default_sensors.json",
+      "install": "sensors/config/eliza_default_sensors.json",
+      "sha256": "c2da15590763fa5a4c611eae642c9bbeb54eb4f21a0f29105a552bbe1ab2d1c6",
+      "size": 6198
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_dynamic_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_dynamic_sensors.json",
+      "install": "sensors/config/eliza_dynamic_sensors.json",
+      "sha256": "ac7c9f162c2a22f331c1d204915c586b010e3852df9a111a3c6740a572dc4877",
+      "size": 917
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_dynamic_sensors_template.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_dynamic_sensors_template.json",
+      "install": "sensors/config/eliza_dynamic_sensors_template.json",
+      "sha256": "a248f6aebb52f1e08311a1150449b72040dbd2697e33e99bf6b4dbdbf5bddc60",
+      "size": 556
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_fcal_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_fcal_mmc56x3x_0.json",
+      "install": "sensors/config/eliza_fcal_mmc56x3x_0.json",
+      "sha256": "43a75719dbc61cdc5ca385b4234784a7126842e032ada4798f636401a7c952d4",
+      "size": 2654
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_hdk_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_hdk_lsm6dso_0.json",
+      "install": "sensors/config/eliza_hdk_lsm6dso_0.json",
+      "sha256": "b16755929b84821ac0cb843ab48a7f40b06ad6038099daa4d4088e3d5f8b3a22",
+      "size": 386
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_hdk_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_hdk_lsm6dso_1.json",
+      "install": "sensors/config/eliza_hdk_lsm6dso_1.json",
+      "sha256": "b6cd0c42c79c49f9e4ae105044a2606e9f79a0c082ea6b18b0dd4fe4190797b0",
+      "size": 386
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_irq.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_irq.json",
+      "install": "sensors/config/eliza_irq.json",
+      "sha256": "290c06237800eada9a9c9d65f302e1532ce847e5863add75931ba2faf5a888e3",
+      "size": 151
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_lps22df_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_lps22df_0.json",
+      "install": "sensors/config/eliza_lps22df_0.json",
+      "sha256": "3b72ffaba720ad9795ed06b5ca998c09555aca1745986bf1bee22ac659be4744",
+      "size": 3338
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_lsm6dso_0.json",
+      "install": "sensors/config/eliza_lsm6dso_0.json",
+      "sha256": "e881941859de06a6316d279615ea4863838478f8408eff073fa05d39fb5d4b82",
+      "size": 7801
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_lsm6dso_1.json",
+      "install": "sensors/config/eliza_lsm6dso_1.json",
+      "sha256": "7f7cb4bb7e2864dd904423847725bf7b03ea92c66750dabfb11499d59445a4bd",
+      "size": 7802
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_mmc56x3x_0.json",
+      "install": "sensors/config/eliza_mmc56x3x_0.json",
+      "sha256": "b1bfeaa5e0c5a1da039b26a90d0a7bb644f8ca87d6d8b57aa76305477ba22503",
+      "size": 1665
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_mtp_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_mtp_lsm6dso_0.json",
+      "install": "sensors/config/eliza_mtp_lsm6dso_0.json",
+      "sha256": "2c436464594850b8a39dc2e595f3b46e6976ff7d011491e423f70616007007c3",
+      "size": 386
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_mtp_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_mtp_lsm6dso_1.json",
+      "install": "sensors/config/eliza_mtp_lsm6dso_1.json",
+      "sha256": "ea6a39d1dd5307a3c3e4466bc74e6231f9dfc0e9a03f98c123aa2349aea62f8b",
+      "size": 386
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_mtp_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_mtp_mmc56x3x_0.json",
+      "install": "sensors/config/eliza_mtp_mmc56x3x_0.json",
+      "sha256": "b22a5d424b6644aeb6a2e3381f5a30edc5fb568cd9894a1a07380be5ac826acc",
+      "size": 397
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_power_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_power_0.json",
+      "install": "sensors/config/eliza_power_0.json",
+      "sha256": "e5ddfed153059d4a2b43b463e16bd8284a868aeb7403228dcd187bb981d0fe41",
+      "size": 722
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_qrd_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_qrd_default_sensors.json",
+      "install": "sensors/config/eliza_qrd_default_sensors.json",
+      "sha256": "728d583af6f66abc106b6e5d00885db2ef14fa0111c93c366d005bddcd3a6502",
+      "size": 5885
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_qrd_icm4x6xx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_qrd_icm4x6xx_0.json",
+      "install": "sensors/config/eliza_qrd_icm4x6xx_0.json",
+      "sha256": "59c659b753f87e49b574c4a99827b00d8f21337e813b82c30857b88f63c4753e",
+      "size": 7348
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_qrd_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_qrd_mmc56x3x_0.json",
+      "install": "sensors/config/eliza_qrd_mmc56x3x_0.json",
+      "sha256": "cc9660ddde95badfbee38d93b585cf39299228d78de336f3a942a136cf3ee917",
+      "size": 3003
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_qrd_tmd2755_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_qrd_tmd2755_0.json",
+      "install": "sensors/config/eliza_qrd_tmd2755_0.json",
+      "sha256": "f855f63a82eab58aa7cc78b1e23afec4b68e490adcc5381e5a3af6c2152fc683",
+      "size": 7198
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_sht4x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_sht4x_0.json",
+      "install": "sensors/config/eliza_sht4x_0.json",
+      "sha256": "929d608e6b7ab8848ccf2846a0bb36782ab7607b475e14c2f16bea778e61af09",
+      "size": 2867
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_sx932x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_sx932x_0.json",
+      "install": "sensors/config/eliza_sx932x_0.json",
+      "sha256": "f582c8d7eace56b645bdfd08d1389929c42aeaa3407f0e04f3a90ff4dee32131",
+      "size": 6990
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_tmd2755_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_tmd2755_0.json",
+      "install": "sensors/config/eliza_tmd2755_0.json",
+      "sha256": "34cb6f06d7c20faea067a075948f23a08f7a360c5a20a59350449e32b3d202bd",
+      "size": 7219
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_vertigo_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_vertigo_lsm6dso_0.json",
+      "install": "sensors/config/eliza_vertigo_lsm6dso_0.json",
+      "sha256": "575cdd58050a4a610970b1544811c86a0e74bc74068f8859c61eb9aa85b681fb",
+      "size": 394
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_vertigo_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_vertigo_lsm6dso_1.json",
+      "install": "sensors/config/eliza_vertigo_lsm6dso_1.json",
+      "sha256": "7114013a4aefcebdf644d0e5e8f31c64101c74641c060da8c14243458f2975f4",
+      "size": 394
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/eliza_vertigo_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/eliza_vertigo_mmc56x3x_0.json",
+      "install": "sensors/config/eliza_vertigo_mmc56x3x_0.json",
+      "sha256": "d0f8d891020a86fcaffd96a2a491e1bf5e6e08a22e81ea3ab2b25ce2a4866595",
+      "size": 405
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/json.lst",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/json.lst",
+      "install": "sensors/config/json.lst",
+      "sha256": "2f8aff6d0f345b73ea188a76b5032d7c50895a7fd0d9a885e7f08445e752330a",
+      "size": 3717
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_bu52053nvx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_bu52053nvx_0.json",
+      "install": "sensors/config/pakala_bu52053nvx_0.json",
+      "sha256": "fd27a02f0b06b6f740b34e2c659a2fcca391f325eb285bc1761d5a04ca600e69",
+      "size": 1860
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_ccd_base.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_ccd_base.json",
+      "install": "sensors/config/pakala_ccd_base.json",
+      "sha256": "d2d9bb89c911a48e726f096d425a618b9b6a4f0db9bdac40d59ffab653772253",
+      "size": 353
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_default_sensors.json",
+      "install": "sensors/config/pakala_default_sensors.json",
+      "sha256": "457d6da7f58a38d7cd8926b86df6f5ac591520862a6062d5c48d10a1ccd32d73",
+      "size": 5987
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_dynamic_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_dynamic_sensors.json",
+      "install": "sensors/config/pakala_dynamic_sensors.json",
+      "sha256": "8959b586a615a54c677503afd04d3078eee1fcb42843092443c8f3a7b8e0c051",
+      "size": 521
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_dynamic_sensors_template.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_dynamic_sensors_template.json",
+      "install": "sensors/config/pakala_dynamic_sensors_template.json",
+      "sha256": "a248f6aebb52f1e08311a1150449b72040dbd2697e33e99bf6b4dbdbf5bddc60",
+      "size": 556
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_fcal_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_fcal_mmc56x3x_0.json",
+      "install": "sensors/config/pakala_fcal_mmc56x3x_0.json",
+      "sha256": "4c3ef8ec6aede9f2805d42aa010e0c1dc90ab0b5acabcf97cb1514757fde7e78",
+      "size": 2644
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_hdk_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_hdk_lsm6dso_0.json",
+      "install": "sensors/config/pakala_hdk_lsm6dso_0.json",
+      "sha256": "e8f839ae5279d78dc5ee66d7568b8e4a497700d87e3d735b6458172e1d38f00d",
+      "size": 379
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_hdk_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_hdk_lsm6dso_1.json",
+      "install": "sensors/config/pakala_hdk_lsm6dso_1.json",
+      "sha256": "0ef5f3c1fa2db341c7aed07c82d0b0d71b46afafb118167e5630628219f7c97d",
+      "size": 379
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_irq.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_irq.json",
+      "install": "sensors/config/pakala_irq.json",
+      "sha256": "9b5fb24566a631d121d7f56a1d9d6db82a3a1810564e75659f2768cf66d2ae5f",
+      "size": 151
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_lps22df_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_lps22df_0.json",
+      "install": "sensors/config/pakala_lps22df_0.json",
+      "sha256": "4fba2cf4107c09e7a5aae88e70c2b2e12555cc5948ea3cf794b3050fd655400e",
+      "size": 3338
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_lsm6dso_0.json",
+      "install": "sensors/config/pakala_lsm6dso_0.json",
+      "sha256": "337302b159f06629fbf7e00e25e6c0f66c2e9865642508a08803069662d3b4da",
+      "size": 7800
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_lsm6dso_1.json",
+      "install": "sensors/config/pakala_lsm6dso_1.json",
+      "sha256": "bde799cb745335d6336a5a90eedfe8c29abc44547839b6fdd4143e180b530c89",
+      "size": 7801
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_mmc56x3x_0.json",
+      "install": "sensors/config/pakala_mmc56x3x_0.json",
+      "sha256": "0d8e21c0c8c73956981124be5dd2230495dbf6f9d6755ee5aaf7d1a37b086100",
+      "size": 1668
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_mtp_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_mtp_lsm6dso_0.json",
+      "install": "sensors/config/pakala_mtp_lsm6dso_0.json",
+      "sha256": "9e60d6bd04949f8bf773d4137858256babd612fb02f7e93440975ce9b38cb544",
+      "size": 385
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_mtp_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_mtp_lsm6dso_1.json",
+      "install": "sensors/config/pakala_mtp_lsm6dso_1.json",
+      "sha256": "079ee8db82931ef2909937feb2c7c2dc8cfaf9a8f9dea82a539140c1a50c7888",
+      "size": 385
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_mtp_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_mtp_mmc56x3x_0.json",
+      "install": "sensors/config/pakala_mtp_mmc56x3x_0.json",
+      "sha256": "62a15c1ae187991eff6fdbf2f0168ca76a8c6ee05c74340aa0b92b85c04229e3",
+      "size": 396
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_mtp_oplus_camera_aon.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_mtp_oplus_camera_aon.json",
+      "install": "sensors/config/pakala_mtp_oplus_camera_aon.json",
+      "sha256": "396c6e52c14feaa390f01da9e60e83c8c50ae7a353df0634482e709bf786029e",
+      "size": 1627
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_power_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_power_0.json",
+      "install": "sensors/config/pakala_power_0.json",
+      "sha256": "64b43b3ffd436d3e21e08af8cd806e34079a6fdcaeed218eeffafa56c16b9982",
+      "size": 287
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_qrd_default_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_qrd_default_sensors.json",
+      "install": "sensors/config/pakala_qrd_default_sensors.json",
+      "sha256": "fed580a2f755712f56318680aefab378c2b81c4e0e0094e0156e2c0ed6445177",
+      "size": 5885
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_qrd_icm4x6xx_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_qrd_icm4x6xx_0.json",
+      "install": "sensors/config/pakala_qrd_icm4x6xx_0.json",
+      "sha256": "b59b146f82126125ef7b3bed12ff3921fce6b27d8664e3d41a530c20c277b108",
+      "size": 7645
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_qrd_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_qrd_mmc56x3x_0.json",
+      "install": "sensors/config/pakala_qrd_mmc56x3x_0.json",
+      "sha256": "3c280a91bbbbe4d4baef886d5bcdbb49eadc13dd3a9e760983609999a66e6eca",
+      "size": 3003
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_qrd_tmd3765_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_qrd_tmd3765_0.json",
+      "install": "sensors/config/pakala_qrd_tmd3765_0.json",
+      "sha256": "50cd8261335f6cad1e731147fe1e0f498ec7a9ea86b5c1e249bcff5d9ef35acc",
+      "size": 6060
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_sht4x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_sht4x_0.json",
+      "install": "sensors/config/pakala_sht4x_0.json",
+      "sha256": "a0252e5da2751fa9f97b64d324b7a725593ad4e262518754fa5b12d63c1d34d1",
+      "size": 2867
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_sx932x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_sx932x_0.json",
+      "install": "sensors/config/pakala_sx932x_0.json",
+      "sha256": "d593f299c6394f473aacce5cecbbb4fa6cbae5ad84da89a4effa96262da9edb5",
+      "size": 6990
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_tmd3765_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_tmd3765_0.json",
+      "install": "sensors/config/pakala_tmd3765_0.json",
+      "sha256": "f7d3dad7060768cc30961004173a5916f8d3f28cf6b18371c352226d01f4f197",
+      "size": 6091
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_vertigo_lsm6dso_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_vertigo_lsm6dso_0.json",
+      "install": "sensors/config/pakala_vertigo_lsm6dso_0.json",
+      "sha256": "dbce44b4f2af46b9431a9285329e96a196e0d93f159fc6f75d4108c72ac845e8",
+      "size": 387
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_vertigo_lsm6dso_1.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_vertigo_lsm6dso_1.json",
+      "install": "sensors/config/pakala_vertigo_lsm6dso_1.json",
+      "sha256": "91e363d44c8c21af9e30769ca830d982fc0c483b63112a3e5ba99d503fd2b832",
+      "size": 387
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/pakala_vertigo_mmc56x3x_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/pakala_vertigo_mmc56x3x_0.json",
+      "install": "sensors/config/pakala_vertigo_mmc56x3x_0.json",
+      "sha256": "5928c11195d69f75813ecd16f69b49fd2b71c7e6e1ff55d7303dc3657e23530a",
+      "size": 398
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_common.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_common.json",
+      "install": "sensors/config/qsh_camera_common.json",
+      "sha256": "12426c43e53914a05405d1d8d4789544e4cfef402a3cfa06e7c788e6634e03b2",
+      "size": 11059
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_common_sm8735.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_common_sm8735.json",
+      "install": "sensors/config/qsh_camera_common_sm8735.json",
+      "sha256": "a4774e805834fbf0c9b4ebf086be6a467e73ab20c76e79b1bb48fca26889c3c0",
+      "size": 11469
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_dodgefront_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_dodgefront_3.json",
+      "install": "sensors/config/qsh_camera_dodgefront_3.json",
+      "sha256": "92416c6837a6b7e7371dc3f10edf7ec903a0d88044eeff7fff31ebbbeb17d927",
+      "size": 8541
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_hummerFront_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_hummerFront_3.json",
+      "install": "sensors/config/qsh_camera_hummerFront_3.json",
+      "sha256": "df09b225a9de9fb76c2f4b4546cba3b2a9ac943f975f5d89dcbeca0eb3e969ac",
+      "size": 8568
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_imx480_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_imx480_3.json",
+      "install": "sensors/config/qsh_camera_imx480_3.json",
+      "sha256": "cd7a0d68d967a69e21c3be93931c866fa38613f6483f1a9545d1c7e8c2f9a849",
+      "size": 8441
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_imx615_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_imx615_3.json",
+      "install": "sensors/config/qsh_camera_imx615_3.json",
+      "sha256": "463db1efd26275262d5dceca28b0bff9e723997413c92043df52c140ff01cc53",
+      "size": 8441
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_imx688_6.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_imx688_6.json",
+      "install": "sensors/config/qsh_camera_imx688_6.json",
+      "sha256": "91f5a973311752440ee20ea52b4f8cc62a3c32201734c02d4c600e6d41b7d2a1",
+      "size": 20147
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_imx688_6_actuator.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_imx688_6_actuator.json",
+      "install": "sensors/config/qsh_camera_imx688_6_actuator.json",
+      "sha256": "8f9a0454380ad19f5b37d43ba7f80ae0d43a17f64c3833c78fa79880303617d8",
+      "size": 1876
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_ktmFront_2.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_ktmFront_2.json",
+      "install": "sensors/config/qsh_camera_ktmFront_2.json",
+      "sha256": "f6620ef67d6e11e37a81d4dcf7bbc090198cc54e72ae67996adf0c8e91e5c6d6",
+      "size": 8473
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_ov32c4c_4.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_ov32c4c_4.json",
+      "install": "sensors/config/qsh_camera_ov32c4c_4.json",
+      "sha256": "c646cd8b741ed2ccade7276e02e4284d0e1a3c2e45f43d2ea4a1e231cb1f2cc5",
+      "size": 22774
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_ov32c4c_4_sm8735.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_ov32c4c_4_sm8735.json",
+      "install": "sensors/config/qsh_camera_ov32c4c_4_sm8735.json",
+      "sha256": "29e87c67a0ea04eab990e7aa6eb0f5a41e809720f70e34b1421eb9733c033dc1",
+      "size": 23891
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_paganiFront_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_paganiFront_3.json",
+      "install": "sensors/config/qsh_camera_paganiFront_3.json",
+      "sha256": "589eff3533f69afbc58456a7cdc75927d5930ea791389ba24efdce01fd30ff49",
+      "size": 8566
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_paganiInFront_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_paganiInFront_3.json",
+      "install": "sensors/config/qsh_camera_paganiInFront_3.json",
+      "sha256": "2e81b9aa7e34573461bb79763b7c767fe6b80bdf17812b820de92c58d2bb9767",
+      "size": 8633
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_petrelfrontmain_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_petrelfrontmain_3.json",
+      "install": "sensors/config/qsh_camera_petrelfrontmain_3.json",
+      "sha256": "963d04e341ec2f2ed242d97c1925b7114ad50e90a1a21447c9c3b2b331530b8e",
+      "size": 8668
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_petrelfrontsub_4.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_petrelfrontsub_4.json",
+      "install": "sensors/config/qsh_camera_petrelfrontsub_4.json",
+      "sha256": "d2b8929a6a2a60c51d8297679184a36a46bc252fa906b413a81cb28ac8af97d7",
+      "size": 8641
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/qsh_camera_zffront_3.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/qsh_camera_zffront_3.json",
+      "install": "sensors/config/qsh_camera_zffront_3.json",
+      "sha256": "98ba99b19a640985e98d485c6e0a915bf55f78b31dbc5ae3a326225ba3be93c0",
+      "size": 9645
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_amd.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_amd.json",
+      "install": "sensors/config/sns_amd.json",
+      "sha256": "74a2615e2ed3f51b4d9f9b81f3ae9be3e85f9142b13e40277cbf2b076ecf56e9",
+      "size": 484
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_amd_sw_enabled.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_amd_sw_enabled.json",
+      "install": "sensors/config/sns_amd_sw_enabled.json",
+      "sha256": "b5b5264c13b4de58449cc8210a7fbf5a53f291233b7311827d4a9448408b69af",
+      "size": 485
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_aont.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_aont.json",
+      "install": "sensors/config/sns_aont.json",
+      "sha256": "e5351978635f9346f2ba934dc18f7fc5f216916a072164414dfe26cf24e07399",
+      "size": 141
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_basic_gestures.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_basic_gestures.json",
+      "install": "sensors/config/sns_basic_gestures.json",
+      "sha256": "478bd4437ba90b8490b2a612564251ccad6c4a86311ea9ed6b66ad02a635d80c",
+      "size": 1157
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_bring_to_ear.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_bring_to_ear.json",
+      "install": "sensors/config/sns_bring_to_ear.json",
+      "sha256": "525793f1220361d7b1349519fa5f4534c34ded8436d2ecb5c4e5d99208ebd12b",
+      "size": 1163
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v1_0_amd.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v1_0_amd.json",
+      "install": "sensors/config/sns_ccd_v1_0_amd.json",
+      "sha256": "b778afc07f0bc5c62c253ce0b9bfa56c26896587061fa6d27dae93a1cb7e63ed",
+      "size": 356
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v1_0_ttw.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v1_0_ttw.json",
+      "install": "sensors/config/sns_ccd_v1_0_ttw.json",
+      "sha256": "1fa8402e133dcbe9827f0a8656e0f585cc9a4961d4dd0002ddc15b4a0d162216",
+      "size": 6124
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v2_0_walk.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v2_0_walk.json",
+      "install": "sensors/config/sns_ccd_v2_0_walk.json",
+      "sha256": "f89666b28aacc8b0cc54168b977e51ec60286d1c1a521a1db7d845506997af7a",
+      "size": 449
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v3_0_walk.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v3_0_walk.json",
+      "install": "sensors/config/sns_ccd_v3_0_walk.json",
+      "sha256": "af9dbd52ab89f95a839d46a98059fd11bc11e5681095984dbfcbd41e693c7bf0",
+      "size": 1229
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v3_1_walk.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v3_1_walk.json",
+      "install": "sensors/config/sns_ccd_v3_1_walk.json",
+      "sha256": "ac3ccc21be8e8e09d578bb9e5464e9d95423061786643500119e509cdebb4f81",
+      "size": 1295
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v4_0_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v4_0_sensors.json",
+      "install": "sensors/config/sns_ccd_v4_0_sensors.json",
+      "sha256": "14ace9650f4a76dd2a58f29c4a6284dc5b0fa8ac37ef753dc1d28255ddbf993e",
+      "size": 1134
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v4_0_te_cd_regs.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v4_0_te_cd_regs.json",
+      "install": "sensors/config/sns_ccd_v4_0_te_cd_regs.json",
+      "sha256": "4969c5386dae12ddb076a4630703720fe346a3ccea62671b6e00e5b995fd9918",
+      "size": 1617
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v5_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v5_0.json",
+      "install": "sensors/config/sns_ccd_v5_0.json",
+      "sha256": "f128a78cb37df5e411d216a801d2e1643f833416f5233a4491b6fac012a8fa99",
+      "size": 1656
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v5_0_te_cd_regs.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v5_0_te_cd_regs.json",
+      "install": "sensors/config/sns_ccd_v5_0_te_cd_regs.json",
+      "sha256": "e56a8731457b1f905de8f33437f7c60f84e88427ae2c06c0b25a28bdb921a26e",
+      "size": 1985
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v5_1_te_cd_regs.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v5_1_te_cd_regs.json",
+      "install": "sensors/config/sns_ccd_v5_1_te_cd_regs.json",
+      "sha256": "66e1d3b4f0c5b42f61bd2befa23d6d0eb1546388bc7511171c76f929e2af9049",
+      "size": 3114
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v6_0.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v6_0.json",
+      "install": "sensors/config/sns_ccd_v6_0.json",
+      "sha256": "9a10869afe4af6defccc00140279eb2c4763d24006b3686f971281876a77fde9",
+      "size": 3228
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v6_0_sensors.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v6_0_sensors.json",
+      "install": "sensors/config/sns_ccd_v6_0_sensors.json",
+      "sha256": "567bbae0634c2051fbf40deac117f81712257638d22e1b2fcb8217d2e01a77c3",
+      "size": 5941
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_ccd_v6_0_te_cd_regs.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_ccd_v6_0_te_cd_regs.json",
+      "install": "sensors/config/sns_ccd_v6_0_te_cd_regs.json",
+      "sha256": "c63c6edb1fadf6e13d93906d40efd16ea5881a29e4f89b6001cf1d14516635db",
+      "size": 18523
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_cm.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_cm.json",
+      "install": "sensors/config/sns_cm.json",
+      "sha256": "087a8bbe637025b36064b85c69503ab2e740fa57de7be9e56b9c0297a6b07524",
+      "size": 474
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_dae.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_dae.json",
+      "install": "sensors/config/sns_dae.json",
+      "sha256": "4fa439f76cc4b1e80ad38b321d31567d515f9a2a3a4ede1fa7b651a1d1090f62",
+      "size": 893
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_device_orient.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_device_orient.json",
+      "install": "sensors/config/sns_device_orient.json",
+      "sha256": "06ff3e5497b3f6a1aacd7b9a2cb2126e48388d6b69d1717c8ac52d2f78f83327",
+      "size": 930
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_diag_filter.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_diag_filter.json",
+      "install": "sensors/config/sns_diag_filter.json",
+      "sha256": "e71990510239c70cbb00c4d9f41dcd2388101ce530c59c8f2921d2594c61570c",
+      "size": 6816
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_direct_channel.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_direct_channel.json",
+      "install": "sensors/config/sns_direct_channel.json",
+      "sha256": "4a6c1821edfb7b449edef4bf077f35920579f22af903d6512a4f858b364b33f6",
+      "size": 164
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_distance_bound.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_distance_bound.json",
+      "install": "sensors/config/sns_distance_bound.json",
+      "sha256": "275153bbd7f12136993b245b3cbbf6bfff5e03fe829ca96347bfdb60f43ea781",
+      "size": 861
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_dpc.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_dpc.json",
+      "install": "sensors/config/sns_dpc.json",
+      "sha256": "33f61f945586ff326d4d9d829c0811aa1e9e2034a15293a5329cba1f88e262a5",
+      "size": 649
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_facing.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_facing.json",
+      "install": "sensors/config/sns_facing.json",
+      "sha256": "bb07b3f3eb475ed9cd39376ea07a8331780fee4150d34bd90cb0b5ef9a6b4e30",
+      "size": 856
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_flight_md.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_flight_md.json",
+      "install": "sensors/config/sns_flight_md.json",
+      "sha256": "02d7d941807667da63a60dded1fa3d51e7028d6a0234cc8080f30c5898803375",
+      "size": 566
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_fmv.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_fmv.json",
+      "install": "sensors/config/sns_fmv.json",
+      "sha256": "279e692880f131aa63f6a90d0c2cc1fbf4f514a116746d6ec938aff22271a2b7",
+      "size": 1419
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_fmv_legacy.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_fmv_legacy.json",
+      "install": "sensors/config/sns_fmv_legacy.json",
+      "sha256": "6453974dac7abc5fbcbc4b2c440610622af51006466ba5642cddcd07eb4f9df0",
+      "size": 1583
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_gyro_cal.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_gyro_cal.json",
+      "install": "sensors/config/sns_gyro_cal.json",
+      "sha256": "353f0f84a102283c57d15ac3498553ae3c5aa3d73fc3bfae415c9f58bcb43950",
+      "size": 628
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_heart_rate.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_heart_rate.json",
+      "install": "sensors/config/sns_heart_rate.json",
+      "sha256": "05cb7058ab63d2c8a35ae653fbc86041902d39bea94fe782cc7f9616fba60abb",
+      "size": 3593
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_mag_cal.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_mag_cal.json",
+      "install": "sensors/config/sns_mag_cal.json",
+      "sha256": "a0ef57d2d5529b499c3a4d5029c2e1941fec1156915f07a604c609af2e52ebbe",
+      "size": 398
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_mag_cal_legacy.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_mag_cal_legacy.json",
+      "install": "sensors/config/sns_mag_cal_legacy.json",
+      "sha256": "5963da9915cd35aa4f66a639bd0fdda24fb8f53c781557514d8d8a363058e8b3",
+      "size": 313
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_multishake.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_multishake.json",
+      "install": "sensors/config/sns_multishake.json",
+      "sha256": "0c46f27bbdd0990839d5ca91f5423cd53d1fd37e50bcfd5e91c00d21f543eaab",
+      "size": 862
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_offbody_detect_phone.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_offbody_detect_phone.json",
+      "install": "sensors/config/sns_offbody_detect_phone.json",
+      "sha256": "22c2fe309e4cf8e30931a70d96f9db3ea6b1c133fc73e58d156dd7688b3ce11f",
+      "size": 173
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_pedometer.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_pedometer.json",
+      "install": "sensors/config/sns_pedometer.json",
+      "sha256": "81abbec2a2fc877a55100cb7d56dcc19b63281f691d833aeda3ba008fe17eb29",
+      "size": 797
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_psd_disable.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_psd_disable.json",
+      "install": "sensors/config/sns_psd_disable.json",
+      "sha256": "2c35721dc152e6067f212bd95ef296d85f00f85c6a16fb3e69a327d237b5922a",
+      "size": 267
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_psd_enable.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_psd_enable.json",
+      "install": "sensors/config/sns_psd_enable.json",
+      "sha256": "4aa153e7112611ca6d98c1b03e615590e3a279dddfb8562f9790af1e20f524b4",
+      "size": 270
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_rmd.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_rmd.json",
+      "install": "sensors/config/sns_rmd.json",
+      "sha256": "2704f0eb5fe7c2d0ed29ee18fe998021ff0ccacac97946ea3721c0c6f1b13740",
+      "size": 575
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_rotv.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_rotv.json",
+      "install": "sensors/config/sns_rotv.json",
+      "sha256": "7a4ec41ff8b6f0e04665ccf575b5691c6f79258a4b87d879f1c0c54e889e8345",
+      "size": 531
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_smd.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_smd.json",
+      "install": "sensors/config/sns_smd.json",
+      "sha256": "7b1c6157e5189bf01d8244faac8b9103a67024180714641ce3c5748465dea091",
+      "size": 1033
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_tilt.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_tilt.json",
+      "install": "sensors/config/sns_tilt.json",
+      "sha256": "b9530b5b384f85508605d2a12ef590d2c5b47b056672089deaca2980195dfcc6",
+      "size": 522
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_tilt_sw_enabled.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_tilt_sw_enabled.json",
+      "install": "sensors/config/sns_tilt_sw_enabled.json",
+      "sha256": "54f1560d80ce22dbc06fbc34ff16fea186bfc7edb33a7300567c553717998105",
+      "size": 452
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_tilt_to_wake.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_tilt_to_wake.json",
+      "install": "sensors/config/sns_tilt_to_wake.json",
+      "sha256": "b93a1dca32d9a6c4191a4c54fcc018cb9707efa018210ec40fe84cb0af8aa2f1",
+      "size": 1265
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_transport_ppe.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_transport_ppe.json",
+      "install": "sensors/config/sns_transport_ppe.json",
+      "sha256": "66f86daab35c70d5675adae5070bf4ca64cfc0d067b55807faf02b5068fbf914",
+      "size": 432
+    },
+    {
+      "file": "rom/vendor/etc/sensors/config/sns_wrist_pedo.json",
+      "from": "stock-vendor",
+      "member": "etc/sensors/config/sns_wrist_pedo.json",
+      "install": "sensors/config/sns_wrist_pedo.json",
+      "sha256": "96f7e5b4bfc7800b6b347736bd529a49d941b3e2f6c0dbf49f5412dd5f1eba98",
+      "size": 653
+    },
+    {
+      "file": "rom/vendor/etc/sensors/sns_reg_config",
+      "from": "stock-vendor",
+      "member": "etc/sensors/sns_reg_config",
+      "install": "sensors/sns_reg.conf",
+      "sha256": "475c964bc19126f88696c2917cc5ea1924f1e210deb9c21aab8edced6a79b989",
+      "size": 608
+    }
+  ]
+}

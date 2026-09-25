@@ -1,0 +1,4 @@
+# Verbatim third-party inputs: upstream patches and stock ROM configuration are
+# pinned by SHA-256 in sources.json and rom-config.json, whitespace included.
+patches/** -whitespace
+rom/** -whitespace
