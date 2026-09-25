@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Publishes the accelerometer to iio-sensor-proxy only after ssccli has read
+# real measurements of gravity from it. One bounded attempt; a failure is
+# recorded under /run/erhai-sensors and is not retried.
+[Unit]
+Description=Accelerometer sample gate for the ADSP sensor core
+Requires=erhai-sensors-rpcd.service
+After=erhai-sensors-rpcd.service
+Before=iio-sensor-proxy.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=fastrpc
+Group=fastrpc
+Environment=LC_ALL=C
+ExecStart=/usr/libexec/erhai-sensors/ssc-sample-gate
+TimeoutStartSec=30s
+RuntimeDirectory=erhai-sensors
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_QIPCRTR
+RestrictNamespaces=yes
+LockPersonality=yes

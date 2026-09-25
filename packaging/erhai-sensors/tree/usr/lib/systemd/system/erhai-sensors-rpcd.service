@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Attaches the ADSP sensor protection domain (INIT_ATTACH_SNS) and serves it
+# the stock sensor configuration and this unit's registry.
+#
+# The sensor domain reads its registry when this attach creates it, and on
+# this SoC the same ADSP also runs audio, the battery link and USB-C, so the
+# only way to make it read a different registry -- restarting the ADSP -- is
+# not available. Hence:
+#   * no attach without a registry: the condition below keeps the domain
+#     unattached, so a registry imported later is read at the next boot;
+#   * no restart loop: a failure is recorded and stays failed.
+[Unit]
+Description=FastRPC file server for the ADSP sensor domain
+ConditionPathIsDirectory=/var/lib/erhai/sensors/persist/registry
+ConditionDirectoryNotEmpty=/var/lib/erhai/sensors/persist/registry
+BindsTo=dev-erhai\x2dsensors\x2dfastrpc.device
+After=dev-erhai\x2dsensors\x2dfastrpc.device local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
+Before=erhai-sensors-gate.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=fastrpc
+Group=fastrpc
+ExecStart=/usr/lib/erhai/sensors/bin/hexagonrpcd -f /dev/erhai-sensors-fastrpc -d adsp -s -R /usr/share/erhai-sensors/hexagonrpcd
+Restart=no
+TimeoutStopSec=5s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+DevicePolicy=closed
+DeviceAllow=/dev/erhai-sensors-fastrpc rw

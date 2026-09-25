@@ -1,0 +1,205 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Import this tablet's sensor registry from a copy of its Android persist data.
+
+The ADSP sensor core keeps per-unit state -- the registry it generated from
+the stock configuration and the factory calibration -- in Android's
+/mnt/vendor/persist/sensors. It is machine data, so erhai-sensors does not
+ship it; this tool copies it from a directory you give it into
+/var/lib/erhai/sensors, where the FastRPC file server serves it to the DSP.
+
+    erhai-sensors-import-registry [--socinfo SOC0] SENSORS
+
+SENSORS is a copy of /mnt/vendor/persist/sensors and must contain
+registry/registry/; registry/sns_reg_version is taken when present.
+SOC0 is an optional copy of Android's /sys/devices/soc0; only the attributes
+the stock sns_reg_config names are taken.
+
+Nothing is read from anywhere else and nothing is restarted: the sensor domain
+reads its registry when it is first attached, so an import takes effect at the
+next boot. Restarting the ADSP instead is not an option on this tablet; it
+also runs audio, the battery link and USB-C.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+STATE = Path('var/lib/erhai/sensors')
+SOCINFO = ('hw_platform', 'platform_subtype', 'platform_subtype_id',
+           'platform_version', 'soc_id', 'revision')
+NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,254}')
+MAX_FILE = 1 << 20
+MAX_TOTAL = 32 << 20
+MAX_FILES = 4096
+SERVER = 'erhai-sensors-rpcd.service'
+
+
+class ImportError_(Exception):
+    pass
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def regular(path, limit):
+    """A regular file, not a symlink, within the size limit."""
+    if path.is_symlink() or not path.is_file():
+        raise ImportError_(f'{path} is not a regular file')
+    size = path.stat().st_size
+    if size > limit:
+        raise ImportError_(f'{path} is {size} bytes, more than {limit}')
+    return size
+
+
+def collect_registry(source):
+    registry = source / 'registry' / 'registry'
+    if registry.is_symlink() or not registry.is_dir():
+        raise ImportError_(f'{registry} is not a directory; SENSORS must be a copy '
+                           f'of /mnt/vendor/persist/sensors')
+    entries = sorted(registry.iterdir())
+    if not entries:
+        raise ImportError_(f'{registry} is empty')
+    if len(entries) > MAX_FILES:
+        raise ImportError_(f'{registry} holds {len(entries)} entries, more than {MAX_FILES}')
+    total = 0
+    for entry in entries:
+        if not NAME.fullmatch(entry.name):
+            raise ImportError_(f'unexpected registry entry name: {entry.name!r}')
+        total += regular(entry, MAX_FILE)
+    if total > MAX_TOTAL:
+        raise ImportError_(f'registry is {total} bytes, more than {MAX_TOTAL}')
+    version = source / 'registry' / 'sns_reg_version'
+    if version.exists() or version.is_symlink():
+        regular(version, 4096)
+    else:
+        version = None
+    return entries, version
+
+
+def collect_socinfo(source):
+    if source is None:
+        return {}
+    if source.is_symlink() or not source.is_dir():
+        raise ImportError_(f'{source} is not a directory')
+    found = {}
+    for name in SOCINFO:
+        path = source / name
+        if not (path.exists() or path.is_symlink()):
+            continue
+        regular(path, 256)
+        data = path.read_bytes()
+        if not all(32 <= b < 127 or b in (9, 10, 0) for b in data):
+            raise ImportError_(f'{path} is not a short text attribute')
+        found[name] = path
+    if not found:
+        raise ImportError_(f'{source} holds none of {", ".join(SOCINFO)}')
+    return found
+
+
+def fastrpc_ids():
+    try:
+        import grp
+        import pwd
+        return pwd.getpwnam('fastrpc').pw_uid, grp.getgrnam('fastrpc').gr_gid
+    except (KeyError, ImportError):
+        return None
+
+
+def install(src, dst, owner):
+    shutil.copyfile(src, dst)
+    os.chmod(dst, 0o640)
+    if owner:
+        os.chown(dst, 0, owner[1])
+
+
+def mkdir(path, owner):
+    path.mkdir(mode=0o750)
+    os.chmod(path, 0o750)
+    if owner:
+        os.chown(path, 0, owner[1])
+
+
+def server_active():
+    result = subprocess.run(['systemctl', 'is-active', '--quiet', SERVER],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('sensors', type=Path, help='copy of /mnt/vendor/persist/sensors')
+    parser.add_argument('--socinfo', type=Path, help='copy of /sys/devices/soc0')
+    parser.add_argument('--root', type=Path, default=Path('/'),
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--force', action='store_true',
+                        help='replace the registry even while the file server runs')
+    args = parser.parse_args(argv)
+
+    live = args.root.resolve() == Path('/')
+    if live and os.geteuid() != 0:
+        parser.error('must run as root')
+    try:
+        source = args.sensors.resolve(strict=True)
+        entries, version = collect_registry(source)
+        socinfo = collect_socinfo(args.socinfo.resolve(strict=True) if args.socinfo else None)
+    except (ImportError_, OSError) as error:
+        print(f'erhai-sensors-import-registry: {error}', file=sys.stderr)
+        return 1
+    if live and server_active() and not args.force:
+        print(f'erhai-sensors-import-registry: {SERVER} is running and the sensor '
+              f'domain has already read its registry; use --force to replace the '
+              f'files for the next boot', file=sys.stderr)
+        return 1
+
+    owner = fastrpc_ids() if os.geteuid() == 0 else None
+    state = args.root / STATE
+    state.mkdir(parents=True, exist_ok=True)
+    new = state / f'.import-{os.getpid()}'
+    try:
+        mkdir(new, owner)
+        mkdir(new / 'persist', owner)
+        mkdir(new / 'persist' / 'registry', owner)
+        record = {'imported': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                  'source': str(source), 'registry': {}, 'socinfo': {}}
+        for entry in entries:
+            install(entry, new / 'persist' / 'registry' / entry.name, owner)
+            record['registry'][entry.name] = sha256(entry)
+        if version:
+            install(version, new / 'persist' / 'sns_reg_version', owner)
+            record['sns_reg_version'] = sha256(version)
+        if socinfo:
+            mkdir(new / 'socinfo', owner)
+            for name, path in socinfo.items():
+                install(path, new / 'socinfo' / name, owner)
+                record['socinfo'][name] = path.read_bytes().decode('ascii', 'replace').strip('\0\n')
+        (new / 'import.json').write_text(json.dumps(record, indent=2) + '\n')
+        os.chmod(new / 'import.json', 0o640)
+        # Swap in the complete set; a half-copied registry is never served.
+        for name in ('persist', 'socinfo', 'import.json'):
+            old = state / name
+            if old.is_dir() and not old.is_symlink():
+                shutil.rmtree(old)
+            elif old.exists() or old.is_symlink():
+                old.unlink()
+            if (new / name).exists():
+                os.rename(new / name, old)
+    finally:
+        shutil.rmtree(new, ignore_errors=True)
+    print(f'imported {len(entries)} registry files'
+          f'{" and sns_reg_version" if version else ""}'
+          f'{" and " + str(len(socinfo)) + " socinfo attributes" if socinfo else ""}'
+          f' into /{STATE}; they are read at the next boot')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

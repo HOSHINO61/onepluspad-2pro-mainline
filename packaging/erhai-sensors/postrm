@@ -1,0 +1,20 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+case "$1" in
+remove|purge)
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload || true
+	fi
+	udevadm control --reload >/dev/null 2>&1 || true
+	;;
+esac
+
+# The imported registry is this unit's own data; purge is the explicit
+# request to drop it.
+if [ "$1" = purge ]; then
+	rm -rf /var/lib/erhai/sensors
+fi
+
+exit 0

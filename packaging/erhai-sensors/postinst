@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+case "$1" in
+configure)
+	systemd-sysusers erhai-sensors.conf
+	systemd-tmpfiles --create erhai-sensors.conf
+	if [ -d /run/systemd/system ]; then
+		systemctl daemon-reload || true
+	fi
+	udevadm control --reload >/dev/null 2>&1 || true
+	# Nothing is started here. Attaching the ADSP sensor domain makes it read
+	# its registry once, for the whole boot; the stack comes up at the next
+	# boot, from the DSP node's udev event.
+	if [ ! -d /var/lib/erhai/sensors/persist/registry ]; then
+		echo "erhai-sensors: no sensor registry imported yet; run" \
+			"erhai-sensors-import-registry, then reboot" >&2
+	else
+		echo "erhai-sensors: takes effect at the next boot" >&2
+	fi
+	;;
+esac
+
+exit 0

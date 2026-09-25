@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+# On removal, let Ubuntu's own iio-sensor-proxy take over again. Upgrades
+# leave the running stack alone: the new build is used from the next boot,
+# because the sensor domain cannot be re-attached without an ADSP restart.
+case "$1" in
+remove)
+	if [ -d /run/systemd/system ]; then
+		systemctl stop iio-sensor-proxy.service erhai-sensors-gate.service \
+			erhai-sensors-rpcd.service || true
+	fi
+	;;
+esac
+
+exit 0

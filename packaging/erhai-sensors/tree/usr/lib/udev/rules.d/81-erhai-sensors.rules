@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# OnePlus Pad 2 Pro: the accelerometer, gyroscope, magnetometer, light and
+# hall sensors sit on an ADSP-owned bus and are reached only through the
+# Qualcomm Sensor Core on the ADSP. The ADSP FastRPC node is the anchor for
+# the whole stack.
+#
+# Mainline names the node fastrpc-adsp-secure when the DT node has no
+# qcom,non-secure-domain, fastrpc-adsp otherwise; only one exists. The
+# stable symlink is what the file server opens.
+#
+# IIO_SENSOR_PROXY_TYPE is *assigned*, not appended: the distribution rule
+# (80-) announces ssc-light and ssc-compass for every fastrpc-adsp* node, and
+# neither has been validated here. Only the accelerometer is exposed.
+#
+# ACCEL_MOUNT_MATRIX is a candidate derived from the panel's landscape
+# scan-out versus the Android sensor frame. It has NOT been measured and is
+# to be confirmed or falsified by the four-orientation test.
+ACTION=="remove", GOTO="erhai_sensors_end"
+SUBSYSTEM!="misc", GOTO="erhai_sensors_end"
+KERNEL!="fastrpc-adsp|fastrpc-adsp-secure", GOTO="erhai_sensors_end"
+
+GROUP="fastrpc", MODE="0660", SYMLINK+="erhai-sensors-fastrpc"
+ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel"
+ENV{ACCEL_MOUNT_MATRIX}="0, 1, 0; -1, 0, 0; 0, 0, 1"
+TAG+="systemd", ENV{SYSTEMD_WANTS}+="erhai-sensors-rpcd.service iio-sensor-proxy.service"
+
+LABEL="erhai_sensors_end"
