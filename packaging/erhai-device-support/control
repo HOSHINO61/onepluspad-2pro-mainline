@@ -43,5 +43,13 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  erhai-kernel and written by erhai-switch. Left enabled it fails and takes
  dracut's configure down with it.
  .
+ The kernel's Gunyah hardware watchdog stays off by default: a drop-in in
+ /usr/lib/systemd/system.conf.d keeps systemd from arming it, including at
+ reboot, where systemd's 10 minute default is longer than the 32 second
+ hardware limit. The opt-in variant in
+ /usr/share/erhai-device-support/watchdog, installed under the same name in
+ /etc/systemd/system.conf.d, has systemd pet it with a 30 second timeout so
+ that a hard lockup resets the tablet instead of leaving it hung.
+ .
  Nothing here is tied to a particular kernel build. The boot images belong to
  erhai-kernel, which drives this package's installer from its own postinst.
