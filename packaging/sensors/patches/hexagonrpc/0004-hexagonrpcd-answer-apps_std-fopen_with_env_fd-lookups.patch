@@ -1,0 +1,582 @@
+From 022bed29b7fb6380717169815696eac19bf66735 Mon Sep 17 00:00:00 2001
+From: Erwin <yzddmr7@gmail.com>
+Date: Fri, 25 Sep 2026 20:00:00 +0800
+Subject: [PATCH] hexagonrpcd: answer apps_std fopen_with_env_fd lookups
+
+The SM8750 ADSP sensor domain calls apps_std method 36 shortly after it
+has read its configuration, as an extended method (sc 0x1f050100: method
+31, five input buffers, one output buffer, real ID in the first word).
+In Qualcomm's apps_std IDL, as generated into the reference skel of
+quic/fastrpc and matched by the stock libadsprpc.so dispatcher, method
+36 is
+
+  fopen_with_env_fd(in string envvarname, in string delim,
+                    in string name, in string mode,
+                    rout long fd, rout long len)
+
+The reference listener searches the path in envvarname, reads the file
+into an rpcmem buffer, maps that buffer into the DSP process and returns
+the buffer's file descriptor and length; an absent file is answered with
+the host errno ENOENT. hexagonrpcd has no method 36, so the listener
+stops at the first such call.
+
+Serve the lookup with the same search directories as fopen_with_env and
+answer an absent file (or an unavailable search directory) with ENOENT,
+as the reference does. Mapping a buffer into the DSP is not implemented,
+so a present file is refused with AEE_EUNSUPPORTED and logged instead of
+being served wrongly, and write or update modes are refused like in
+fopen_with_env. Only the exact ROM scalar shape is accepted. The search
+path selection moves into a helper shared with fopen_with_env, whose
+results are unchanged.
+
+Cover the wire encoding, absent and present files, file-number leaks,
+refused modes, unknown variables, unterminated strings, other scalar
+shapes and the unchanged fopen_with_env results with a host test.
+
+Assisted-by: LLM
+---
+ hexagonrpcd/apps_std.c           | 109 ++++++++++-
+ hexagonrpcd/interface/apps_std.c |  24 +++
+ hexagonrpcd/interface/apps_std.h |   4 +
+ tests/meson.build                |  18 ++
+ tests/test_apps_std_fd.c         | 298 +++++++++++++++++++++++++++++++
+ 5 files changed, 447 insertions(+), 6 deletions(-)
+ create mode 100644 tests/test_apps_std_fd.c
+
+diff --git a/hexagonrpcd/apps_std.c b/hexagonrpcd/apps_std.c
+index 7172bf0..5575903 100644
+--- a/hexagonrpcd/apps_std.c
++++ b/hexagonrpcd/apps_std.c
+@@ -20,6 +20,7 @@
+  */
+ 
+ #include <errno.h>
++#include <stdbool.h>
+ #include <libhexagonrpc/error.h>
+ #include <stdio.h>
+ #include <stdint.h>
+@@ -150,6 +151,28 @@ static uint32_t apps_std_fseek(void *data,
+ 	return 0;
+ }
+ 
++/*
++ * Select the directory that stands in for the search path named by an
++ * environment variable. Returns false for an unknown variable.
++ */
++static bool apps_std_search_dirfd(const struct apps_std_ctx *ctx,
++				  const char *envvarname, int *dirfd)
++{
++	if (!strcmp(envvarname, "ADSP_LIBRARY_PATH"))
++		*dirfd = ctx->adsp_library_dirfd;
++	else if (!strcmp(envvarname, "ADSP_AVS_CFG_PATH"))
++		*dirfd = ctx->adsp_avs_cfg_dirfd;
++	else
++		return false;
++
++	return true;
++}
++
++static bool apps_std_is_c_string(const struct fastrpc_io_buffer *buf)
++{
++	return buf->s > 0 && ((const char *) buf->p)[buf->s - 1] == '\0';
++}
++
+ static uint32_t apps_std_fopen_with_env(void *data,
+ 					const struct fastrpc_io_buffer *inbufs,
+ 					struct fastrpc_io_buffer *outbufs)
+@@ -172,11 +195,7 @@ static uint32_t apps_std_fopen_with_env(void *data,
+ 		return AEE_EUNSUPPORTED;
+ 	}
+ 
+-	if (!strcmp(inbufs[1].p, "ADSP_LIBRARY_PATH")) {
+-		dirfd = ctx->adsp_library_dirfd;
+-	} else if (!strcmp(inbufs[1].p, "ADSP_AVS_CFG_PATH")) {
+-		dirfd = ctx->adsp_avs_cfg_dirfd;
+-	} else {
++	if (!apps_std_search_dirfd(ctx, inbufs[1].p, &dirfd)) {
+ 		fprintf(stderr, "Unknown search directory %s\n",
+ 				(const char *) inbufs[1].p);
+ 		return AEE_EBADPARM;
+@@ -351,6 +370,74 @@ static uint32_t apps_std_stat(void *data,
+ 	return 0;
+ }
+ 
++/*
++ * fopen_with_env_fd (IDL method 36) searches the path in an environment
++ * variable like fopen_with_env, but returns a DMA buffer holding the whole
++ * file instead of a stream: the reference listener reads the file into an
++ * rpcmem buffer, maps that buffer into the DSP process (FASTRPC_MAP_FD) and
++ * returns its file descriptor and length. The DSP probes optional files this
++ * way, and the reference answers an absent file with the host errno ENOENT.
++ *
++ * Mapping buffers into the DSP is not implemented here, so only the lookup is
++ * served: an absent file is reported exactly like the reference does, and a
++ * present file is refused with AEE_EUNSUPPORTED rather than served wrongly.
++ */
++static uint32_t apps_std_fopen_with_env_fd(void *data,
++					   const struct fastrpc_io_buffer *inbufs,
++					   struct fastrpc_io_buffer *outbufs)
++{
++	struct apps_std_ctx *ctx = data;
++	struct {
++		int32_t fd;
++		int32_t len;
++	} *first_out = outbufs[0].p;
++	const char *envvarname = inbufs[1].p;
++	const char *name = inbufs[3].p;
++	const char *mode = inbufs[4].p;
++	int dirfd, fd;
++
++	first_out->fd = -1;
++	first_out->len = 0;
++
++	if (!apps_std_is_c_string(&inbufs[1])
++	 || !apps_std_is_c_string(&inbufs[2])
++	 || !apps_std_is_c_string(&inbufs[3])
++	 || !apps_std_is_c_string(&inbufs[4]))
++		return AEE_EBADPARM;
++
++	if (strpbrk(mode, "wa+") != NULL) {
++		fprintf(stderr, "Tried to open %s for writing\n", name);
++		return AEE_EUNSUPPORTED;
++	}
++
++	if (!apps_std_search_dirfd(ctx, envvarname, &dirfd)) {
++		fprintf(stderr, "Unknown search directory %s\n", envvarname);
++		return AEE_EBADPARM;
++	}
++
++	if (dirfd < 0) {
++		fprintf(stderr, "Could not open %s: search directory $%s is unavailable\n",
++				name, envvarname);
++		return ENOENT;
++	}
++
++	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, name);
++	if (fd == -ENOENT) {
++		fprintf(stderr, "Could not open %s: %s\n", name, strerror(-fd));
++		return ENOENT;
++	} else if (fd < 0) {
++		fprintf(stderr, "Could not open %s: %s\n", name, strerror(-fd));
++		return AEE_EFAILED;
++	}
++
++	hexagonfs_close(ctx->fds, fd);
++
++	fprintf(stderr, "Found %s, but serving it as a DSP-mapped buffer is not supported\n",
++			name);
++
++	return AEE_EUNSUPPORTED;
++}
++
+ struct fastrpc_interface *fastrpc_apps_std_init(struct hexagonfs_dirent *root)
+ {
+ 	struct fastrpc_interface *iface;
+@@ -465,10 +552,20 @@ static const struct fastrpc_function_impl apps_std_procs[] = {
+ 		.def = &apps_std_stat_def,
+ 		.impl = apps_std_stat,
+ 	},
++	{ .def = NULL, .impl = NULL, },
++	{ .def = NULL, .impl = NULL, },
++	{ .def = NULL, .impl = NULL, },
++	{ .def = NULL, .impl = NULL, },
++	{
++		.def = &apps_std_fopen_with_env_fd_def,
++		.expected_sc = APPS_STD_FOPEN_WITH_ENV_FD_SC,
++		.strict_sc = true,
++		.impl = apps_std_fopen_with_env_fd,
++	},
+ };
+ 
+ const struct fastrpc_interface apps_std_interface = {
+ 	.name = "apps_std",
+-	.n_procs = 32,
++	.n_procs = HRPC_ARRAY_SIZE(apps_std_procs),
+ 	.procs = apps_std_procs,
+ };
+diff --git a/hexagonrpcd/interface/apps_std.c b/hexagonrpcd/interface/apps_std.c
+index 67b3ace..f8cabf4 100644
+--- a/hexagonrpcd/interface/apps_std.c
++++ b/hexagonrpcd/interface/apps_std.c
+@@ -182,3 +182,27 @@ const struct hrpc_method_def_interp4 apps_std_stat_def = {
+ 	.n_inner_types = 0,
+ 	.inner_types = NULL,
+ };
++
++/*
++ * IDL method 36, reached through the extended method ID (sc method 31):
++ *
++ *   inbuf[0]  = { uint32_t method_id, envvarname_len, delim_len, name_len, mode_len }
++ *   inbuf[1..4] = NUL-terminated envvarname, delim, name, mode
++ *   outbuf[0] = { int32_t fd, int32_t len }
++ */
++static struct hrpc_arg_def_interp4 apps_std_fopen_with_env_fd_args[] = {
++	{ HRPC_ARG_BLOB_SEQ, sizeof(char) },
++	{ HRPC_ARG_BLOB_SEQ, sizeof(char) },
++	{ HRPC_ARG_BLOB_SEQ, sizeof(char) },
++	{ HRPC_ARG_BLOB_SEQ, sizeof(char) },
++	{ HRPC_ARG_OUT_BLOB, sizeof(uint32_t) },
++	{ HRPC_ARG_OUT_BLOB, sizeof(uint32_t) },
++};
++
++const struct hrpc_method_def_interp4 apps_std_fopen_with_env_fd_def = {
++	.msg_id = 36,
++	.n_args = HRPC_ARRAY_SIZE(apps_std_fopen_with_env_fd_args),
++	.args = apps_std_fopen_with_env_fd_args,
++	.n_inner_types = 0,
++	.inner_types = NULL,
++};
+diff --git a/hexagonrpcd/interface/apps_std.h b/hexagonrpcd/interface/apps_std.h
+index b80a1ca..f6f56af 100644
+--- a/hexagonrpcd/interface/apps_std.h
++++ b/hexagonrpcd/interface/apps_std.h
+@@ -35,5 +35,9 @@ extern struct hrpc_method_def_interp4 apps_std_closedir_def;
+ extern struct hrpc_method_def_interp4 apps_std_readdir_def;
+ extern struct hrpc_method_def_interp4 apps_std_mkdir_def;
+ extern struct hrpc_method_def_interp4 apps_std_stat_def;
++extern const struct hrpc_method_def_interp4 apps_std_fopen_with_env_fd_def;
++
++/* Methods above 30 are sent as method 31 with the real ID in inbuf[0]. */
++#define APPS_STD_FOPEN_WITH_ENV_FD_SC REMOTE_SCALARS_MAKE(31, 5, 1)
+ 
+ #endif /* INTERFACE_APPS_STD_H */
+diff --git a/tests/meson.build b/tests/meson.build
+index 1646800..7d19c4a 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -64,6 +64,22 @@ test_sns_registry = executable('test_sns_registry',
+   include_directories : include,
+ )
+ 
++test_apps_std_fd = executable('test_apps_std_fd',
++  'test_apps_std_fd.c',
++  '../hexagonrpcd/apps_std.c',
++  '../hexagonrpcd/interface/adsp_listener.c',
++  '../hexagonrpcd/interface/apps_std.c',
++  '../hexagonrpcd/hexagonfs.c',
++  '../hexagonrpcd/hexagonfs_mapped.c',
++  '../hexagonrpcd/hexagonfs_plat_subtype_name.c',
++  '../hexagonrpcd/hexagonfs_virt_dir.c',
++  '../hexagonrpcd/iobuffer.c',
++  '../hexagonrpcd/listener.c',
++  '../hexagonrpcd/rpcd_builder.c',
++  c_args : cflags,
++  include_directories : include,
++)
++
+ test('iobuffer', test_iobuffer)
+ test('hexagonfs', test_hexagonfs, args : [sample_file])
+ test('hexagonrpc', test_hexagonrpc)
+@@ -72,3 +88,5 @@ test('registry-version-contract', test_registry_version_contract,
+ test('odm-sensor-config', test_odm_sensor_config,
+   args : [meson.current_build_dir() / 'odm-sensor-config'])
+ test('sns-registry', test_sns_registry)
++test('apps-std-fd', test_apps_std_fd,
++  args : [meson.current_build_dir() / 'apps-std-fd'])
+diff --git a/tests/test_apps_std_fd.c b/tests/test_apps_std_fd.c
+new file mode 100644
+index 0000000..1d0b979
+--- /dev/null
++++ b/tests/test_apps_std_fd.c
+@@ -0,0 +1,298 @@
++#include <endian.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <libhexagonrpc/error.h>
++#include <libhexagonrpc/hexagonrpc.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#include "../hexagonrpcd/apps_std.h"
++#include "../hexagonrpcd/hexagonfs.h"
++#include "../hexagonrpcd/interface/apps_std.h"
++#include "../hexagonrpcd/iobuffer.h"
++#include "../hexagonrpcd/listener.h"
++#include "../hexagonrpcd/rpcd_builder.h"
++
++/*
++ * apps_std method 36 (fopen_with_env_fd) as the SM8750 ADSP sensor domain
++ * sends it: sc 0x1f050100, i.e. extended method 31 with five input buffers
++ * and one output buffer. The primary input carries the real method ID and
++ * the four string lengths; the primary output carries { fd, len }.
++ */
++
++#define APPS_STD_FOPEN_WITH_ENV_SC REMOTE_SCALARS_MAKE(19, 5, 1)
++
++static struct fastrpc_interface *apps_std;
++
++static void fail(const char *message)
++{
++	fprintf(stderr, "test_apps_std_fd: %s\n", message);
++	exit(1);
++}
++
++/* Dispatch-only tests must never issue a host FastRPC ioctl. */
++int hexagonrpc(const struct hrpc_method_def_interp4 *def,
++	       int fd, uint32_t handle, ...)
++{
++	fail("dispatch-only test attempted a FastRPC ioctl");
++	return -1;
++}
++
++/* Encode input buffers as the kernel hands them to adsp_listener_next2. */
++static size_t encode_wire(unsigned char *wire, size_t capacity,
++			  size_t n, const void *const *bufs, const uint32_t *lens)
++{
++	size_t off = 0, i;
++	uint32_t le;
++
++	for (i = 0; i < n; i++) {
++		if (off + 16 + lens[i] > capacity)
++			fail("wire buffer is too small");
++
++		le = htole32(lens[i]);
++		memcpy(&wire[off], &le, sizeof(le));
++		off += sizeof(le);
++
++		if (lens[i] && (off & 7)) {
++			memset(&wire[off], 0, 8 - (off & 7));
++			off += 8 - (off & 7);
++		}
++
++		memcpy(&wire[off], bufs[i], lens[i]);
++		off += lens[i];
++	}
++
++	return off;
++}
++
++static uint32_t invoke(uint32_t sc, uint32_t method,
++		       const char *env, const char *name, const char *mode,
++		       uint32_t name_len, int *dispatch_ret,
++		       struct fastrpc_io_buffer **returned_out)
++{
++	struct fastrpc_interface *ifaces[] = { NULL, apps_std };
++	struct fastrpc_decoder_context *ctx;
++	struct fastrpc_io_buffer *decoded, *returned = NULL;
++	unsigned char wire[256];
++	uint32_t primary[5];
++	const void *bufs[5];
++	uint32_t lens[5];
++	uint32_t result = UINT32_MAX;
++	size_t wire_len;
++	int extended = REMOTE_SCALARS_METHOD(sc) == 31;
++	int off = 0;
++
++	if (extended)
++		primary[off++] = htole32(method);
++	primary[off++] = htole32(strlen(env) + 1);
++	primary[off++] = htole32(2);
++	primary[off++] = htole32(name_len);
++	primary[off++] = htole32(strlen(mode) + 1);
++
++	bufs[0] = primary;
++	lens[0] = off * sizeof(uint32_t);
++	bufs[1] = env;
++	lens[1] = strlen(env) + 1;
++	bufs[2] = ";";
++	lens[2] = 2;
++	bufs[3] = name;
++	lens[3] = name_len;
++	bufs[4] = mode;
++	lens[4] = strlen(mode) + 1;
++
++	wire_len = encode_wire(wire, sizeof(wire), 5, bufs, lens);
++
++	ctx = inbuf_decode_start(sc);
++	if (ctx == NULL || inbuf_decode(ctx, wire_len, wire)
++	 || !inbuf_decode_is_complete(ctx))
++		fail("could not decode the request");
++	decoded = inbuf_decode_finish(ctx);
++
++	*dispatch_ret = fastrpc_invoke_requested_procedure(
++		HRPC_ARRAY_SIZE(ifaces), ifaces, 1, sc, &result,
++		decoded, &returned);
++	iobuf_free(REMOTE_SCALARS_INBUFS(sc), decoded);
++	*returned_out = returned;
++
++	return result;
++}
++
++static uint32_t open_fd(const char *env, const char *name, const char *mode,
++			int32_t *fd, int32_t *len)
++{
++	struct fastrpc_io_buffer *returned;
++	int32_t out[2];
++	uint32_t result;
++	int dispatch_ret;
++
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_FD_SC, 36, env, name, mode,
++			strlen(name) + 1, &dispatch_ret, &returned);
++	if (dispatch_ret)
++		fail("a well-formed method 36 request was rejected");
++	if (returned == NULL || returned[0].s != sizeof(out))
++		fail("method 36 did not return an 8-byte { fd, len }");
++
++	memcpy(out, returned[0].p, sizeof(out));
++	*fd = out[0];
++	*len = out[1];
++	iobuf_free(1, returned);
++
++	return result;
++}
++
++static void test_abi(void)
++{
++	if (APPS_STD_FOPEN_WITH_ENV_FD_SC != 0x1f050100)
++		fail("method 36 scalars differ from the ones the DSP sends");
++	if (apps_std_fopen_with_env_fd_def.msg_id != 36)
++		fail("method 36 definition has the wrong message ID");
++	if (apps_std_interface.n_procs != 37)
++		fail("apps_std does not reach method 36");
++}
++
++static void test_absent_file(void)
++{
++	int32_t fd, len;
++	uint32_t result;
++
++	result = open_fd("ADSP_LIBRARY_PATH", "absent.so", "r", &fd, &len);
++	if (result != ENOENT || fd != -1 || len != 0)
++		fail("an absent file was not reported as ENOENT with fd -1");
++
++	/* Absolute names resolve from the root, as for fopen_with_env. */
++	result = open_fd("ADSP_LIBRARY_PATH", "/vendor/etc/absent.json", "r",
++			 &fd, &len);
++	if (result != ENOENT)
++		fail("an absent absolute path was not reported as ENOENT");
++
++	/* No acdb directory is mapped in this root. */
++	result = open_fd("ADSP_AVS_CFG_PATH", "absent.acdb", "r", &fd, &len);
++	if (result != ENOENT || fd != -1)
++		fail("a missing search directory was not reported as ENOENT");
++}
++
++static void test_present_file_is_refused(void)
++{
++	int32_t fd, len;
++	uint32_t result;
++	int i;
++
++	/* More lookups than file numbers: a leaked number would surface. */
++	for (i = 0; i < HEXAGONFS_MAX_FD + 8; i++) {
++		result = open_fd("ADSP_LIBRARY_PATH", "present.so", "r",
++				 &fd, &len);
++		if (result != AEE_EUNSUPPORTED || fd != -1 || len != 0)
++			fail("a present file was not refused cleanly");
++	}
++}
++
++static void test_rejections(void)
++{
++	struct fastrpc_io_buffer *returned;
++	int32_t fd, len;
++	uint32_t result;
++	int dispatch_ret;
++
++	result = open_fd("ADSP_LIBRARY_PATH", "absent.so", "w", &fd, &len);
++	if (result != AEE_EUNSUPPORTED)
++		fail("a write-mode open was not refused");
++	result = open_fd("ADSP_LIBRARY_PATH", "present.so", "r+", &fd, &len);
++	if (result != AEE_EUNSUPPORTED)
++		fail("an update-mode open was not refused");
++
++	result = open_fd("DSP_UNKNOWN_PATH", "absent.so", "r", &fd, &len);
++	if (result != AEE_EBADPARM)
++		fail("an unknown search variable was not rejected");
++
++	/* A name without its NUL terminator. */
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_FD_SC, 36, "ADSP_LIBRARY_PATH",
++			"present.so", "r", strlen("present.so"),
++			&dispatch_ret, &returned);
++	if (dispatch_ret || result != AEE_EBADPARM)
++		fail("an unterminated name was not rejected");
++	iobuf_free(1, returned);
++
++	/* Any other scalar shape is refused before the handler runs. */
++	result = invoke(REMOTE_SCALARS_MAKE(31, 5, 2), 36, "ADSP_LIBRARY_PATH",
++			"present.so", "r", strlen("present.so") + 1,
++			&dispatch_ret, &returned);
++	if (!dispatch_ret || result != AEE_EBADPARM || returned != NULL)
++		fail("a non-ROM scalar shape was not rejected");
++
++	/* Methods 32 to 35 stay unimplemented. */
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_FD_SC, 34, "ADSP_LIBRARY_PATH",
++			"present.so", "r", strlen("present.so") + 1,
++			&dispatch_ret, &returned);
++	if (!dispatch_ret || result != AEE_EUNSUPPORTED || returned != NULL)
++		fail("method 34 was not rejected");
++}
++
++static void test_fopen_with_env_unchanged(void)
++{
++	struct fastrpc_io_buffer *returned;
++	uint32_t result;
++	int dispatch_ret;
++
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_SC, 19, "ADSP_LIBRARY_PATH",
++			"absent.so", "r", strlen("absent.so") + 1,
++			&dispatch_ret, &returned);
++	if (dispatch_ret || result != AEE_EFAILED)
++		fail("fopen_with_env changed its absent-file result");
++	iobuf_free(1, returned);
++
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_SC, 19, "DSP_UNKNOWN_PATH",
++			"absent.so", "r", strlen("absent.so") + 1,
++			&dispatch_ret, &returned);
++	if (dispatch_ret || result != AEE_EBADPARM)
++		fail("fopen_with_env changed its unknown-variable result");
++	iobuf_free(1, returned);
++
++	result = invoke(APPS_STD_FOPEN_WITH_ENV_SC, 19, "ADSP_LIBRARY_PATH",
++			"present.so", "r", strlen("present.so") + 1,
++			&dispatch_ret, &returned);
++	if (dispatch_ret || result != AEE_SUCCESS)
++		fail("fopen_with_env no longer opens a present file");
++	iobuf_free(1, returned);
++}
++
++int main(int argc, char **argv)
++{
++	char dsp[4096], adsp[4096], lib[4096];
++	int fd;
++
++	if (argc != 2)
++		return 2;
++	if (mkdir(argv[1], 0700) && access(argv[1], F_OK))
++		return 3;
++	if (snprintf(dsp, sizeof(dsp), "%s/dsp", argv[1]) >= (int) sizeof(dsp)
++	 || snprintf(adsp, sizeof(adsp), "%s/adsp", dsp) >= (int) sizeof(adsp)
++	 || snprintf(lib, sizeof(lib), "%s/present.so", adsp) >= (int) sizeof(lib))
++		return 3;
++	if ((mkdir(dsp, 0700) && access(dsp, F_OK))
++	 || (mkdir(adsp, 0700) && access(adsp, F_OK)))
++		return 3;
++	fd = open(lib, O_WRONLY | O_CREAT | O_TRUNC, 0600);
++	if (fd < 0 || write(fd, "ELF", 3) != 3 || close(fd))
++		return 3;
++
++	apps_std = fastrpc_apps_std_init(construct_root_dir(argv[1], "adsp"));
++	if (apps_std == NULL)
++		fail("could not create the apps_std interface");
++
++	test_abi();
++	test_absent_file();
++	test_present_file_is_refused();
++	test_rejections();
++	test_fopen_with_env_unchanged();
++
++	/*
++	 * Not deinitialized: fastrpc_apps_std_deinit() double-frees the shared
++	 * directory descriptors even right after init; the daemon only calls it
++	 * on a failed start.
++	 */
++	return 0;
++}
+-- 
+2.43.0
+

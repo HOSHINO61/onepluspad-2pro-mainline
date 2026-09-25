@@ -73,6 +73,49 @@
           "origin": "this project",
           "upstream_status": "not submitted",
           "note": "The ADSP sensor image names both /vendor/etc/sensors/config (json.lst) and /odm/etc/sensor/config (json_list); the stock sns_reg_config points its config directory at the ODM path."
+        },
+        {
+          "file": "patches/hexagonrpc/0004-hexagonrpcd-answer-apps_std-fopen_with_env_fd-lookups.patch",
+          "sha256": "fe73ca530d87612078def87cffbc07994e6e21043f7ab29ea671074c8f25bcd8",
+          "origin": "this project",
+          "upstream_status": "not submitted",
+          "note": "apps_std method 36 is fopen_with_env_fd in Qualcomm's apps_std IDL (quic/fastrpc src/apps_std_skel.c at d247519650fe5cb16de6c78edaa95bcc4be25073); the stock libadsprpc.so dispatcher accepts it only as sc 0x1f050100. Absent files answer ENOENT like the reference; serving a present file as a DSP-mapped buffer is not implemented and is refused with AEE_EUNSUPPORTED.",
+          "evidence": [
+            {
+              "url": "https://raw.githubusercontent.com/quic/fastrpc/d247519650fe5cb16de6c78edaa95bcc4be25073/src/apps_std_skel.c",
+              "sha256": "0e3ff421cf2b7b6f3649fd2c17f0327daad8a5628157159dcebff12f688cdc91",
+              "shows": "generated apps_std skel: extended method 36 -> apps_std_fopen_with_env_fd, 5 in / 1 out, 20-byte primary input, 8-byte primary output; unknown methods return AEE_EUNSUPPORTED"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/quic/fastrpc/d247519650fe5cb16de6c78edaa95bcc4be25073/inc/apps_std.h",
+              "sha256": "170f337fefbaccc505e6560823e9aa2c35c9b9b150ba467fcf9fb54f776fcf08",
+              "shows": "fopen_with_env_fd(envvarname, delim, name, mode, int *fd, int *len)"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/quic/fastrpc/d247519650fe5cb16de6c78edaa95bcc4be25073/src/apps_std_imp.c",
+              "sha256": "2bb7d12565c495399259f5d1a16333bb14cf79245475ff9e41090563906188f3",
+              "shows": "reference semantics: search the path, read into rpcmem, fastrpc_mmap(FASTRPC_MAP_FD), return fd/len; ENOENT when absent"
+            },
+            {
+              "rom_file": "vendor.img:/lib64/libadsprpc.so",
+              "sha256": "9f29121254586caa205f2471f5bead26e61487c8d298ea54d903bd636fde6f38",
+              "shows": "stock dispatcher: extended ID 0x24 accepted only for scalars 0x050100, primary input >= 20 and output >= 8 bytes; handler logs apps_std_fopen_with_env_fd"
+            }
+          ]
+        },
+        {
+          "file": "patches/hexagonrpc/0005-hexagonrpcd-keep-listening-after-refusing-a-request.patch",
+          "sha256": "aae6e7b1ce97018ffc58a63d60155f78222dccbe70c68906eb85bdb589c63cc2",
+          "origin": "this project",
+          "upstream_status": "not submitted",
+          "note": "Upstream hexagonrpcd exits on any refused request; the reference listener (quic/fastrpc src/listener_android.c) replies with the error and empty output buffers and keeps serving. Refusals stay logged.",
+          "evidence": [
+            {
+              "url": "https://raw.githubusercontent.com/quic/fastrpc/d247519650fe5cb16de6c78edaa95bcc4be25073/src/listener_android.c",
+              "sha256": "d2659622e9b192b61d7ff5cbbf38dd348597290521c217155abc51f45ea0a7ab",
+              "shows": "a non-zero result is sent back with outBufsLen = 0 and the loop continues"
+            }
+          ]
         }
       ]
     },

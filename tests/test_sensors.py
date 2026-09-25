@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -211,6 +212,70 @@ class RecipeTest(unittest.TestCase):
         self.assertIn('SYMLINK+="erhai-sensors-fastrpc"', rule)
         # Sensor interrupt lines belong to the DSP; nothing here claims a GPIO.
         self.assertNotIn('gpio', rule.lower())
+
+
+def scalars(sc):
+    """Split FastRPC scalars into (method, inbufs, outbufs, handles)."""
+    return (sc >> 24) & 0x1f, (sc >> 16) & 0xff, (sc >> 8) & 0xff, sc & 0xff
+
+
+class ReverseRpcTest(unittest.TestCase):
+    """The ADSP sensor domain's apps_std method 36 and refused requests."""
+
+    # Logged by hexagonrpcd on the tablet: "Unsupported method: 36 (1f050100)".
+    LOGGED_SC = 0x1f050100
+
+    def hexagonrpc_patches(self):
+        lock = json.loads((INPUTS / 'sources.json').read_text())
+        source = next(s for s in lock['sources'] if s['name'] == 'hexagonrpc')
+        return [INPUTS / p['file'] for p in source['patches']]
+
+    def test_logged_scalars_are_extended_fopen_with_env_fd(self):
+        # Method field 31 means "real ID in the first input word"; the
+        # reference skel's fopen_with_env_fd takes the primary input plus
+        # four strings and returns one primary output { fd, len }.
+        self.assertEqual(scalars(self.LOGGED_SC), (31, 5, 1, 0))
+        patch = self.hexagonrpc_patches()[3].read_text()
+        self.assertIn('.msg_id = 36,', patch)
+        self.assertIn('#define APPS_STD_FOPEN_WITH_ENV_FD_SC REMOTE_SCALARS_MAKE(31, 5, 1)', patch)
+        self.assertEqual(patch.count('{ HRPC_ARG_BLOB_SEQ, sizeof(char) },\n'), 4)
+        self.assertEqual(patch.count('{ HRPC_ARG_OUT_BLOB, sizeof(uint32_t) },\n'), 2)
+        self.assertIn('.strict_sc = true,', patch)
+
+    def test_series_order_and_refusal_patch(self):
+        names = [p.name for p in self.hexagonrpc_patches()]
+        self.assertEqual([n[:4] for n in names], ['0001', '0002', '0003', '0004', '0005'])
+        refusal = self.hexagonrpc_patches()[4].read_text()
+        # A refusal is answered with no output buffers and the loop goes on;
+        # the reason stays in the journal for the bring-up check.
+        self.assertIn('outbufs_len = 0;', refusal)
+        self.assertIn('Refused request on handle', refusal)
+        self.assertIn('+\t\t\tret = 0;\n', refusal)
+
+    def test_hexagonrpc_host_suite(self):
+        """Build the patched hexagonrpc on the host and run its tests."""
+        builder = load(REPO / 'tools/build-sensors.py', 'build_sensors')
+        lock = json.loads((INPUTS / 'sources.json').read_text())
+        source = next(s for s in lock['sources'] if s['name'] == 'hexagonrpc')
+        archive = builder.WS / 'cache/sensors' / source['archive']
+        missing = [t for t in ('meson', 'ninja', 'cc', 'patch') if shutil.which(t) is None]
+        if missing or not archive.is_file():
+            self.skipTest(f'needs {missing or archive}')
+        self.assertEqual(sha256(archive), source['sha256'])
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(['tar', '-xzf', str(archive), '-C', tmp], check=True)
+            tree = Path(tmp) / source['directory']
+            for patch in self.hexagonrpc_patches():
+                subprocess.run(['patch', '-d', str(tree), '-p1', '--batch', '--fuzz=0',
+                                '-i', str(patch)], check=True, stdout=subprocess.DEVNULL)
+            build = Path(tmp) / 'build'
+            subprocess.run(['meson', 'setup', str(build), str(tree)], check=True,
+                           stdout=subprocess.DEVNULL)
+            result = subprocess.run(['meson', 'test', '-C', str(build), '--print-errorlogs'],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            for name in ('apps-std-fd', 'listener-refusal', 'sns-registry', 'odm-sensor-config'):
+                self.assertRegex(result.stdout, rf'{name}\s+OK')
 
 
 if __name__ == '__main__':
