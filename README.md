@@ -28,6 +28,7 @@ enabled audio profile.
 | Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
+| Pogo keyboard | Driver candidate, not yet booted | A serdev driver follows the stock attach sequence (sense line with the supply off, switched connector supply, sync packet, heartbeats) and the stock framing: keys, media keys, a five-contact clickpad and the Caps Lock LED. No keyboard has been attached to a mainline kernel yet. |
 | UFS | Installed Ubuntu root and active-slot boot-image updates verified | Boot, init_boot and vendor_boot are checked together; destructive layout changes require separate approval. |
 | Battery | Charge level/status and full-charge capacity available | The protocol-unit fix restores UPower energy and runtime estimates; net charging performance and control thresholds need separate validation. |
 | CPU frequency | SCMI policies and short per-cluster frequency transitions verified | Matching CPUCP mailbox modules are required. Governors and firmware OPPs are unchanged; sustained-load thermal control remains unverified. |
@@ -35,7 +36,7 @@ enabled audio profile.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
-| Speakers | Not enabled (offline candidate) | The six AW88261 amplifiers and the secondary TDM link with per-amplifier slots are described, with a placeholder amplifier supply because the real rail is unknown; not yet booted. There is no UCM playback device, so the desktop does not route sound to them. Stereo routing and physical playback remain incomplete. |
+| Speakers | Not enabled (offline candidate) | The six AW88261 amplifiers and the secondary TDM link with per-amplifier slots are described, with a placeholder amplifier supply because the real rail is unknown, and the SoC votes the TDM bit clock; not yet booted. There is no UCM playback device, so the desktop does not route sound to them. Stereo routing and physical playback remain incomplete. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
