@@ -7,8 +7,10 @@ Section: admin
 Priority: optional
 Depends: python3, systemd, libc6 (>= 2.34), gnome-settings-daemon (>= 50), gnome-settings-daemon (<< 51)
 Description: Backlight-only display blanking for the OnePlus Pad 2 Pro
- Keeps the display link running while controlling both physical backlights.
- A device-scoped adapter redirects GNOME Settings Daemon 50's display-power
- setter; battery management and GNOME authentication remain in the original
- distribution processes. This workaround increases screen-off power and does
- not establish display recovery from system suspend.
+ Keeps the display link running while switching the panel backlight: the one
+ led-backlight device through which the kernel drives both KTZ8868 chips. The
+ service is skipped on kernels with any other backlight layout, such as one
+ device per chip. A device-scoped adapter redirects GNOME Settings Daemon 50's
+ display-power setter; battery management and GNOME authentication remain in
+ the original distribution processes. This workaround increases screen-off
+ power and does not establish display recovery from system suspend.

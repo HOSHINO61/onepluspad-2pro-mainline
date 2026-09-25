@@ -3,10 +3,11 @@
 Description=Tablet backlight-only blanking
 Requires=erhai-display-power.socket
 After=systemd-logind.service
-ConditionPathExists=/sys/class/backlight/ktz8868-master/bl_power
-ConditionPathExists=/sys/class/backlight/ktz8868-slave/bl_power
+ConditionDirectoryNotEmpty=/sys/class/backlight
 
 [Service]
+# Skip, rather than fail, unless exactly one led-backlight device exists.
+ExecCondition=/usr/sbin/erhai-display-power --check
 ExecStart=/usr/sbin/erhai-display-power
 Restart=on-failure
 RestartSec=1

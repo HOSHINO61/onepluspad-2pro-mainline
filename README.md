@@ -22,7 +22,7 @@ remains the only enabled audio profile.
 | Area | State | Notes |
 |---|---|---|
 | Boot | Temporary RAM boot and installed GKI triplet verified | Installed Ubuntu and Android switch through the established active-slot layout; temporary installed-root tests use an explicit expiry. |
-| Display | DSI panel 3392x2400@120 native KMS; display and backlight-only wake visually verified | Full display-link shutdown/recovery remains broken; blanking keeps KMS running and switches both backlights. |
+| Display | DSI panel 3392x2400@120 native KMS; display and backlight-only wake visually verified | Full display-link shutdown/recovery remains broken; blanking keeps KMS running and switches the backlight. Both backlight chips now form one brightness control (candidate, not yet verified on hardware). |
 | Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
@@ -39,8 +39,11 @@ remains the only enabled audio profile.
 | Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
 | Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The optional erhai-mesa package enables hardware rendering for GNOME; application coverage and physical interaction acceptance are tracked separately. |
 
-The current blanking workaround switches both backlights while keeping KMS
-running. The failed touch/DSI retention diagnostics have been reverted.
+The current blanking workaround switches the panel backlight while keeping KMS
+running. The kernel drives both backlight chips through one led-backlight
+device, so that blanking and desktop brightness act on both chips together;
+this layout has not yet been verified on hardware. The failed touch/DSI
+retention diagnostics have been reverted.
 `erhai-display-power` adapts only the GNOME Settings Daemon 50 display-power
 setter; the original daemon continues to manage battery policy and inhibitors.
 The adapter is loaded through a service drop-in, without overwriting Ubuntu
@@ -202,7 +205,7 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
 | `erhai-audio` | the board AudioReach topology, including an inactive native speaker graph, and UCM for the two internal microphones; speaker playback is not enabled |
-| `erhai-display-power` | the dual-backlight service, its socket and the GNOME 50 display-power adapter |
+| `erhai-display-power` | the backlight power service, its socket and the GNOME 50 display-power adapter; it requires the kernel's single led-backlight device |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the required device packages |
 
