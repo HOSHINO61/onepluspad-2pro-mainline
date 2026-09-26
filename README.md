@@ -116,14 +116,14 @@ tools/build-mainline-boot.py --output out/mainline-boot            # minimal ses
 fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
 ```
 
-`build-erhai-abl-symbols.py` builds the legacy overlay sink layout by default,
-the one daily deliveries use. `--contained-sink` builds the layout that lets
-rpmhpd, the NoCs and the PSCI power domains reach `sync_state()`; on this unit
-the first unblank after the display subsystem powers down still loses the
-device with it, so it is for sync_state experiments only, and
-`build-mainline-boot.py`, `build-mainline-gki.py` and `build-debs.py` take such
-a DTB only with their own `--contained-sink`. Each records the layout it read
-back from the DTB as `abl_sink_layout`.
+`build-erhai-abl-symbols.py` builds the contained overlay sink layout by
+default, the one daily deliveries use: the sink sits in a disabled container,
+so rpmhpd, the NoCs and the PSCI power domains reach `sync_state()`.
+`--legacy-sink` builds the root-level sink that releases before 0.1.56 boot
+with; it holds `sync_state()` back and is kept for fallback and comparison
+images, so `build-mainline-boot.py`, `build-mainline-gki.py` and
+`build-debs.py` take such a DTB only with their own `--legacy-sink`. Each
+records the layout it read back from the DTB as `abl_sink_layout`.
 
 The session comes up with a USB NCM link (device `192.168.77.2`, telnet 2323,
 HTTP evidence on 8080) and reboots to Android on its own when the watchdog

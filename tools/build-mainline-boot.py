@@ -5,8 +5,8 @@
 The device boot contract is header v2 with the three components delivered by
 ABL: kernel, ramdisk and --dtb. Output identity records the kernel commit,
 config fragment, every input hash and the ABL overlay sink layout read back
-from the DTB (tools/lib/abl_layout.py). A DTB with the contained sink is only
-taken with --contained-sink: that layout is for sync_state experiments.
+from the DTB (tools/lib/abl_layout.py). A DTB with the legacy root-level sink
+is only taken with --legacy-sink: that layout is for fallback and comparison.
 """
 import argparse
 import hashlib
@@ -15,7 +15,8 @@ import os
 from pathlib import Path
 import subprocess
 
-from lib.abl_layout import LayoutError, check_choice, sink_layout
+from lib.abl_layout import LayoutError, add_arguments as add_layout_arguments, \
+    check_choice, sink_layout
 from lib.boot_profiles import CMDLINE, PROFILE_EXTRA
 
 REPO = Path(__file__).resolve().parent.parent
@@ -49,9 +50,7 @@ def main():
     parser.add_argument('--profile', choices=tuple(PROFILE_EXTRA),
                         help='Append a pinned cmdline: "desktop" runs the RAM Ubuntu '
                              'session, "persistent" boots the installed UFS root')
-    parser.add_argument('--contained-sink', action='store_true',
-                        help='The DTB carries the contained ABL overlay sink on purpose '
-                             '(sync_state experiments only); refused otherwise')
+    add_layout_arguments(parser)
     args = parser.parse_args()
     cmdline = CMDLINE
     if args.profile:
@@ -66,7 +65,7 @@ def main():
         if not path.is_file():
             parser.error(f'Missing input: {path}')
     try:
-        layout = check_choice(sink_layout(dtb.read_bytes()), args.contained_sink,
+        layout = check_choice(sink_layout(dtb.read_bytes()), args.sink_layout,
                               allow_none=True)
     except LayoutError as error:
         parser.error(f'{dtb}: {error}')

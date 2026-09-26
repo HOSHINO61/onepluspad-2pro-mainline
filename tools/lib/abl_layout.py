@@ -4,19 +4,21 @@
 tools/build-erhai-abl-symbols.py places the inert overlay sink in one of two
 layouts:
 
-* legacy (the default): the root child /erhai-abl-overlay-sink.  This is the
-  layout the installed releases boot with.  Its known cost is that the merged
-  sink becomes a platform device and holds back sync_state() of several
-  power and interconnect providers.
-* contained (--contained-sink): /erhai-abl/overlay-sink inside a disabled
-  container.  It lets those providers reach sync_state(), but the first
-  unblank after the display subsystem powered down loses the device; it is
-  for sync_state experiments only and is not a daily delivery.
+* contained (the default): /erhai-abl/overlay-sink inside a disabled
+  container.  The sink never becomes a device, so rpmhpd, the NoCs and the
+  PSCI power domains reach sync_state().  This is the layout daily
+  deliveries use.
+* legacy (--legacy-sink): the root child /erhai-abl-overlay-sink, the
+  layout the installed releases before 0.1.56 boot with.  The merged sink
+  becomes a platform device that never binds and holds back sync_state()
+  of those providers; it is kept only as a fallback and for comparison
+  images.
 
 The boot image builders take a finished DTB, so they read the layout back
-from the DTB itself rather than trusting a flag: a contained DTB is refused
-unless --contained-sink says it is meant, and --contained-sink is refused
-on anything else.  The layout goes into their manifests.
+from the DTB itself rather than trusting a flag: a legacy DTB is refused
+unless --legacy-sink says it is meant, and an explicit --legacy-sink or
+--contained-sink is refused on a DTB that carries anything else.  The
+layout goes into their manifests.
 """
 import struct
 
@@ -26,8 +28,8 @@ NONE = 'none'  # no sink at all: a plain mainline DTB
 LAYOUTS = (LEGACY, CONTAINED)
 ROOT_NODES = {'erhai-abl-overlay-sink': LEGACY, 'erhai-abl': CONTAINED}
 USE = {
-    LEGACY: 'default: the root-level sink of the installed releases',
-    CONTAINED: 'opt-in (--contained-sink): sync_state experiments only, not a daily delivery',
+    CONTAINED: 'default: daily deliveries; the sink never becomes a device',
+    LEGACY: 'opt-in (--legacy-sink): fallback and comparison only, holds back sync_state()',
     NONE: 'no ABL overlay sink (plain mainline DTB)',
 }
 
@@ -105,14 +107,35 @@ def vendor_boot_dtb(image):
     return image[start:start + dtb_size]
 
 
-def check_choice(layout, contained_sink, allow_none=False):
-    """Refuse a layout the caller did not ask for; returns the layout."""
-    if contained_sink and layout != CONTAINED:
-        raise LayoutError(f'--contained-sink given, but the DTB carries the {layout} layout')
-    if layout == CONTAINED and not contained_sink:
-        raise LayoutError('the DTB carries the contained sink, which is for sync_state '
-                          'experiments only and not a daily delivery; pass '
-                          '--contained-sink to build with it on purpose')
+def add_arguments(parser):
+    """--contained-sink / --legacy-sink for a builder that takes a finished DTB.
+
+    Neither flag means the default, contained; either one states the layout
+    the DTB must carry.  The choice lands in args.sink_layout (None, or the
+    layout named)."""
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--contained-sink', dest='sink_layout', action='store_const',
+                       const=CONTAINED,
+                       help='The DTB must carry the contained ABL overlay sink (the default)')
+    group.add_argument('--legacy-sink', dest='sink_layout', action='store_const',
+                       const=LEGACY,
+                       help='The DTB carries the legacy root-level sink on purpose '
+                            '(fallback and comparison only); refused otherwise')
+    parser.set_defaults(sink_layout=None)
+    return group
+
+
+def check_choice(layout, wanted=None, allow_none=False):
+    """Refuse a layout the caller did not ask for; returns the layout.
+
+    wanted is None for the default or the layout an explicit flag named."""
+    if wanted is not None and layout != wanted:
+        raise LayoutError(f'--{wanted}-sink given, but the DTB carries the {layout} layout')
+    if layout == LEGACY and wanted != LEGACY:
+        raise LayoutError('the DTB carries the legacy root-level sink, which holds back '
+                          'sync_state() of rpmhpd, the NoCs and the PSCI power domains and '
+                          'is kept for fallback and comparison only; pass --legacy-sink to '
+                          'build with it on purpose')
     if layout == NONE and not allow_none:
         raise LayoutError('the DTB has no ABL overlay sink; ABL will not boot it next to '
                           'the stock dtbo (build it with tools/build-erhai-abl-symbols.py)')

@@ -2,11 +2,12 @@
 """Where build-erhai-abl-symbols.py puts the ABL overlay sink, and how the
 boot image builders read the layout back.
 
-Both layouts at the text level: the root-level legacy sink (the default, for
-daily deliveries) and the contained sink of --contained-sink (sync_state
-experiments only). tools/lib/abl_layout.py on synthetic device trees and
-vendor_boot images, and the choice it enforces.
+Both layouts at the text level: the contained sink (the default, for daily
+deliveries) and the root-level sink of --legacy-sink (fallback and comparison
+only). tools/lib/abl_layout.py on synthetic device trees and vendor_boot
+images, the choice it enforces, and the flags the builders share.
 """
+import argparse
 import importlib.util
 from pathlib import Path
 import struct
@@ -36,17 +37,17 @@ MAINLINE = '''/dts-v1/;
 
 
 class LayoutChoiceTest(unittest.TestCase):
-    """The command line: legacy unless --contained-sink asks otherwise."""
+    """The command line: contained unless --legacy-sink asks otherwise."""
 
     def parse(self, *argv):
         return abl.build_parser().parse_args(list(argv)).sink_layout
 
-    def test_default_is_legacy(self):
-        self.assertEqual(self.parse(), 'legacy')
-        self.assertEqual(self.parse('--legacy-sink'), 'legacy')
-
-    def test_contained_is_opt_in(self):
+    def test_default_is_contained(self):
+        self.assertEqual(self.parse(), 'contained')
         self.assertEqual(self.parse('--contained-sink'), 'contained')
+
+    def test_legacy_is_opt_in(self):
+        self.assertEqual(self.parse('--legacy-sink'), 'legacy')
 
     def test_both_flags_are_refused(self):
         with self.assertRaises(SystemExit):
@@ -54,12 +55,13 @@ class LayoutChoiceTest(unittest.TestCase):
 
     def test_every_layout_says_what_it_is_for(self):
         self.assertEqual(set(abl.LAYOUT_USE), {'legacy', 'contained', 'none'})
-        self.assertIn('default', abl.LAYOUT_USE['legacy'])
-        self.assertIn('not a daily delivery', abl.LAYOUT_USE['contained'])
+        self.assertIn('default', abl.LAYOUT_USE['contained'])
+        self.assertIn('--legacy-sink', abl.LAYOUT_USE['legacy'])
+        self.assertNotIn('default', abl.LAYOUT_USE['legacy'])
 
 
 class SinkPlacementTest(unittest.TestCase):
-    """--contained-sink: the sink inside the disabled /erhai-abl container."""
+    """The default: the sink inside the disabled /erhai-abl container."""
 
     def setUp(self):
         self.text = abl.inject(MAINLINE, ['alpha', 'beta'],
@@ -114,7 +116,7 @@ class SinkPlacementTest(unittest.TestCase):
 
 
 class LegacySinkPlacementTest(unittest.TestCase):
-    """The default: the root-level sink the installed releases boot with."""
+    """--legacy-sink: the root-level sink of the releases before 0.1.56."""
 
     def setUp(self):
         self.text = abl.inject(MAINLINE, ['alpha', 'beta'],
@@ -231,23 +233,53 @@ class LayoutReadbackTest(unittest.TestCase):
         with self.assertRaises(abl_layout.LayoutError):
             abl_layout.vendor_boot_dtb(b'ANDROID!' + b'\0' * 4096)
 
-    def test_legacy_is_taken_without_a_flag(self):
-        self.assertEqual(abl_layout.check_choice('legacy', False), 'legacy')
+    def test_contained_is_taken_without_a_flag(self):
+        self.assertEqual(abl_layout.check_choice('contained'), 'contained')
+        self.assertEqual(abl_layout.check_choice('contained', 'contained'), 'contained')
 
-    def test_contained_needs_the_flag(self):
+    def test_legacy_needs_the_flag(self):
         with self.assertRaises(abl_layout.LayoutError):
-            abl_layout.check_choice('contained', False)
-        self.assertEqual(abl_layout.check_choice('contained', True), 'contained')
+            abl_layout.check_choice('legacy')
+        with self.assertRaises(abl_layout.LayoutError):
+            abl_layout.check_choice('legacy', 'contained')
+        self.assertEqual(abl_layout.check_choice('legacy', 'legacy'), 'legacy')
 
-    def test_the_flag_needs_a_contained_dtb(self):
-        for layout in ('legacy', 'none'):
-            with self.assertRaises(abl_layout.LayoutError):
-                abl_layout.check_choice(layout, True, allow_none=True)
+    def test_an_explicit_flag_needs_its_layout(self):
+        for wanted, others in (('legacy', ('contained', 'none')),
+                               ('contained', ('legacy', 'none'))):
+            for layout in others:
+                with self.assertRaises(abl_layout.LayoutError):
+                    abl_layout.check_choice(layout, wanted, allow_none=True)
 
     def test_no_sink_only_where_allowed(self):
         with self.assertRaises(abl_layout.LayoutError):
-            abl_layout.check_choice('none', False)
-        self.assertEqual(abl_layout.check_choice('none', False, allow_none=True), 'none')
+            abl_layout.check_choice('none')
+        self.assertEqual(abl_layout.check_choice('none', allow_none=True), 'none')
+
+
+class BuilderFlagsTest(unittest.TestCase):
+    """add_arguments(): the flags build-debs.py and the boot image builders share."""
+
+    def parse(self, *argv):
+        parser = argparse.ArgumentParser()
+        abl_layout.add_arguments(parser)
+        return parser.parse_args(list(argv)).sink_layout
+
+    def test_no_flag_means_the_default(self):
+        self.assertIsNone(self.parse())
+
+    def test_each_flag_names_its_layout(self):
+        self.assertEqual(self.parse('--legacy-sink'), 'legacy')
+        self.assertEqual(self.parse('--contained-sink'), 'contained')
+
+    def test_both_flags_are_refused(self):
+        with self.assertRaises(SystemExit):
+            self.parse('--contained-sink', '--legacy-sink')
+
+    def test_the_flag_is_spelled_as_the_triplet_builder_takes_it(self):
+        # build-debs.py passes --<layout>-sink on to build-mainline-gki.py.
+        for layout in abl_layout.LAYOUTS:
+            self.assertEqual(self.parse(f'--{layout}-sink'), layout)
 
 
 if __name__ == '__main__':

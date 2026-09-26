@@ -19,25 +19,24 @@ the packaging DTB offline, without touching the kernel DTS:
 Two sink layouts exist; the manifest records which one was built as
 abl_sink_layout, and the boot image builders read it back from the DTB.
 
-legacy (the default) puts the sink at the root as /erhai-abl-overlay-sink,
-with every symbol naming it and no container: the layout the installed
-releases boot with, and the one daily deliveries use.  Its known cost: the
-merged sink ends up with a compatible, status = "ok" and the phandle cells
-of every stock provider it stands in for, so it is populated as a platform
-device that never binds, and fw_devlink parses its subtree.  The sink has
-none of the #clock-cells, #interconnect-cells or #reset-cells the stock
-lists expect, so their argument cells are read as phandles and happen to
-name mainline suppliers (rpmhpd, NoCs, GCC, the PSCI power domains), whose
-sync_state() then waits for that consumer forever.
-
-contained (--contained-sink) puts the sink at /erhai-abl/overlay-sink, in a
+contained (the default) puts the sink at /erhai-abl/overlay-sink, in a
 container node with status = "disabled" and no compatible, which no symbol
 names, so no fragment can reach it.  Inside the container the sink never
 becomes a device, its subtree is never parsed for suppliers, and
-interconnect provider counting skips it, so those providers reach
-sync_state().  On this unit the first unblank after the display subsystem
-powered down then loses the device, which is not resolved: the contained
-layout is for sync_state experiments only and is not a daily delivery.
+interconnect provider counting skips it, so rpmhpd, the NoCs, GCC and the
+PSCI power domains reach sync_state().  This is the layout daily
+deliveries use.
+
+legacy (--legacy-sink) puts the sink at the root as /erhai-abl-overlay-sink,
+with every symbol naming it and no container: the layout the installed
+releases before 0.1.56 boot with, kept only as a fallback and for comparison
+images.  Its known cost: the merged sink ends up with a compatible, status = "ok" and the
+phandle cells of every stock provider it stands in for, so it is populated
+as a platform device that never binds, and fw_devlink parses its subtree.
+The sink has none of the #clock-cells, #interconnect-cells or #reset-cells
+the stock lists expect, so their argument cells are read as phandles and
+happen to name mainline suppliers (rpmhpd, NoCs, GCC, the PSCI power
+domains), whose sync_state() then waits for that consumer forever.
 
 The rebuilt DTB is decompiled again and verified: __symbols__ count and sink
 phandle, the sink layout (no container for legacy, the container status for
@@ -74,7 +73,7 @@ DEFAULT_OUT = WS / 'out/abl-dtb'
 CONTAINER_NAME = 'erhai-abl'
 SINK_NAME = 'overlay-sink'
 SINK_PATH = f'/{CONTAINER_NAME}/{SINK_NAME}'
-# The root-level sink of the legacy layout (the default).
+# The root-level sink of the legacy layout (--legacy-sink).
 LEGACY_SINK_NAME = 'erhai-abl-overlay-sink'
 LEGACY_SINK_PATH = f'/{LEGACY_SINK_NAME}'
 SINK_PHANDLE = 0x40000000
@@ -331,13 +330,13 @@ def build_parser():
     layout = parser.add_mutually_exclusive_group()
     layout.add_argument('--contained-sink', dest='sink_layout', action='store_const',
                         const=CONTAINED,
-                        help='Put the sink in the disabled container /erhai-abl: '
-                             'sync_state experiments only, not a daily delivery')
+                        help='Put the sink in the disabled container /erhai-abl; '
+                             'this is the default')
     layout.add_argument('--legacy-sink', dest='sink_layout', action='store_const',
                         const=LEGACY,
-                        help='Put the sink at the root (/erhai-abl-overlay-sink); '
-                             'this is the default')
-    parser.set_defaults(sink_layout=LEGACY)
+                        help='Put the sink at the root (/erhai-abl-overlay-sink) as the '
+                             'releases before 0.1.56 did: fallback and comparison only')
+    parser.set_defaults(sink_layout=CONTAINED)
     return parser
 
 
