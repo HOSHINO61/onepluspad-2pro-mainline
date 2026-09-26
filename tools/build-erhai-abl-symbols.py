@@ -11,14 +11,27 @@ the packaging DTB offline, without touching the kernel DTS:
 
 * extract the dtbo.img entries (reusing byte-identical files), then map every
   symbol named by any stock base __symbols__ or any dtbo entry __fixups__ to
-  an inert sink node /erhai-abl-overlay-sink carrying an explicit
+  an inert sink node /erhai-abl/overlay-sink carrying an explicit
   linux,phandle, so libufdt fragment merges land harmlessly in the sink;
 * copy the root identity statements of the stock base table this unit
   actually boots verbatim into the mainline root.
 
+The sink sits in a container node with status = "disabled" and no
+compatible, which no symbol names, so no fragment can reach it.  The merged
+sink itself ends up with a compatible, status = "ok" and the phandle cells
+of every stock provider it stands in for.  As a root child it would be
+populated as a platform device that never binds, and fw_devlink would parse
+its subtree: the sink has none of the #clock-cells, #interconnect-cells or
+#reset-cells the stock lists expect, so their argument cells are read as
+phandles and happen to name mainline suppliers (rpmhpd, NoCs, GCC, the PSCI
+power domains), whose sync_state() then waits for that consumer forever.
+Inside the container the sink never becomes a device, its subtree is never
+parsed for suppliers, and interconnect provider counting skips it.
+
 The rebuilt DTB is decompiled again and verified: __symbols__ count and sink
-phandle, byte-faithful root identity, and full __fixups__ coverage for every
-dtbo entry. Input and output identity goes into manifest.json.
+phandle, the container status, byte-faithful root identity, and full
+__fixups__ coverage for every dtbo entry. Input and output identity goes into
+manifest.json.
 """
 import argparse
 import hashlib
@@ -44,8 +57,9 @@ BASE_DIR = WS / 'out/stock-c34/trees'
 IDENTITY_BASE = BASE_DIR / 'base-06.dtb'
 DTBO_DIR = WS / 'out/stock-c34/dtbo'
 DEFAULT_OUT = WS / 'out/abl-dtb'
-SINK_NAME = 'erhai-abl-overlay-sink'
-SINK_PATH = '/' + SINK_NAME
+CONTAINER_NAME = 'erhai-abl'
+SINK_NAME = 'overlay-sink'
+SINK_PATH = f'/{CONTAINER_NAME}/{SINK_NAME}'
 SINK_PHANDLE = 0x40000000
 IDENTITY_PROPS = ('qcom,msm-id', 'qcom,board-id')
 DT_TABLE_MAGIC = 0xd7b7ab1e
@@ -82,31 +96,37 @@ def opening_re(node):
 
 
 def child_node_properties(text, node):
-    """Direct properties of the root child NODE as {name: value_text}.
+    """Direct properties of NODE as {name: value_text}.
 
-    Line-based brace state machine: node openings end their line with '{',
-    closings start with '}'. Value text is kept verbatim (strings, cell
-    arrays and string lists alike); only the trailing semicolon is dropped.
+    NODE is a root child name or a path of node names ("a/b"). Line-based
+    brace state machine: node openings end their line with '{', closings
+    start with '}'. Value text is kept verbatim (strings, cell arrays and
+    string lists alike); only the trailing semicolon is dropped.
     """
+    names = node.strip('/').split('/')
+    openings = [opening_re(name) for name in names]
     depth = 0
-    target = None
+    matched = 0  # how many leading path components are open right now
+    target = len(names) + 1
     props = {}
-    opening = opening_re(node)
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.endswith('{'):
             depth += 1
-            if target is None and depth == 2 and opening.match(stripped):
-                target = depth
+            if matched == depth - 2 and matched < len(names) and \
+                    openings[matched].match(stripped):
+                matched += 1
         elif stripped.startswith('}'):
-            if target == depth:
+            if matched == len(names) and depth == target:
                 return props
+            if matched and matched == depth - 1:
+                matched -= 1
             depth -= 1
-        elif target == depth:
+        elif matched == len(names) and depth == target:
             match = PROP_RE.match(stripped)
             if match:
                 props[match.group(1)] = match.group(2)
-    if target is None:
+    if matched < len(names):
         die(f'node "{node}" not found in decompiled text')
     die(f'node "{node}" is not closed in decompiled text')
 
@@ -177,7 +197,7 @@ def check_mainline(text):
     present = [name for name in IDENTITY_PROPS if name in root_properties(text)]
     if present:
         die(f'mainline root already defines {present}; refusing to override real data')
-    for node in ('__symbols__', SINK_NAME):
+    for node in ('__symbols__', CONTAINER_NAME):
         if any(opening_re(node).match(line.strip()) for line in text.splitlines()):
             die(f'mainline DTB already has a {node} node')
     phandles = {int(match.group(1), 0) for match in PHANDLE_RE.finditer(text)}
@@ -187,8 +207,11 @@ def check_mainline(text):
 
 def inject(text, union, identity):
     props = ['\t' + identity[name] for name in IDENTITY_PROPS if name in identity]
-    subnodes = [f'\t{SINK_NAME} {{',
-                f'\t\tlinux,phandle = <{SINK_PHANDLE:#x}>;',
+    subnodes = [f'\t{CONTAINER_NAME} {{',
+                '\t\tstatus = "disabled";',
+                f'\t\t{SINK_NAME} {{',
+                f'\t\t\tlinux,phandle = <{SINK_PHANDLE:#x}>;',
+                '\t\t};',
                 '\t};',
                 '\t__symbols__ {']
     subnodes += [f'\t\t{name} = "{SINK_PATH}";' for name in union]
@@ -222,9 +245,12 @@ def verify(dtc, final_dtb, union, identity, fixups_by_entry):
     wrong = [name for name, value in symbols.items() if value != f'"{SINK_PATH}"']
     if wrong:
         die(f'{len(wrong)} __symbols__ entries do not point to {SINK_PATH}')
-    sink = child_node_properties(text, SINK_NAME)
+    sink = child_node_properties(text, SINK_PATH)
     if sink.get('linux,phandle') != f'<{SINK_PHANDLE:#x}>':
         die(f'sink linux,phandle is {sink.get("linux,phandle")}, want {SINK_PHANDLE:#x}')
+    container = child_node_properties(text, CONTAINER_NAME)
+    if container != {'status': '"disabled"'}:
+        die(f'{CONTAINER_NAME} must carry only status = "disabled", has {container}')
     root = root_properties(text)
     for name, statement in identity.items():
         if root.get(name) != statement:
@@ -236,10 +262,11 @@ def verify(dtc, final_dtb, union, identity, fixups_by_entry):
             die(f'{name}: {len(missing)} __fixups__ symbols absent from the final DTB, '
                 f'first: {missing[0]}')
         covered += 1
-    print(f'verification: __symbols__={len(symbols)} sink=ok identity=ok '
+    print(f'verification: __symbols__={len(symbols)} sink=ok container=disabled identity=ok '
           f'fixups coverage {covered}/{len(fixups_by_entry)} dtbo entries')
     return {'symbols_count': len(symbols),
             'sink_phandle': f'{SINK_PHANDLE:#x}',
+            'container': f'/{CONTAINER_NAME} status "disabled", no compatible',
             'root_identity': {name: root[name] for name in identity},
             'fixups_coverage': f'{covered}/{len(fixups_by_entry)} dtbo entries fully covered'}
 
@@ -308,6 +335,7 @@ def main():
             'root_identity': {'source': str(args.identity_base.resolve()),
                               'copied': identity, 'absent_in_source_skipped': skipped},
             'sink': {'name': SINK_NAME, 'path': SINK_PATH,
+                     'container': f'/{CONTAINER_NAME}',
                      'linux,phandle': f'{SINK_PHANDLE:#x}'},
             'outputs_sha256': {'erhai-abl.dts': sha(out / 'erhai-abl.dts'),
                                'erhai-abl.dtb': sha(final_dtb)},
