@@ -453,7 +453,10 @@ def stage_firmware(root, manifest):
 # sound/soc/qcom/qdsp6/q6apm-dai.c.  At open() the PCM core intersects them
 # with the capabilities the topology gives the front end; an empty
 # intersection fails every open() with EINVAL and the kernel logs nothing.
-Q6APM_DAI_STREAMS = {'Playback': ({'S16_LE', 'S24_LE'}, 2, 8),
+# Playback advertises up to eight channels, but audioreach_pcm_set_media_format()
+# and audioreach_shmem_set_media_format() in audioreach.c refuse more than
+# four, so a wider stream opens and then fails at prepare ("Invalid channels").
+Q6APM_DAI_STREAMS = {'Playback': ({'S16_LE', 'S24_LE'}, 2, 4),
                      'Capture': ({'S16_LE', 'S24_LE'}, 2, 4)}
 
 
@@ -532,6 +535,153 @@ def check_topology(text, kernel_widgets):
             die(f'topology PCM {name!r} reaches no back-end DAI widget')
 
 
+# Binary topology layout: include/uapi/sound/asoc.h and snd_ar_tokens.h.
+TPLG_MAGIC = 0x41536F43
+TPLG_TYPE_DAPM_WIDGET = 5
+TPLG_VALUE_TUPLES = {2, 3, 4, 5}        # bool, byte, word, short: token/value pairs
+AR_TKN_U32_MODULE_ID = 200
+AR_TKN_U32_MODULE_INSTANCE_ID = 201
+AR_TPLG_MODULE_CFG_TYPE = 0x01001006    # SND_SOC_AR_TPLG_MODULE_CFG_TYPE
+AR_MODULE_ID_MFC = 0x07001015
+AR_PARAM_ID_CHMIXER_COEFF = 0x0800101F  # AudioReach chmixer_common_api.h
+Q14_UNITY = 0x4000
+# The channel maps the kernel sends with every PCM and MFC media format:
+# audioreach_set_default_channel_mapping(), i.e. q6dsp_map_channels() in
+# q6dsp-common.c with mono as FL.  The MFC applies a mixing table only when
+# its maps equal the stream's; any other table is silently ignored and the
+# built-in ITU-R BS.775 coefficients are used instead.
+KERNEL_CHANNEL_MAPS = {1: (1,), 2: (1, 2), 3: (1, 2, 3), 4: (1, 2, 4, 5),
+                       5: (1, 2, 3, 4, 5), 6: (1, 2, 6, 3, 4, 5),
+                       8: (1, 2, 6, 3, 4, 5, 8, 9)}
+
+
+def topology_widgets(blob):
+    """(name, private data) of each DAPM widget in a binary topology."""
+    pos = 0
+    while pos < len(blob):
+        magic, _, _, kind, size, _, payload, _, count = struct.unpack_from('<9I', blob, pos)
+        if magic != TPLG_MAGIC:
+            die(f'topology binary: bad block magic at {pos}')
+        at = pos + size
+        pos = at + payload
+        if kind != TPLG_TYPE_DAPM_WIDGET:
+            continue
+        for _ in range(count):
+            wsize = struct.unpack_from('<I', blob, at)[0]
+            name = blob[at + 8:at + 52].split(b'\0')[0].decode()
+            controls, private = struct.unpack_from('<2I', blob, at + wsize - 8)
+            yield name, blob[at + wsize:at + wsize + private]
+            at += wsize + private
+            for _ in range(controls):
+                # Each control struct starts with a header whose first word is
+                # its size; the struct's own size follows it, and the struct
+                # ends with its private data's size.
+                hsize = struct.unpack_from('<I', blob, at)[0]
+                csize = struct.unpack_from('<I', blob, at + hsize)[0]
+                at += csize + struct.unpack_from('<I', blob, at + csize - 4)[0]
+        if at != pos:
+            die('topology binary: widget block does not add up')
+
+
+def module_config(name, private):
+    """The module tokens and the configuration blob of one widget's private data.
+
+    Mirrors audioreach_get_module_priv_data(): the private data is a run of
+    vendor arrays, each sized including its header, and a module
+    configuration is the array of type SND_SOC_AR_TPLG_MODULE_CFG_TYPE.
+    """
+    tokens, blob, at = {}, None, 0
+    while at < len(private):
+        if len(private) - at < 12:
+            die(f'topology widget {name!r}: {len(private) - at} stray private bytes')
+        size, kind, count = struct.unpack_from('<3I', private, at)
+        if size < 12 or size > len(private) - at:
+            die(f'topology widget {name!r}: vendor array of {size} bytes at {at}')
+        if kind == AR_TPLG_MODULE_CFG_TYPE:
+            if blob is not None or size <= 16:
+                die(f'topology widget {name!r}: module configuration is repeated or empty')
+            blob = private[at + 16:at + size]
+        elif kind in TPLG_VALUE_TUPLES and size == 12 + 8 * count:
+            for i in range(count):
+                token, value = struct.unpack_from('<2I', private, at + 12 + 8 * i)
+                tokens[token] = value
+        at += size
+    return tokens, blob
+
+
+def chmixer_tables(name, payload):
+    """Decode PARAM_ID_CHMIXER_COEFF: [(out map, in map, rows)]."""
+    tables, at = [], 4
+    for _ in range(struct.unpack_from('<I', payload)[0]):
+        outs, ins = struct.unpack_from('<2H', payload, at)
+        count = outs + ins + outs * ins
+        if not outs or not ins or at + 4 + 2 * count > len(payload):
+            die(f'topology widget {name!r}: chmixer table overruns its parameter')
+        words = struct.unpack_from(f'<{count}H', payload, at + 4)
+        rows = [words[outs + ins + r * ins:outs + ins + (r + 1) * ins] for r in range(outs)]
+        if any(c > Q14_UNITY for row in rows for c in row):
+            die(f'topology widget {name!r}: chmixer coefficient above Q14 unity')
+        tables.append((words[:outs], words[outs:outs + ins], rows))
+        at += (4 + 2 * count + 3) & ~3
+    if payload[at:].strip(b'\0'):
+        die(f'topology widget {name!r}: bytes after the chmixer tables')
+    return tables
+
+
+def check_module_configs(blob):
+    """Refuse module configurations the kernel or the DSP would misapply.
+
+    Returns {widget: {param id: payload or decoded tables}} for the widgets
+    that carry one.  The kernel sends a blob verbatim as APM parameters, so
+    each must address its own module; a channel mixing table must use the
+    maps the kernel sends or the MFC falls back to its default upmix.
+    """
+    found = {}
+    for name, private in topology_widgets(blob):
+        tokens, config = module_config(name, private)
+        if config is None:
+            continue
+        module = tokens.get(AR_TKN_U32_MODULE_ID)
+        if module != AR_MODULE_ID_MFC:
+            die(f'topology widget {name!r}: the kernel sends a module configuration '
+                f'only to MFC modules, not to {module:#x}' if module is not None else
+                f'topology widget {name!r}: module configuration without a module')
+        params, at = {}, 0
+        while len(config) - at >= 16:
+            iid, pid, psize, error = struct.unpack_from('<4I', config, at)
+            if iid != tokens.get(AR_TKN_U32_MODULE_INSTANCE_ID) or error:
+                die(f'topology widget {name!r}: parameter {pid:#x} addresses instance '
+                    f'{iid:#x}, not its own')
+            payload = config[at + 16:at + 16 + psize]
+            if len(payload) != psize or psize % 4:
+                die(f'topology widget {name!r}: parameter {pid:#x} size {psize}')
+            params[pid] = (chmixer_tables(name, payload) if pid == AR_PARAM_ID_CHMIXER_COEFF
+                           else payload)
+            at += 16 + ((psize + 7) & ~7)
+        if config[at:].strip(b'\0') or not params:
+            die(f'topology widget {name!r}: module configuration does not parse')
+        for out_map, in_map, _ in params.get(AR_PARAM_ID_CHMIXER_COEFF, ()):
+            if (tuple(out_map) != KERNEL_CHANNEL_MAPS.get(len(out_map)) or
+                    tuple(in_map) != KERNEL_CHANNEL_MAPS.get(len(in_map))):
+                die(f'topology widget {name!r}: chmixer maps {list(in_map)} -> '
+                    f'{list(out_map)} are not the ones the kernel sends; the MFC '
+                    'would ignore the table')
+        found[name] = params
+    return found
+
+
+def describe_chmixer(params):
+    """'L R L R ...' per output of each mixing table, for the build log."""
+    names = {}
+    for _, in_map, rows in params.get(AR_PARAM_ID_CHMIXER_COEFF, ()):
+        labels = {1: 'L', 2: 'R'}
+        cells = ['+'.join(labels.get(in_map[i], str(in_map[i])) +
+                          ('' if c == Q14_UNITY else f'*{c / Q14_UNITY:.3g}')
+                          for i, c in enumerate(row) if c) or '-' for row in rows]
+        names[f'{len(in_map)}->{len(rows)}'] = ' '.join(cells)
+    return names
+
+
 def stage_audio(root, archive):
     inputs = PACKAGING / 'audio'
     source = json.loads((inputs / 'source.json').read_text())
@@ -561,6 +711,9 @@ def stage_audio(root, archive):
         run(['alsatplg', '-c', str(conf), '-o', str(target)])
         target.chmod(0o644)
         run(['alsatplg', '-d', str(target), '-o', str(work / 'decoded.conf')])
+        for widget, params in check_module_configs(target.read_bytes()).items():
+            for shape, slots in describe_chmixer(params).items():
+                print(f'  topology: {widget} chmixer {shape}: {slots}')
         doc = root / 'usr/share/doc/erhai-audio'
         install_file(upstream / 'LICENSE.BSD-3-Clause', doc / 'copyright', 0o644)
         local_sources = {}

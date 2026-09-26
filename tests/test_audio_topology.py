@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
-"""erhai-audio: the topology guard against unopenable PCMs and dangling routes."""
+"""erhai-audio: the topology guard against unopenable PCMs, dangling routes
+and module configurations the kernel or the DSP would misapply."""
 import importlib.machinery
 import importlib.util
 import json
@@ -41,6 +42,23 @@ def recipe_conf():
                               capture_output=True, text=True, check=True).stdout
 
 
+def compile_conf(conf):
+    """The binary alsatplg makes of a topology conf."""
+    if not shutil.which('alsatplg'):
+        raise unittest.SkipTest('alsatplg is missing')
+    with tempfile.TemporaryDirectory() as directory:
+        source, target = Path(directory) / 't.conf', Path(directory) / 't.bin'
+        source.write_text(conf)
+        subprocess.run(['alsatplg', '-c', str(source), '-o', str(target)],
+                       capture_output=True, check=True)
+        return target.read_bytes()
+
+
+def mix(rows, frame):
+    """What the MFC puts on each output for one input frame (Q14 rows)."""
+    return [sum(c * x for c, x in zip(row, frame)) / build.Q14_UNITY for row in rows]
+
+
 class TopologyGuard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -75,9 +93,90 @@ class TopologyGuard(unittest.TestCase):
         cut = self.conf.replace('"device120.logger1, , device120.codec_dma_tx1"', '')
         self.assertIn("'MultiMedia3 Capture' reaches no back-end", self.rejects(cut))
 
+    def test_front_end_wider_than_the_media_format_commands(self):
+        # The 0.1.40 speaker graph: eight channels opened, then prepare failed
+        # with "Invalid channels (8)" before any command reached the DSP.
+        start = self.conf.index('SectionPCMCapabilities."MultiMedia1 Playback"')
+        head, tail = self.conf[:start], self.conf[start:]
+        wide = head + tail.replace('channels_min "2"', 'channels_min "8"', 1).replace(
+            'channels_max "2"', 'channels_max "8"', 1)
+        self.assertIn('channel range outside q6apm-dai 2..4', self.rejects(wide))
+
     def test_every_declared_back_end_is_used(self):
         self.assertIn('Quinary TDM0 Playback',
                       self.rejects(self.conf, WIDGETS + ['Quinary TDM0 Playback']))
+
+
+class SpeakerMixing(unittest.TestCase):
+    """The stereo front end spread over the eight TDM slots inside the DSP."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conf = recipe_conf()
+        cls.blob = compile_conf(cls.conf)
+
+    def rejects(self, conf):
+        with self.assertRaises(SystemExit) as caught:
+            build.check_module_configs(compile_conf(conf))
+        return str(caught.exception)
+
+    def test_stereo_front_end_and_eight_slot_back_end(self):
+        start = self.conf.index('SectionPCMCapabilities."MultiMedia1 Playback"')
+        caps = self.conf[start:self.conf.index('}', start)]
+        self.assertIn('channels_min "2"', caps)
+        self.assertIn('channels_max "2"', caps)
+        tdm = self.conf[self.conf.index('SectionVendorTuples."device40.tdm_rx1_tuples"'):]
+        self.assertIn('AR_TKN_U16_MODULE_NSLOTS_PER_FRAME "8"', tdm)
+        self.assertIn('AR_TKN_U32_MODULE_SLOT_MASK "0xff"', tdm)
+
+    def test_left_on_even_slots_right_on_odd(self):
+        configs = build.check_module_configs(self.blob)
+        self.assertEqual(list(configs), ['device40.mfc1'])
+        tables = configs['device40.mfc1'][build.AR_PARAM_ID_CHMIXER_COEFF]
+        self.assertEqual(len(tables), 1)
+        out_map, in_map, rows = tables[0]
+        self.assertEqual(tuple(in_map), build.KERNEL_CHANNEL_MAPS[2])
+        self.assertEqual(tuple(out_map), build.KERNEL_CHANNEL_MAPS[8])
+        self.assertEqual(mix(rows, (1, 0)), [1, 0] * 4)
+        self.assertEqual(mix(rows, (0, 1)), [0, 1] * 4)
+        # Same as the stock ACDB table (speaker manifest, stereo_mixing).
+        self.assertEqual(rows, [(0x4000, 0), (0, 0x4000)] * 4)
+
+    def test_blob_sits_behind_the_module_tokens(self):
+        # audioreach_get_{sg,cont,module}_array() stop at the first array
+        # holding their token; the blob must come after all of them.
+        private = dict(build.topology_widgets(self.blob))['device40.mfc1']
+        tokens, config = build.module_config('device40.mfc1', private)
+        self.assertEqual(tokens[build.AR_TKN_U32_MODULE_INSTANCE_ID], 0x6101)
+        self.assertEqual(private[-(16 + len(config)):][4:8], (0x01001006).to_bytes(4, 'little'))
+        self.assertEqual(len(config) % 8, 0)
+
+    def test_only_the_speaker_mfc_changes(self):
+        # The stream MFC and the capture graph carry no configuration.
+        for name, private in build.topology_widgets(self.blob):
+            if name != 'device40.mfc1':
+                self.assertIsNone(build.module_config(name, private)[1], name)
+
+    def test_maps_the_kernel_does_not_send(self):
+        # Stock ACDB output map (FL FR FC LS RS CS LB RB) differs from the
+        # kernel default; the MFC would ignore such a table.
+        stock = self.conf.replace('0x00020001, 0x00030006, 0x00050004, 0x00090008',
+                                  '0x00020001, 0x00040003, 0x00070005, 0x00090008')
+        self.assertIn('not the ones the kernel sends', self.rejects(stock))
+
+    def test_blob_addressed_to_another_module(self):
+        other = self.conf.replace('0x00006101, 0x0800101f', '0x00006102, 0x0800101f')
+        self.assertIn('addresses instance 0x6102', self.rejects(other))
+
+    def test_blob_size_must_match(self):
+        short = self.conf.replace('words "0x00000060, 0x01001006', 'words "0x00000064, 0x01001006')
+        self.assertIn('vendor array', self.rejects(short))
+
+    def test_coefficient_above_unity(self):
+        loud = self.conf.replace('0x00004000, 0x40000000, 0x00004000, 0x40000000,\n\t\t0x00004000',
+                                 '0x00004001, 0x40000000, 0x00004000, 0x40000000,\n\t\t0x00004000', 1)
+        self.assertNotEqual(loud, self.conf)
+        self.assertIn('above Q14 unity', self.rejects(loud))
 
 
 if __name__ == '__main__':
