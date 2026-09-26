@@ -197,8 +197,11 @@ meson install -C /build/hex --no-rebuild --destdir "$stage"
 # libssc: installed into the build root as well, for iio-sensor-proxy's
 # pkg-config lookup; the build root is disposable.
 unpack @SSC_ARCHIVE@
+apply @SSC_DIR@ @SSC_PATCHES@
 setup /build/ssc /build/tree/@SSC_DIR@
 meson compile -C /build/ssc -j @JOBS@
+# Only the request-encoding test: the others need the mock SSC server.
+/build/ssc/tests/tests-delivery
 meson install -C /build/ssc --no-rebuild
 meson install -C /build/ssc --no-rebuild --destdir "$stage"
 

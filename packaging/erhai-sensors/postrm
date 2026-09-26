@@ -4,6 +4,8 @@ set -e
 
 case "$1" in
 remove|purge)
+	# A stream delivery selected for this boot has no reader any more.
+	rm -rf /run/erhai-sensors-ssc
 	if [ -d /run/systemd/system ]; then
 		systemctl daemon-reload || true
 	fi

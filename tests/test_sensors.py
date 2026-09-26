@@ -17,6 +17,7 @@ TREE = REPO / 'packaging/erhai-sensors/tree'
 INPUTS = REPO / 'packaging/sensors'
 GATE = TREE / 'usr/libexec/erhai-sensors/ssc-sample-gate'
 IMPORT = TREE / 'usr/sbin/erhai-sensors-import-registry'
+DELIVERY = TREE / 'usr/sbin/erhai-sensors-ssc-delivery'
 
 
 def load(path, name):
@@ -212,6 +213,81 @@ class RecipeTest(unittest.TestCase):
         self.assertIn('SYMLINK+="erhai-sensors-fastrpc"', rule)
         # Sensor interrupt lines belong to the DSP; nothing here claims a GPIO.
         self.assertNotIn('gpio', rule.lower())
+
+
+class DeliveryTest(unittest.TestCase):
+    """erhai-sensors-ssc-delivery: the per-boot stream delivery switch."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.env_dir = self.dir / 'run/erhai-sensors-ssc'
+        self.calls = self.dir / 'calls'
+        systemctl = self.dir / 'systemctl'
+        systemctl.write_text(f'#!/bin/sh\necho "$*" >> {self.calls}\n'
+                             'case $1 in show) echo ActiveState=active; echo MainPID=42 ;; esac\n')
+        systemctl.chmod(0o755)
+        self.environ = dict(os.environ, ERHAI_SENSORS_SSC_ENV_DIR=str(self.env_dir),
+                            ERHAI_SENSORS_SYSTEMCTL=str(systemctl), LC_ALL='C')
+
+    def tearDown(self):
+        subprocess.run(['rm', '-rf', str(self.dir)], check=True)
+
+    def run_tool(self, *args):
+        return subprocess.run([str(DELIVERY), *args], env=self.environ, capture_output=True,
+                              text=True)
+
+    def restarts(self):
+        if not self.calls.exists():
+            return []
+        return [line for line in self.calls.read_text().splitlines() if 'restart' in line]
+
+    def settings(self):
+        return [line for line in (self.env_dir / 'env').read_text().splitlines()
+                if not line.startswith('#')]
+
+    def test_nowakeup_writes_the_environment_and_restarts_only_the_proxy(self):
+        result = self.run_tool('nowakeup')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.settings(), ['SSC_SUSPEND_MODE=nowakeup'])
+        self.assertEqual(self.restarts(), ['try-restart iio-sensor-proxy.service'])
+        self.assertIn('selection: SSC_SUSPEND_MODE=nowakeup', result.stdout)
+
+    def test_batching_and_default(self):
+        self.assertEqual(self.run_tool('--no-restart', 'wakeup', '2000000', '4000000').returncode, 0)
+        self.assertEqual(self.settings(), ['SSC_SUSPEND_MODE=wakeup', 'SSC_BATCH_PERIOD_US=2000000',
+                                           'SSC_FLUSH_PERIOD_US=4000000'])
+        self.assertEqual(self.restarts(), [])
+        result = self.run_tool('default')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.env_dir / 'env').exists())
+        self.assertIn('selection: default', result.stdout)
+        self.assertEqual(self.restarts(), ['try-restart iio-sensor-proxy.service'])
+
+    def test_invalid_arguments_change_nothing(self):
+        for args in (['sleep'], ['nowakeup', '0'], ['nowakeup', '2s'], ['nowakeup', '0200'],
+                     ['nowakeup', '4294967296'], ['nowakeup', '1', '2', '3'], ['status', 'x'], []):
+            with self.subTest(args=args):
+                result = self.run_tool(*args)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse((self.env_dir / 'env').exists())
+                self.assertEqual(self.restarts(), [])
+        self.assertEqual(self.run_tool('--no-restart', 'nowakeup', '4294967295').returncode, 0)
+
+    def test_names_match_the_proxy_unit_and_libssc(self):
+        text = DELIVERY.read_text()
+        dropin = (TREE / 'usr/lib/systemd/system/iio-sensor-proxy.service.d/80-erhai-ssc.conf').read_text()
+        self.assertIn('ENV_DIR=${ERHAI_SENSORS_SSC_ENV_DIR:-/run/erhai-sensors-ssc}', text)
+        self.assertIn('EnvironmentFile=-/run/erhai-sensors-ssc/env', dropin)
+        lock = json.loads((INPUTS / 'sources.json').read_text())
+        libssc = next(s for s in lock['sources'] if s['name'] == 'libssc')
+        patch = (INPUTS / libssc['patches'][0]['file']).read_text()
+        for name in ('SSC_SUSPEND_MODE', 'SSC_BATCH_PERIOD_US', 'SSC_FLUSH_PERIOD_US'):
+            self.assertIn(f'"{name}"', patch)
+            self.assertIn(name + '=', text)
+        # Default requests stay those of libssc 0.4.4: wake-up, no batching.
+        self.assertIn('config_msg.suspend_mode = streaming ? delivery->suspend_mode : '
+                      'SSC_SUSPEND_MODE_WAKEUP;', patch)
+        self.assertIn('+#define SSC_SUSPEND_MODE_NO_WAKEUP\t1', patch)
 
 
 def scalars(sc):

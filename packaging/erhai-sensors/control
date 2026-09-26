@@ -18,5 +18,9 @@ Description: OnePlus Pad 2 Pro (erhai) accelerometer for screen rotation
  The per-unit sensor registry is not included. Import it once with
  erhai-sensors-import-registry from a copy of this tablet's Android persist
  data; until then the stack stays inactive. Only the accelerometer is
- exposed. This is an offline candidate: the mount matrix and the start-up
- sequence have not yet been validated on hardware.
+ exposed. The start-up sequence and gravity samples have been checked on
+ hardware; the mount matrix is still to be confirmed by rotating the tablet.
+ .
+ For measurements, erhai-sensors-ssc-delivery can switch the accelerometer
+ stream to non-wakeup delivery or batching for the current boot only; by
+ default libssc requests wake-up delivery without batching, as upstream.

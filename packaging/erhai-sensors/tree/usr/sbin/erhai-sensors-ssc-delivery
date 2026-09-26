@@ -1,0 +1,99 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Select, for this boot only, how the ADSP sensor core delivers the
+# accelerometer stream to iio-sensor-proxy. Meant for measuring the ADSP
+# wake-ups the stream causes, one setting at a time.
+#
+#   erhai-sensors-ssc-delivery [--no-restart] status
+#   erhai-sensors-ssc-delivery [--no-restart] default
+#   erhai-sensors-ssc-delivery [--no-restart] wakeup|nowakeup [BATCH_US [FLUSH_US]]
+#
+# The choice is an environment file under /run that the proxy unit reads
+# (drop-in 80-erhai-ssc.conf); libssc turns it into the delivery type and
+# batching of its stream requests. "default" removes the file, and so does
+# the next boot: libssc then sends wake-up delivery without batching, as
+# upstream. A running proxy is restarted to apply the change; the file
+# server stays attached and the ADSP is not restarted.
+set -eu
+
+ENV_DIR=${ERHAI_SENSORS_SSC_ENV_DIR:-/run/erhai-sensors-ssc}
+ENV_FILE=$ENV_DIR/env
+SYSTEMCTL=${ERHAI_SENSORS_SYSTEMCTL:-systemctl}
+UNIT=iio-sensor-proxy.service
+NAME=${0##*/}
+
+usage() {
+	echo "usage: $NAME [--no-restart] status|default|wakeup|nowakeup [BATCH_US [FLUSH_US]]" >&2
+	exit 2
+}
+
+period() {
+	case $1 in
+	'' | *[!0-9]* | 0*)
+		echo "$NAME: $2 must be a positive whole number of microseconds" >&2
+		exit 2
+		;;
+	esac
+	# Both periods are uint32 on the wire.
+	if [ ${#1} -gt 10 ] || ! awk -v v="$1" 'BEGIN { exit !(v + 0 <= 4294967295) }'; then
+		echo "$NAME: $2 exceeds 4294967295 us" >&2
+		exit 2
+	fi
+}
+
+show() {
+	if [ -f "$ENV_FILE" ]; then
+		echo "selection: $(grep -v '^#' "$ENV_FILE" | tr '\n' ' ')"
+	else
+		echo 'selection: default (wake-up delivery, no batching)'
+	fi
+	echo "proxy: $("$SYSTEMCTL" show "$UNIT" -p ActiveState -p MainPID | tr '\n' ' ')"
+}
+
+apply() {
+	# Only a running proxy is restarted; one that is stopped (for example
+	# because the sample gate failed) stays stopped.
+	[ "$restart" = yes ] && "$SYSTEMCTL" try-restart "$UNIT"
+	show
+}
+
+restart=yes
+if [ "${1:-}" = --no-restart ]; then
+	restart=no
+	shift
+fi
+[ $# -ge 1 ] || usage
+mode=$1
+shift
+
+case $mode in
+status)
+	[ $# -eq 0 ] || usage
+	show
+	;;
+default)
+	[ $# -eq 0 ] || usage
+	rm -f "$ENV_FILE"
+	apply
+	;;
+wakeup | nowakeup)
+	[ $# -le 2 ] || usage
+	[ $# -lt 1 ] || period "$1" BATCH_US
+	[ $# -lt 2 ] || period "$2" FLUSH_US
+	umask 022
+	mkdir -p "$ENV_DIR"
+	tmp=$ENV_FILE.new
+	{
+		echo "# Written by $NAME for this boot; \"$NAME default\" removes it."
+		echo "SSC_SUSPEND_MODE=$mode"
+		[ $# -lt 1 ] || echo "SSC_BATCH_PERIOD_US=$1"
+		[ $# -lt 2 ] || echo "SSC_FLUSH_PERIOD_US=$2"
+	} >"$tmp"
+	mv -f "$tmp" "$ENV_FILE"
+	apply
+	;;
+*)
+	usage
+	;;
+esac
