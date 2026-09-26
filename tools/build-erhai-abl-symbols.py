@@ -28,8 +28,16 @@ power domains), whose sync_state() then waits for that consumer forever.
 Inside the container the sink never becomes a device, its subtree is never
 parsed for suppliers, and interconnect provider counting skips it.
 
+--legacy-sink rebuilds the layout of the packaging DTBs up to 0.1.49 instead:
+the sink as the root child /erhai-abl-overlay-sink, with every symbol naming
+it and no container.  It exists only to build comparison boot images that
+differ from a current candidate in nothing but the sink placement (for
+example, to observe something on the old sync_state() baseline); a package
+set must not be built from it.  The manifest records which layout was built.
+
 The rebuilt DTB is decompiled again and verified: __symbols__ count and sink
-phandle, the container status, byte-faithful root identity, and full
+phandle, the sink layout (the container status, or no container with
+--legacy-sink), byte-faithful root identity, and full
 __fixups__ coverage for every dtbo entry. Input and output identity goes into
 manifest.json.
 """
@@ -60,6 +68,9 @@ DEFAULT_OUT = WS / 'out/abl-dtb'
 CONTAINER_NAME = 'erhai-abl'
 SINK_NAME = 'overlay-sink'
 SINK_PATH = f'/{CONTAINER_NAME}/{SINK_NAME}'
+# The root-level sink of the packaging DTBs up to 0.1.49 (--legacy-sink).
+LEGACY_SINK_NAME = 'erhai-abl-overlay-sink'
+LEGACY_SINK_PATH = f'/{LEGACY_SINK_NAME}'
 SINK_PHANDLE = 0x40000000
 IDENTITY_PROPS = ('qcom,msm-id', 'qcom,board-id')
 DT_TABLE_MAGIC = 0xd7b7ab1e
@@ -193,11 +204,15 @@ def symbol_union(dtc, base_dir, entries):
     return by_base, by_entry, union
 
 
-def check_mainline(text):
+def sink_path(legacy=False):
+    return LEGACY_SINK_PATH if legacy else SINK_PATH
+
+
+def check_mainline(text, legacy=False):
     present = [name for name in IDENTITY_PROPS if name in root_properties(text)]
     if present:
         die(f'mainline root already defines {present}; refusing to override real data')
-    for node in ('__symbols__', CONTAINER_NAME):
+    for node in ('__symbols__', LEGACY_SINK_NAME if legacy else CONTAINER_NAME):
         if any(opening_re(node).match(line.strip()) for line in text.splitlines()):
             die(f'mainline DTB already has a {node} node')
     phandles = {int(match.group(1), 0) for match in PHANDLE_RE.finditer(text)}
@@ -205,16 +220,21 @@ def check_mainline(text):
         die(f'sink phandle {SINK_PHANDLE:#x} is already used by the mainline DTB')
 
 
-def inject(text, union, identity):
+def inject(text, union, identity, legacy=False):
     props = ['\t' + identity[name] for name in IDENTITY_PROPS if name in identity]
-    subnodes = [f'\t{CONTAINER_NAME} {{',
-                '\t\tstatus = "disabled";',
-                f'\t\t{SINK_NAME} {{',
-                f'\t\t\tlinux,phandle = <{SINK_PHANDLE:#x}>;',
-                '\t\t};',
-                '\t};',
-                '\t__symbols__ {']
-    subnodes += [f'\t\t{name} = "{SINK_PATH}";' for name in union]
+    if legacy:
+        subnodes = [f'\t{LEGACY_SINK_NAME} {{',
+                    f'\t\tlinux,phandle = <{SINK_PHANDLE:#x}>;',
+                    '\t};']
+    else:
+        subnodes = [f'\t{CONTAINER_NAME} {{',
+                    '\t\tstatus = "disabled";',
+                    f'\t\t{SINK_NAME} {{',
+                    f'\t\t\tlinux,phandle = <{SINK_PHANDLE:#x}>;',
+                    '\t\t};',
+                    '\t};']
+    subnodes += ['\t__symbols__ {']
+    subnodes += [f'\t\t{name} = "{sink_path(legacy)}";' for name in union]
     subnodes += ['\t};']
     lines = text.splitlines()
     depth = 0
@@ -237,20 +257,36 @@ def inject(text, union, identity):
     die('root node is not closed in the mainline decompile')
 
 
-def verify(dtc, final_dtb, union, identity, fixups_by_entry):
+def check_layout(text, legacy=False):
+    """The sink where the chosen layout puts it, and nothing of the other layout.
+
+    Returns the container description for the report.
+    """
+    path = sink_path(legacy)
+    symbols = child_node_properties(text, '__symbols__')
+    wrong = [name for name, value in symbols.items() if value != f'"{path}"']
+    if wrong:
+        die(f'{len(wrong)} __symbols__ entries do not point to {path}')
+    sink = child_node_properties(text, path)
+    if sink.get('linux,phandle') != f'<{SINK_PHANDLE:#x}>':
+        die(f'sink linux,phandle is {sink.get("linux,phandle")}, want {SINK_PHANDLE:#x}')
+    other = CONTAINER_NAME if legacy else LEGACY_SINK_NAME
+    if any(opening_re(other).match(line.strip()) for line in text.splitlines()):
+        die(f'the {"legacy" if legacy else "contained"} layout must not have a {other} node')
+    if legacy:
+        return 'none (legacy root-level sink, the layout up to 0.1.49)'
+    container = child_node_properties(text, CONTAINER_NAME)
+    if container != {'status': '"disabled"'}:
+        die(f'{CONTAINER_NAME} must carry only status = "disabled", has {container}')
+    return f'/{CONTAINER_NAME} status "disabled", no compatible'
+
+
+def verify(dtc, final_dtb, union, identity, fixups_by_entry, legacy=False):
     text = decompile(dtc, final_dtb)
     symbols = child_node_properties(text, '__symbols__')
     if set(symbols) != set(union):
         die(f'final __symbols__ has {len(symbols)} entries, union has {len(union)}')
-    wrong = [name for name, value in symbols.items() if value != f'"{SINK_PATH}"']
-    if wrong:
-        die(f'{len(wrong)} __symbols__ entries do not point to {SINK_PATH}')
-    sink = child_node_properties(text, SINK_PATH)
-    if sink.get('linux,phandle') != f'<{SINK_PHANDLE:#x}>':
-        die(f'sink linux,phandle is {sink.get("linux,phandle")}, want {SINK_PHANDLE:#x}')
-    container = child_node_properties(text, CONTAINER_NAME)
-    if container != {'status': '"disabled"'}:
-        die(f'{CONTAINER_NAME} must carry only status = "disabled", has {container}')
+    container = check_layout(text, legacy)
     root = root_properties(text)
     for name, statement in identity.items():
         if root.get(name) != statement:
@@ -262,11 +298,13 @@ def verify(dtc, final_dtb, union, identity, fixups_by_entry):
             die(f'{name}: {len(missing)} __fixups__ symbols absent from the final DTB, '
                 f'first: {missing[0]}')
         covered += 1
-    print(f'verification: __symbols__={len(symbols)} sink=ok container=disabled identity=ok '
+    layout = 'legacy-root' if legacy else 'container=disabled'
+    print(f'verification: __symbols__={len(symbols)} sink=ok {layout} identity=ok '
           f'fixups coverage {covered}/{len(fixups_by_entry)} dtbo entries')
     return {'symbols_count': len(symbols),
             'sink_phandle': f'{SINK_PHANDLE:#x}',
-            'container': f'/{CONTAINER_NAME} status "disabled", no compatible',
+            'sink_layout': 'legacy-root' if legacy else 'contained',
+            'container': container,
             'root_identity': {name: root[name] for name in identity},
             'fixups_coverage': f'{covered}/{len(fixups_by_entry)} dtbo entries fully covered'}
 
@@ -283,6 +321,10 @@ def main():
     parser.add_argument('--dtc', type=Path, default=DTC)
     parser.add_argument('--verify-only', action='store_true',
                         help='Only re-verify OUTPUT/erhai-abl.dtb against the inputs')
+    parser.add_argument('--legacy-sink', action='store_true',
+                        help='Put the sink at the root as up to 0.1.49 '
+                             '(/erhai-abl-overlay-sink): comparison boot images only, '
+                             'never a package set')
     args = parser.parse_args()
     dtc = args.dtc.resolve()
     for path in (dtc, args.mainline_dtb, args.dtbo_img, args.identity_base):
@@ -306,15 +348,15 @@ def main():
 
     if not args.verify_only:
         text = decompile(dtc, args.mainline_dtb.resolve())
-        check_mainline(text)
+        check_mainline(text, args.legacy_sink)
         dts = out / 'erhai-abl.dts'
-        dts.write_text(inject(text, union, identity))
+        dts.write_text(inject(text, union, identity, args.legacy_sink))
         warnings = compile_dts(dtc, dts, final_dtb)
         union_text = '\n'.join(union) + '\n'
         (out / 'symbols-union.txt').write_text(union_text)
         print(f'compiled {final_dtb.name} ({warnings} dtc warning lines)')
 
-    report = verify(dtc, final_dtb, union, identity, by_entry)
+    report = verify(dtc, final_dtb, union, identity, by_entry, args.legacy_sink)
     if not args.verify_only:
         base_dir = args.base_dir.resolve()
         manifest = {
@@ -334,15 +376,20 @@ def main():
                         'union_file_sha256': hashlib.sha256(union_text.encode()).hexdigest()},
             'root_identity': {'source': str(args.identity_base.resolve()),
                               'copied': identity, 'absent_in_source_skipped': skipped},
-            'sink': {'name': SINK_NAME, 'path': SINK_PATH,
-                     'container': f'/{CONTAINER_NAME}',
-                     'linux,phandle': f'{SINK_PHANDLE:#x}'},
+            'sink': ({'layout': 'legacy-root', 'name': LEGACY_SINK_NAME,
+                      'path': LEGACY_SINK_PATH, 'container': None,
+                      'note': 'the layout up to 0.1.49, for comparison boot images only'}
+                     if args.legacy_sink else
+                     {'layout': 'contained', 'name': SINK_NAME, 'path': SINK_PATH,
+                      'container': f'/{CONTAINER_NAME}'})
+                    | {'linux,phandle': f'{SINK_PHANDLE:#x}'},
             'outputs_sha256': {'erhai-abl.dts': sha(out / 'erhai-abl.dts'),
                                'erhai-abl.dtb': sha(final_dtb)},
             'verification': report,
         }
         (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps({'status': 'OK', 'dtb': str(final_dtb), 'dtb_sha256': sha(final_dtb),
+                      'sink_layout': report['sink_layout'],
                       'symbols_union': len(union),
                       'fixups_coverage': report['fixups_coverage']}, indent=2))
 
