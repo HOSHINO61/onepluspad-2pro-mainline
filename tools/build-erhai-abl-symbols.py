@@ -11,35 +11,39 @@ the packaging DTB offline, without touching the kernel DTS:
 
 * extract the dtbo.img entries (reusing byte-identical files), then map every
   symbol named by any stock base __symbols__ or any dtbo entry __fixups__ to
-  an inert sink node /erhai-abl/overlay-sink carrying an explicit
-  linux,phandle, so libufdt fragment merges land harmlessly in the sink;
+  an inert sink node carrying an explicit linux,phandle, so libufdt fragment
+  merges land harmlessly in the sink;
 * copy the root identity statements of the stock base table this unit
   actually boots verbatim into the mainline root.
 
-The sink sits in a container node with status = "disabled" and no
-compatible, which no symbol names, so no fragment can reach it.  The merged
-sink itself ends up with a compatible, status = "ok" and the phandle cells
-of every stock provider it stands in for.  As a root child it would be
-populated as a platform device that never binds, and fw_devlink would parse
-its subtree: the sink has none of the #clock-cells, #interconnect-cells or
-#reset-cells the stock lists expect, so their argument cells are read as
-phandles and happen to name mainline suppliers (rpmhpd, NoCs, GCC, the PSCI
-power domains), whose sync_state() then waits for that consumer forever.
-Inside the container the sink never becomes a device, its subtree is never
-parsed for suppliers, and interconnect provider counting skips it.
+Two sink layouts exist; the manifest records which one was built as
+abl_sink_layout, and the boot image builders read it back from the DTB.
 
---legacy-sink rebuilds the layout of the packaging DTBs up to 0.1.49 instead:
-the sink as the root child /erhai-abl-overlay-sink, with every symbol naming
-it and no container.  It exists only to build comparison boot images that
-differ from a current candidate in nothing but the sink placement (for
-example, to observe something on the old sync_state() baseline); a package
-set must not be built from it.  The manifest records which layout was built.
+legacy (the default) puts the sink at the root as /erhai-abl-overlay-sink,
+with every symbol naming it and no container: the layout the installed
+releases boot with, and the one daily deliveries use.  Its known cost: the
+merged sink ends up with a compatible, status = "ok" and the phandle cells
+of every stock provider it stands in for, so it is populated as a platform
+device that never binds, and fw_devlink parses its subtree.  The sink has
+none of the #clock-cells, #interconnect-cells or #reset-cells the stock
+lists expect, so their argument cells are read as phandles and happen to
+name mainline suppliers (rpmhpd, NoCs, GCC, the PSCI power domains), whose
+sync_state() then waits for that consumer forever.
+
+contained (--contained-sink) puts the sink at /erhai-abl/overlay-sink, in a
+container node with status = "disabled" and no compatible, which no symbol
+names, so no fragment can reach it.  Inside the container the sink never
+becomes a device, its subtree is never parsed for suppliers, and
+interconnect provider counting skips it, so those providers reach
+sync_state().  On this unit the first unblank after the display subsystem
+powered down then loses the device, which is not resolved: the contained
+layout is for sync_state experiments only and is not a daily delivery.
 
 The rebuilt DTB is decompiled again and verified: __symbols__ count and sink
-phandle, the sink layout (the container status, or no container with
---legacy-sink), byte-faithful root identity, and full
-__fixups__ coverage for every dtbo entry. Input and output identity goes into
-manifest.json.
+phandle, the sink layout (no container for legacy, the container status for
+contained, and no trace of the other layout), byte-faithful root identity,
+and full __fixups__ coverage for every dtbo entry. Input and output identity
+goes into manifest.json.
 """
 import argparse
 import hashlib
@@ -49,6 +53,8 @@ import struct
 import subprocess
 from pathlib import Path
 import os
+
+from lib.abl_layout import CONTAINED, LEGACY, USE as LAYOUT_USE
 
 REPO = Path(__file__).resolve().parent.parent
 # Workspace layout: when this repo is checked out at <workspace>/public/<name>,
@@ -68,7 +74,7 @@ DEFAULT_OUT = WS / 'out/abl-dtb'
 CONTAINER_NAME = 'erhai-abl'
 SINK_NAME = 'overlay-sink'
 SINK_PATH = f'/{CONTAINER_NAME}/{SINK_NAME}'
-# The root-level sink of the packaging DTBs up to 0.1.49 (--legacy-sink).
+# The root-level sink of the legacy layout (the default).
 LEGACY_SINK_NAME = 'erhai-abl-overlay-sink'
 LEGACY_SINK_PATH = f'/{LEGACY_SINK_NAME}'
 SINK_PHANDLE = 0x40000000
@@ -274,7 +280,7 @@ def check_layout(text, legacy=False):
     if any(opening_re(other).match(line.strip()) for line in text.splitlines()):
         die(f'the {"legacy" if legacy else "contained"} layout must not have a {other} node')
     if legacy:
-        return 'none (legacy root-level sink, the layout up to 0.1.49)'
+        return 'none (legacy root-level sink)'
     container = child_node_properties(text, CONTAINER_NAME)
     if container != {'status': '"disabled"'}:
         die(f'{CONTAINER_NAME} must carry only status = "disabled", has {container}')
@@ -309,8 +315,9 @@ def verify(dtc, final_dtb, union, identity, fixups_by_entry, legacy=False):
             'fixups_coverage': f'{covered}/{len(fixups_by_entry)} dtbo entries fully covered'}
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--output', type=Path, default=DEFAULT_OUT,
                         help='New output directory (existing DTB with --verify-only)')
     parser.add_argument('--mainline-dtb', type=Path, default=MAINLINE_DTB)
@@ -321,11 +328,23 @@ def main():
     parser.add_argument('--dtc', type=Path, default=DTC)
     parser.add_argument('--verify-only', action='store_true',
                         help='Only re-verify OUTPUT/erhai-abl.dtb against the inputs')
-    parser.add_argument('--legacy-sink', action='store_true',
-                        help='Put the sink at the root as up to 0.1.49 '
-                             '(/erhai-abl-overlay-sink): comparison boot images only, '
-                             'never a package set')
+    layout = parser.add_mutually_exclusive_group()
+    layout.add_argument('--contained-sink', dest='sink_layout', action='store_const',
+                        const=CONTAINED,
+                        help='Put the sink in the disabled container /erhai-abl: '
+                             'sync_state experiments only, not a daily delivery')
+    layout.add_argument('--legacy-sink', dest='sink_layout', action='store_const',
+                        const=LEGACY,
+                        help='Put the sink at the root (/erhai-abl-overlay-sink); '
+                             'this is the default')
+    parser.set_defaults(sink_layout=LEGACY)
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
+    legacy = args.sink_layout == LEGACY
     dtc = args.dtc.resolve()
     for path in (dtc, args.mainline_dtb, args.dtbo_img, args.identity_base):
         if not path.is_file():
@@ -348,21 +367,23 @@ def main():
 
     if not args.verify_only:
         text = decompile(dtc, args.mainline_dtb.resolve())
-        check_mainline(text, args.legacy_sink)
+        check_mainline(text, legacy)
         dts = out / 'erhai-abl.dts'
-        dts.write_text(inject(text, union, identity, args.legacy_sink))
+        dts.write_text(inject(text, union, identity, legacy))
         warnings = compile_dts(dtc, dts, final_dtb)
         union_text = '\n'.join(union) + '\n'
         (out / 'symbols-union.txt').write_text(union_text)
         print(f'compiled {final_dtb.name} ({warnings} dtc warning lines)')
 
-    report = verify(dtc, final_dtb, union, identity, by_entry, args.legacy_sink)
+    report = verify(dtc, final_dtb, union, identity, by_entry, legacy)
     if not args.verify_only:
         base_dir = args.base_dir.resolve()
         manifest = {
             'status': 'OFFLINE_CANDIDATE_NOT_DEVICE_TESTED',
             'purpose': 'packaging DTB that survives ABL stock-dtbo overlay application '
                        'and root identity checks',
+            'abl_sink_layout': args.sink_layout,
+            'abl_sink_use': LAYOUT_USE[args.sink_layout],
             'inputs_sha256': {'dtbo.img': sha(args.dtbo_img.resolve()),
                               'mainline_dtb': sha(args.mainline_dtb.resolve()),
                               'identity_base': sha(args.identity_base.resolve()),
@@ -377,9 +398,8 @@ def main():
             'root_identity': {'source': str(args.identity_base.resolve()),
                               'copied': identity, 'absent_in_source_skipped': skipped},
             'sink': ({'layout': 'legacy-root', 'name': LEGACY_SINK_NAME,
-                      'path': LEGACY_SINK_PATH, 'container': None,
-                      'note': 'the layout up to 0.1.49, for comparison boot images only'}
-                     if args.legacy_sink else
+                      'path': LEGACY_SINK_PATH, 'container': None}
+                     if legacy else
                      {'layout': 'contained', 'name': SINK_NAME, 'path': SINK_PATH,
                       'container': f'/{CONTAINER_NAME}'})
                     | {'linux,phandle': f'{SINK_PHANDLE:#x}'},
@@ -389,6 +409,7 @@ def main():
         }
         (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps({'status': 'OK', 'dtb': str(final_dtb), 'dtb_sha256': sha(final_dtb),
+                      'abl_sink_layout': args.sink_layout,
                       'sink_layout': report['sink_layout'],
                       'symbols_union': len(union),
                       'fixups_coverage': report['fixups_coverage']}, indent=2))

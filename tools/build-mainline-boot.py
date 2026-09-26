@@ -4,7 +4,9 @@
 
 The device boot contract is header v2 with the three components delivered by
 ABL: kernel, ramdisk and --dtb. Output identity records the kernel commit,
-config fragment and every input hash.
+config fragment, every input hash and the ABL overlay sink layout read back
+from the DTB (tools/lib/abl_layout.py). A DTB with the contained sink is only
+taken with --contained-sink: that layout is for sync_state experiments.
 """
 import argparse
 import hashlib
@@ -13,6 +15,7 @@ import os
 from pathlib import Path
 import subprocess
 
+from lib.abl_layout import LayoutError, check_choice, sink_layout
 from lib.boot_profiles import CMDLINE, PROFILE_EXTRA
 
 REPO = Path(__file__).resolve().parent.parent
@@ -46,6 +49,9 @@ def main():
     parser.add_argument('--profile', choices=tuple(PROFILE_EXTRA),
                         help='Append a pinned cmdline: "desktop" runs the RAM Ubuntu '
                              'session, "persistent" boots the installed UFS root')
+    parser.add_argument('--contained-sink', action='store_true',
+                        help='The DTB carries the contained ABL overlay sink on purpose '
+                             '(sync_state experiments only); refused otherwise')
     args = parser.parse_args()
     cmdline = CMDLINE
     if args.profile:
@@ -59,6 +65,11 @@ def main():
     for path in (image, dtb, initramfs):
         if not path.is_file():
             parser.error(f'Missing input: {path}')
+    try:
+        layout = check_choice(sink_layout(dtb.read_bytes()), args.contained_sink,
+                              allow_none=True)
+    except LayoutError as error:
+        parser.error(f'{dtb}: {error}')
 
     head = subprocess.run(['git', '-C', str(KERNEL_GIT), 'rev-parse', 'HEAD'],
                           capture_output=True, check=True, text=True).stdout.strip()
@@ -84,11 +95,13 @@ def main():
     manifest = {'status': 'OFFLINE_CANDIDATE_NOT_DEVICE_TESTED',
                 'kernel_commit': head, 'kernel_out': str(kout),
                 'cmdline': cmdline, 'inputs_sha256': hashes,
+                'abl_sink_layout': layout,
                 'boot_sha256': sha(boot), 'boot_size': boot.stat().st_size,
                 'scope': 'fastboot boot only (header v2, ABL delivers kernel/ramdisk/dtb); '
                          'RAM userspace with NCM/HTTP evidence, telnet end, watchdog self-recovery.'}
     (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    print(json.dumps({k: manifest[k] for k in ['status', 'kernel_commit', 'boot_sha256', 'boot_size']}, indent=2))
+    print(json.dumps({k: manifest[k] for k in ['status', 'kernel_commit', 'abl_sink_layout',
+                                                   'boot_sha256', 'boot_size']}, indent=2))
 
 
 if __name__ == '__main__':

@@ -19,6 +19,11 @@ Layout produced here:
 The bootloader concatenates the vendor ramdisk and the generic ramdisk, so the
 initramfs goes in vendor_boot and init_boot stays empty. Sizes are checked
 against the real partitions before anything is written.
+
+The dtb must carry an ABL overlay sink (tools/build-erhai-abl-symbols.py);
+its layout is read back from the dtb and recorded. The contained layout is
+only taken with --contained-sink, since it is for sync_state experiments and
+not for a daily install.
 """
 import argparse
 import gzip
@@ -29,6 +34,7 @@ from pathlib import Path
 import struct
 import subprocess
 
+from lib.abl_layout import LayoutError, check_choice, sink_layout
 from lib.boot_profiles import CMDLINE, PROFILE_EXTRA
 
 REPO = Path(__file__).resolve().parent.parent
@@ -113,6 +119,9 @@ def main():
                         help='Appended to the standard cmdline')
     parser.add_argument('--profile', choices=('persistent',),
                         help='Append the pinned persistent-install cmdline')
+    parser.add_argument('--contained-sink', action='store_true',
+                        help='The dtb carries the contained ABL overlay sink on purpose '
+                             '(sync_state experiments only); refused otherwise')
     args = parser.parse_args()
 
     cmdline = CMDLINE
@@ -128,6 +137,10 @@ def main():
     for path in (image, dtb, initramfs):
         if not path.is_file():
             parser.error(f'Missing input: {path}')
+    try:
+        layout = check_choice(sink_layout(dtb.read_bytes()), args.contained_sink)
+    except LayoutError as error:
+        parser.error(f'{dtb}: {error}')
 
     head = subprocess.run(['git', '-C', str(KERNEL_GIT), 'rev-parse', 'HEAD'],
                           capture_output=True, check=True, text=True).stdout.strip()
@@ -185,6 +198,7 @@ def main():
                 'inputs_sha256': {'Image': sha(image), 'sm8750-erhai.dtb': sha(dtb),
                                   'initramfs.cpio.gz': sha(initramfs),
                                   'init_boot-ramdisk.cpio.gz': sha(empty)},
+                'abl_sink_layout': layout,
                 'outputs': outputs,
                 'scope': 'flash to boot_b / init_boot_b / vendor_boot_b and switch slot; '
                          'the kernel needs CONFIG_BOOT_CONFIG for the bootconfig the '

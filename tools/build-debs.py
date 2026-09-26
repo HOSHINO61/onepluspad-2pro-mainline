@@ -30,6 +30,13 @@ erhai-firmware needs neither the ROM cache nor the network.
                          install ships without an unauthenticated root telnet.
     --triplet-signed D   use an already-signed triplet instead of building one
                          (no kernel build, no AVB key needed)
+    --contained-sink     the ABL device tree carries the contained overlay sink
+                         on purpose. Without it only the default legacy layout
+                         is taken: the contained one is for sync_state
+                         experiments and never a daily delivery. The layout is
+                         read back from the shipped vendor_boot and recorded
+                         as abl_sink_layout in build-manifest.json and in the
+                         kernel image package's meta.json.
     --refresh-from-rom   re-extract every firmware file from the pinned stock
                          ROM images and upstream archives and diff the result
                          against packaging/firmware/; nothing is packed. With
@@ -85,6 +92,8 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+
+from lib.abl_layout import LayoutError, check_choice, sink_layout, vendor_boot_dtb
 
 REPO = Path(__file__).resolve().parent.parent
 # Workspace layout: when this repo is checked out at <workspace>/public/<name>,
@@ -732,6 +741,18 @@ def stage_audio(root, archive):
         copy_tree(tree, root)
 
 
+def checked_sink_layout(path, contained_sink, in_vendor_boot=False):
+    """The ABL overlay sink layout of a DTB (or a vendor_boot's), as asked for."""
+    if not path.is_file():
+        die(f'{path} is missing')
+    try:
+        blob = path.read_bytes()
+        return check_choice(sink_layout(vendor_boot_dtb(blob) if in_vendor_boot else blob),
+                            contained_sink)
+    except LayoutError as error:
+        die(f'{path}: {error}')
+
+
 def build_triplet(args, work):
     """Kernel Image + ABL device tree + initramfs -> a signed boot triplet."""
     if args.triplet_signed:
@@ -752,6 +773,8 @@ def build_triplet(args, work):
                '--initramfs', str(args.initramfs)]
     if args.debug:
         command += ['--cmdline-extra', 'erhai.debug=1']
+    if args.contained_sink:
+        command += ['--contained-sink']
     print('  packaging the GKI triplet')
     run(command)
 
@@ -788,6 +811,9 @@ def stage_kernel(root, args, work, release):
             or unsigned_manifest['inputs_sha256']['Image'] != build['files']['arch/arm64/boot/Image']):
         die('signed images do not match the module build')
     signed_manifest = json.loads((signed / 'manifest.json').read_text())
+    layout = checked_sink_layout(signed / 'vendor_boot.img', args.contained_sink, True)
+    if unsigned_manifest and unsigned_manifest.get('abl_sink_layout') != layout:
+        die('the signed vendor_boot and the triplet manifest disagree on the ABL sink layout')
     images = root / 'usr/lib/erhai/boot' / release
     images.mkdir(parents=True, exist_ok=True)
     for name in PARTS:
@@ -801,6 +827,7 @@ def stage_kernel(root, args, work, release):
         'kernel_commit': (unsigned_manifest or {}).get('kernel_commit'),
         'cmdline': cmdline,
         'debug_channel': bool(cmdline and 'erhai.debug=1' in cmdline),
+        'abl_sink_layout': layout,
         'kernel_modules': {'count': module_meta['module_count'],
                            'vermagic': module_meta['vermagic'],
                            'manifest_sha256': sha256_file(module_record)},
@@ -981,6 +1008,10 @@ def main():
     parser.add_argument('--avbtool', type=Path)
     parser.add_argument('--triplet-signed', type=Path,
                         help='Use this already-signed triplet instead of building one')
+    parser.add_argument('--contained-sink', action='store_true',
+                        help='The ABL device tree carries the contained overlay sink on '
+                             'purpose (sync_state experiments only, not a daily '
+                             'delivery); refused otherwise')
     parser.add_argument('--debug', action='store_true',
                         help='Enable the debug channel in the packaged kernel command '
                              'line and mark the version ~dbg')
@@ -1015,6 +1046,12 @@ def main():
             die(f'no kernel release at {release_file}; build the kernel first')
         if not re.fullmatch(r'[a-z0-9.+-]{1,64}', release):
             die(f'unsafe kernel release string: {release}')
+        # Fail before anything is built when the layout is not the one asked for.
+        if args.triplet_signed:
+            checked_sink_layout(args.triplet_signed / 'vendor_boot.img',
+                                args.contained_sink, True)
+        else:
+            checked_sink_layout(args.dtb, args.contained_sink)
     image_package = 'erhai-kernel-image-' + release if release else ''
 
     out_dir = args.output.resolve()
@@ -1078,6 +1115,7 @@ def main():
             'source_date_epoch': epoch,
             'built': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'debug_channel': bool(args.debug),
+            'abl_sink_layout': (kernel_meta or {}).get('abl_sink_layout'),
             'kernel': kernel_meta,
             'firmware_files': len(manifest['files']),
             'packages': {path.name: {'sha256': sha256_file(path),

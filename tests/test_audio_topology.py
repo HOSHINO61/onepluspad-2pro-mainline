@@ -7,11 +7,14 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
+# build-debs.py imports its helpers from tools/lib, as it does when run.
+sys.path.insert(0, str(REPO / 'tools'))
 INPUTS = REPO / 'packaging/audio'
 
 
