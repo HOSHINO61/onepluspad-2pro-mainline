@@ -13,6 +13,20 @@ remove|purge)
 	;;
 esac
 
+# The sleep unit, handled the way dh_installsystemd generates it: masked
+# while the package is merely removed, forgotten entirely on purge.
+if command -v deb-systemd-helper >/dev/null 2>&1; then
+	case "$1" in
+	remove)
+		deb-systemd-helper mask erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		;;
+	purge)
+		deb-systemd-helper purge erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		deb-systemd-helper unmask erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		;;
+	esac
+fi
+
 # The imported registry is this unit's own data; purge is the explicit
 # request to drop it.
 if [ "$1" = purge ]; then

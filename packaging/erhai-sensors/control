@@ -27,3 +27,10 @@ Description: OnePlus Pad 2 Pro (erhai) accelerometer for screen rotation
  measurements or as a fallback, erhai-sensors-ssc-delivery overrides the
  delivery or adds batching for the current boot only ("wakeup" restores the
  requests of upstream libssc).
+ .
+ Across system sleep the sensor streams are paused: erhai-sensors-sleep
+ stops iio-sensor-proxy on the way into sleep, which closes its streams,
+ and starts it again after wake-up, when its clients claim the sensors
+ anew. Otherwise the sensor core would keep sending samples, and each
+ message ends a deep suspend. "systemctl disable erhai-sensors-sleep"
+ turns this off.

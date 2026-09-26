@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Pauses the ADSP sensor streams across system sleep (suspend, hibernate and
+# the hybrid modes): started on the way into sleep.target, stopped once the
+# system is back and sleep.target is no longer needed. See
+# /usr/libexec/erhai-sensors/sleep-streams for why and how.
+#
+# Enabled on installation. "systemctl disable erhai-sensors-sleep.service"
+# turns it off for good (upgrades keep that), "systemctl mask --runtime
+# erhai-sensors-sleep.service" for the current boot only.
+[Unit]
+Description=Pause the ADSP sensor streams across system sleep
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/erhai-sensors/sleep-streams pause
+ExecStop=/usr/libexec/erhai-sensors/sleep-streams resume
+# Holds which proxy was stopped, from "pause" until "resume"; removed with
+# the unit.
+RuntimeDirectory=erhai-sensors-sleep
+RuntimeDirectoryMode=0700
+# The script bounds its own wait at 15 s and never fails.
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=sleep.target

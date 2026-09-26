@@ -1,0 +1,90 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Keep the ADSP sensor core quiet while the system sleeps.
+#
+#   sleep-streams pause    before sleep (erhai-sensors-sleep.service start)
+#   sleep-streams resume   after wake-up (erhai-sensors-sleep.service stop)
+#
+# The sensor core keeps sending the samples of every open stream to the
+# application processor, with non-wakeup delivery as well: nothing tells it
+# that the processor sleeps. Each message raises the ADSP's GLINK interrupt,
+# which cannot be kept from ending a deep suspend. iio-sensor-proxy keeps
+# its streams open for as long as a client (the compositor) claims a sensor
+# and has no sleep handling of its own, so "pause" stops the proxy: on the
+# way out it closes each stream and waits for the sensor core to acknowledge
+# that, and its QRTR socket goes away with it. "resume" starts the proxy again,
+# and its clients claim the sensors anew when its bus name comes back.
+#
+# Only a proxy that was running is stopped, and only one that this script
+# stopped is started again: one that is not running (a failed sample gate,
+# a removed registry) stays as it is. The file server is left attached, the
+# sample gate is not repeated and the ADSP is not restarted. Neither command
+# fails the sleep: what went wrong is logged and the command exits 0.
+#
+# Environment (for tests): ERHAI_SENSORS_SYSTEMCTL, ERHAI_SENSORS_SLEEP_STATE,
+# ERHAI_SENSORS_SLEEP_BOUND (seconds).
+set -u
+
+SYSTEMCTL=${ERHAI_SENSORS_SYSTEMCTL:-systemctl}
+STATE=${ERHAI_SENSORS_SLEEP_STATE:-${RUNTIME_DIRECTORY:-/run/erhai-sensors-sleep}}
+BOUND=${ERHAI_SENSORS_SLEEP_BOUND:-15}
+UNIT=iio-sensor-proxy.service
+MARK=$STATE/proxy-stopped
+NAME=${0##*/}
+
+now_ms() {
+	echo $(($(date +%s%N) / 1000000))
+}
+
+pause() {
+	state=$("$SYSTEMCTL" show "$UNIT" -p ActiveState --value 2>/dev/null)
+	case $state in
+	active | activating | reloading) ;;
+	*)
+		rm -f "$MARK"
+		echo "$NAME: $UNIT is ${state:-unknown}; no stream to pause"
+		return 0
+		;;
+	esac
+	pid=$("$SYSTEMCTL" show "$UNIT" -p MainPID --value 2>/dev/null)
+	# Written before the stop, so that "resume" starts the proxy again even
+	# if the stop does not finish in time.
+	mkdir -p "$STATE"
+	echo "${pid:-0}" >"$MARK"
+	start=$(now_ms)
+	if timeout "$BOUND" "$SYSTEMCTL" stop "$UNIT"; then
+		echo "$NAME: stopped $UNIT (PID ${pid:-0}) in $(($(now_ms) - start)) ms;" \
+			"its sensor streams are closed"
+	else
+		echo "$NAME: stopping $UNIT (PID ${pid:-0}) did not finish within" \
+			"${BOUND} s; its sensor streams may still be open" >&2
+	fi
+	return 0
+}
+
+resume() {
+	if [ ! -e "$MARK" ]; then
+		echo "$NAME: no stream was paused"
+		return 0
+	fi
+	pid=$(cat "$MARK" 2>/dev/null)
+	rm -f "$MARK"
+	# Not waited for: the proxy finds the accelerometer again on its own,
+	# and nothing on the way out of sleep should wait for the sensor core.
+	if "$SYSTEMCTL" --no-block start "$UNIT"; then
+		echo "$NAME: starting $UNIT again (was PID ${pid:-0})"
+	else
+		echo "$NAME: could not start $UNIT again (was PID ${pid:-0})" >&2
+	fi
+	return 0
+}
+
+case ${1:-} in
+pause) pause ;;
+resume) resume ;;
+*)
+	echo "usage: $NAME pause|resume" >&2
+	exit 2
+	;;
+esac

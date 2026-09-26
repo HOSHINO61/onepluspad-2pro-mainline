@@ -10,9 +10,24 @@ configure)
 		systemctl daemon-reload || true
 	fi
 	udevadm control --reload >/dev/null 2>&1 || true
+	# The sleep unit pauses the sensor streams across system sleep. Enabled
+	# on a first installation of a version that has it, as dh_installsystemd
+	# does it; an administrator's "systemctl disable" survives upgrades.
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		deb-systemd-helper unmask erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		# was-enabled defaults to true, so new installations run enable.
+		if deb-systemd-helper --quiet was-enabled erhai-sensors-sleep.service; then
+			deb-systemd-helper enable erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		else
+			deb-systemd-helper update-state erhai-sensors-sleep.service >/dev/null 2>&1 || true
+		fi
+	elif command -v systemctl >/dev/null 2>&1; then
+		systemctl enable --quiet erhai-sensors-sleep.service || true
+	fi
 	# Nothing is started here. Attaching the ADSP sensor domain makes it read
 	# its registry once, for the whole boot; the stack comes up at the next
-	# boot, from the DSP node's udev event.
+	# boot, from the DSP node's udev event. The sleep unit only runs on the
+	# way into the next sleep.
 	if [ ! -d /var/lib/erhai/sensors/persist/registry ]; then
 		echo "erhai-sensors: no sensor registry imported yet; run" \
 			"erhai-sensors-import-registry, then reboot" >&2

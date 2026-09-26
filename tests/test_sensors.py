@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
-"""erhai-sensors: sample gate, registry import and recipe consistency."""
+"""erhai-sensors: sample gate, registry import, delivery switch, sleep pause and recipe consistency."""
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -18,6 +18,8 @@ INPUTS = REPO / 'packaging/sensors'
 GATE = TREE / 'usr/libexec/erhai-sensors/ssc-sample-gate'
 IMPORT = TREE / 'usr/sbin/erhai-sensors-import-registry'
 DELIVERY = TREE / 'usr/sbin/erhai-sensors-ssc-delivery'
+SLEEP = TREE / 'usr/libexec/erhai-sensors/sleep-streams'
+SLEEP_UNIT = TREE / 'usr/lib/systemd/system/erhai-sensors-sleep.service'
 
 
 def load(path, name):
@@ -313,6 +315,133 @@ class DeliveryTest(unittest.TestCase):
                       'SSC_SUSPEND_MODE_BY_SENSOR_TYPE)\n', patch)
         self.assertIn('Assisted-by: LLM', patch)
         self.assertIn('by sensor type: accelerometer non-wakeup, no batching', DELIVERY.read_text())
+
+
+
+class SleepStreamsTest(unittest.TestCase):
+    """sleep-streams: stop the proxy before sleep, start it again after."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.state = self.dir / 'run/erhai-sensors-sleep'
+        self.calls = self.dir / 'calls'
+        self.unit_state = self.dir / 'unit-state'
+        self.unit_state.write_text('active')
+        systemctl = self.dir / 'systemctl'
+        # A proxy that is active (or whatever unit-state says) with PID 42;
+        # "stop" hangs while stop-hangs exists.
+        systemctl.write_text(f"""#!/bin/sh
+echo "$*" >> {self.calls}
+case "$1 $2" in
+'show iio-sensor-proxy.service')
+    case "$4" in
+    ActiveState) cat {self.unit_state} ;;
+    MainPID) echo 42 ;;
+    esac ;;
+'stop iio-sensor-proxy.service')
+    [ -e {self.dir}/stop-hangs ] && sleep 5
+    echo inactive > {self.unit_state} ;;
+'--no-block start') echo active > {self.unit_state} ;;
+esac
+""")
+        systemctl.chmod(0o755)
+        self.environ = dict(os.environ, ERHAI_SENSORS_SYSTEMCTL=str(systemctl),
+                            ERHAI_SENSORS_SLEEP_STATE=str(self.state),
+                            ERHAI_SENSORS_SLEEP_BOUND='1', LC_ALL='C')
+
+    def tearDown(self):
+        subprocess.run(['rm', '-rf', str(self.dir)], check=True)
+
+    def run_tool(self, *args):
+        return subprocess.run([str(SLEEP), *args], env=self.environ, capture_output=True,
+                              text=True, timeout=20)
+
+    def actions(self):
+        if not self.calls.exists():
+            return []
+        return [line for line in self.calls.read_text().splitlines()
+                if not line.startswith('show ')]
+
+    def test_pause_stops_a_running_proxy_and_resume_starts_it_again(self):
+        result = self.run_tool('pause')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.actions(), ['stop iio-sensor-proxy.service'])
+        self.assertEqual((self.state / 'proxy-stopped').read_text().strip(), '42')
+        self.assertIn('stopped iio-sensor-proxy.service (PID 42)', result.stdout)
+        result = self.run_tool('resume')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.actions(), ['stop iio-sensor-proxy.service',
+                                          '--no-block start iio-sensor-proxy.service'])
+        self.assertFalse((self.state / 'proxy-stopped').exists())
+        self.assertIn('starting iio-sensor-proxy.service again (was PID 42)', result.stdout)
+
+    def test_a_proxy_that_is_not_running_is_left_alone(self):
+        for state in ('inactive', 'failed', ''):
+            with self.subTest(state=state):
+                self.unit_state.write_text(state)
+                self.assertEqual(self.run_tool('pause').returncode, 0)
+                self.assertEqual(self.run_tool('resume').returncode, 0)
+                self.assertEqual(self.actions(), [])
+        # A stale mark from an earlier pause does not start it either.
+        self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / 'proxy-stopped').write_text('7\n')
+        self.unit_state.write_text('failed')
+        self.run_tool('pause')
+        self.run_tool('resume')
+        self.assertEqual(self.actions(), [])
+
+    def test_a_starting_proxy_is_paused_too(self):
+        self.unit_state.write_text('activating')
+        self.run_tool('pause')
+        self.run_tool('resume')
+        self.assertEqual(self.actions(), ['stop iio-sensor-proxy.service',
+                                          '--no-block start iio-sensor-proxy.service'])
+
+    def test_a_stop_that_hangs_is_bounded_and_resume_still_starts(self):
+        (self.dir / 'stop-hangs').write_text('')
+        started = time.monotonic()
+        result = self.run_tool('pause')
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('did not finish within 1 s', result.stderr)
+        self.run_tool('resume')
+        self.assertEqual(self.actions()[-1], '--no-block start iio-sensor-proxy.service')
+
+    def test_usage(self):
+        for args in ([], ['stop'], ['pause', 'x']):
+            with self.subTest(args=args):
+                result = self.run_tool(*args)
+                if args[:1] == ['pause']:
+                    self.assertEqual(result.returncode, 0)
+                else:
+                    self.assertEqual(result.returncode, 2)
+
+    def test_unit_orders_before_sleep_and_is_enabled_by_the_package(self):
+        unit = SLEEP_UNIT.read_text()
+        for line in ('Before=sleep.target', 'StopWhenUnneeded=yes', 'Type=oneshot',
+                     'RemainAfterExit=yes', 'WantedBy=sleep.target',
+                     'ExecStart=/usr/libexec/erhai-sensors/sleep-streams pause',
+                     'ExecStop=/usr/libexec/erhai-sensors/sleep-streams resume',
+                     'RuntimeDirectory=erhai-sensors-sleep'):
+            self.assertIn(line + '\n', unit)
+        self.assertIn('${RUNTIME_DIRECTORY:-/run/erhai-sensors-sleep}', SLEEP.read_text())
+        # The unit's own bound is longer than the script's.
+        self.assertIn('BOUND=${ERHAI_SENSORS_SLEEP_BOUND:-15}', SLEEP.read_text())
+        self.assertIn('TimeoutStartSec=30s', unit)
+        package = REPO / 'packaging/erhai-sensors'
+        postinst = (package / 'postinst').read_text()
+        self.assertIn('deb-systemd-helper --quiet was-enabled erhai-sensors-sleep.service', postinst)
+        self.assertIn('deb-systemd-helper enable erhai-sensors-sleep.service', postinst)
+        postrm = (package / 'postrm').read_text()
+        self.assertIn('deb-systemd-helper mask erhai-sensors-sleep.service', postrm)
+        self.assertIn('deb-systemd-helper purge erhai-sensors-sleep.service', postrm)
+        # The file server and the sample gate are not part of the pause.
+        script = SLEEP.read_text()
+        self.assertNotIn('erhai-sensors-rpcd', script.split('set -u', 1)[1])
+        self.assertNotIn('erhai-sensors-gate', script.split('set -u', 1)[1])
+        for name in ('postinst', 'postrm', 'prerm'):
+            subprocess.run(['dash', '-n', str(package / name)], check=True)
+        subprocess.run(['dash', '-n', str(SLEEP)], check=True)
 
 
 def scalars(sc):
