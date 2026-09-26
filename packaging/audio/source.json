@@ -7,5 +7,9 @@
   "license": "BSD-3-Clause",
   "template": "SM8550-HDK.m4",
   "model": "OnePlus-Pad-2-Pro",
-  "driver": "sm8750"
+  "driver": "sm8750",
+  "kernel_dai_widgets": [
+    "TX_CODEC_DMA_TX_3 Capture",
+    "Secondary TDM0 Playback"
+  ]
 }

@@ -12,8 +12,12 @@ include(`audioreach/module_tdm.m4')
 
 # The hardware speaker interface carries eight discrete TDM slots.
 # Stereo application routing and acoustic validation are separate from this graph.
+# The front end takes one channel per slot as S16_LE, a format the q6apm-dai
+# platform driver offers (S16_LE and S24_LE only); the device MFC widens it to
+# the 32-bit slots of the back end.  A front-end format outside that set makes
+# every open() fail with EINVAL before the DSP is reached.
 STREAM_SG_PCM_ADD(audioreach/subgraph-stream-vol-playback.m4, FRONTEND_DAI_MULTIMEDIA1,
-	`S32_LE', 48000, 48000, 8, 8,
+	`S16_LE', 48000, 48000, 8, 8,
 	0x00004001, 0x00004001, 0x00006001, `110000')
 
 STREAM_SG_PCM_ADD(audioreach/subgraph-stream-capture.m4, FRONTEND_DAI_MULTIMEDIA3,

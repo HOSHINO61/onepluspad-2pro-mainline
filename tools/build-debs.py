@@ -448,6 +448,90 @@ def stage_firmware(root, manifest):
           f'{FIRMWARE.relative_to(REPO)}')
 
 
+# Front-end streams the q6apm-dai platform driver can serve: formats and
+# channel range of q6apm_dai_hardware_playback/_capture in
+# sound/soc/qcom/qdsp6/q6apm-dai.c.  At open() the PCM core intersects them
+# with the capabilities the topology gives the front end; an empty
+# intersection fails every open() with EINVAL and the kernel logs nothing.
+Q6APM_DAI_STREAMS = {'Playback': ({'S16_LE', 'S24_LE'}, 2, 8),
+                     'Capture': ({'S16_LE', 'S24_LE'}, 2, 4)}
+
+
+def topology_sections(text, kind):
+    """(name, body) of each Section<kind>."name" { ... } in a topology conf."""
+    for match in re.finditer(r'Section' + kind + r'\."([^"]+)"\s*\{', text):
+        depth, end = 1, match.end()
+        while depth:
+            if end == len(text):
+                die(f'unterminated Section{kind}."{match[1]}" in the topology')
+            depth += {'{': 1, '}': -1}.get(text[end], 0)
+            end += 1
+        yield match[1], text[match.end():end - 1]
+
+
+def check_topology(text, kernel_widgets):
+    """Refuse a topology whose PCMs cannot open or reach no back end.
+
+    alsatplg accepts both: it only warns about route ends it does not define
+    (the back-end DAI widgets the kernel creates) and knows nothing of the
+    platform driver.  kernel_widgets names the back-end DAI widgets the graph
+    may end at; each must be used, so a renamed or unused back end fails too.
+    """
+    widgets, streams = {}, {}
+    for name, body in topology_sections(text, 'Widget'):
+        mixer = re.search(r'\bmixer\s*\[(.*?)\]', body, re.S)
+        widgets[name] = {m[0] or m[1] for m in re.findall(r'"([^"]+)"|(\S+)', mixer[1])} if mixer else set()
+        stream = re.search(r'\bstream_name\s+"([^"]+)"', body)
+        if stream:
+            streams.setdefault(stream[1], set()).add(name)
+    edges, used = [], set()
+    for graph, body in topology_sections(text, 'Graph'):
+        lines = re.search(r'\blines\s*\[(.*?)\]', body, re.S)
+        for line in re.findall(r'"([^"]*)"', lines[1] if lines else ''):
+            parts = [part.strip() for part in line.split(',')]
+            if len(parts) != 3:
+                die(f'topology graph {graph!r}: malformed route {line!r}')
+            sink, control, source = parts
+            for end in (sink, source):
+                if end in kernel_widgets:
+                    used.add(end)
+                elif end not in widgets:
+                    die(f'topology graph {graph!r}: route end {end!r} is neither a '
+                        'topology widget nor a declared back-end DAI widget')
+            if control and control not in widgets.get(sink, ()):
+                die(f'topology graph {graph!r}: {sink!r} has no mixer control {control!r}')
+            edges.append((source, sink))
+    unused = sorted(set(kernel_widgets) - used)
+    if unused:
+        die(f'declared back-end DAI widgets no route reaches: {", ".join(unused)}')
+    for name, body in topology_sections(text, 'PCMCapabilities'):
+        direction = name.rsplit(' ', 1)[-1]
+        if direction not in Q6APM_DAI_STREAMS:
+            die(f'topology PCM {name!r} is neither Playback nor Capture')
+        formats, low, high = Q6APM_DAI_STREAMS[direction]
+        found = re.search(r'\bformats\s+"([^"]+)"', body)
+        advertised = {f.strip() for f in found[1].split(',')} if found else set()
+        if not advertised or not advertised <= formats:
+            die(f'topology PCM {name!r} offers {sorted(advertised)}; q6apm-dai serves '
+                f'{direction.lower()} only as {sorted(formats)}, so open() would fail')
+        channels = [re.search(r'\bchannels_' + key + r'\s+"(\d+)"', body) for key in ('min', 'max')]
+        if not all(channels) or max(int(channels[0][1]), low) > min(int(channels[1][1]), high):
+            die(f'topology PCM {name!r}: channel range outside q6apm-dai {low}..{high}')
+        # A playback front end must reach a back end downstream, a capture one upstream.
+        forward = direction == 'Playback'
+        reached, todo = set(), list(streams.get(name, ()))
+        if not todo:
+            die(f'topology PCM {name!r}: no widget carries its stream')
+        while todo:
+            node = todo.pop()
+            if node in reached:
+                continue
+            reached.add(node)
+            todo += [b if forward else a for a, b in edges if (a if forward else b) == node]
+        if not reached & set(kernel_widgets):
+            die(f'topology PCM {name!r} reaches no back-end DAI widget')
+
+
 def stage_audio(root, archive):
     inputs = PACKAGING / 'audio'
     source = json.loads((inputs / 'source.json').read_text())
@@ -471,6 +555,7 @@ def stage_audio(root, archive):
         recipe = inputs / (source['model'] + '.m4')
         conf = work / 'topology.conf'
         conf.write_text(run(['m4', '-I', str(inputs), '-I', str(upstream), str(recipe)]))
+        check_topology(conf.read_text(), source['kernel_dai_widgets'])
         target = root / 'usr/lib/firmware/qcom' / source['driver'] / (source['model'] + '-tplg.bin')
         target.parent.mkdir(parents=True)
         run(['alsatplg', '-c', str(conf), '-o', str(target)])
