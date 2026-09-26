@@ -4,7 +4,7 @@
     "upstream": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
     "baseline_tag": "v7.2",
     "branch": "erhai/dev",
-    "commit": "d3f3bcbe3a175292b1cf10c7cca6426d77055e0f",
+    "commit": "431625f1f5ef3a45a3acb3db6e6f43872912e2e2",
     "board_dts": "arch/arm64/boot/dts/qcom/sm8750-erhai.dts",
     "config_fragment": "arch/arm64/configs/erhai-firstboot.config",
     "toolchain": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1)"
