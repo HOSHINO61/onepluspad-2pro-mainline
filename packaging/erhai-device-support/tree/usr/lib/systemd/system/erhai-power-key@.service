@@ -3,7 +3,9 @@
 Description=Tablet power-key display control (%I)
 BindsTo=dev-input-%i.device
 After=dev-input-%i.device systemd-logind.service
-Requires=erhai-display-power.socket
+# The backlight service is the compat path; erhai-display-power-mode masks it
+# for the standard path, and a masked Wants= does not keep this unit down.
+Wants=erhai-display-power.socket
 After=erhai-display-power.socket
 JobTimeoutSec=15
 StartLimitIntervalSec=30

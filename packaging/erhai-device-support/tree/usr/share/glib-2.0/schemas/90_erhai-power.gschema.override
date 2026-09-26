@@ -1,7 +1,8 @@
 # Tablet power button: lock and blank through GNOME, never suspend or power off.
 [org.gnome.settings-daemon.plugins.power]
 # The device power-key service handles the button. Keep the desktop action
-# inert, including GNOME's unconditional poweroff fallback for VM chassis.
+# inert while it is not running: GNOME's default would suspend the system,
+# and resume of the display from system suspend has not been validated.
 power-button-action='nothing'
 sleep-inactive-ac-type='nothing'
 sleep-inactive-battery-type='nothing'

@@ -6,6 +6,13 @@ if [ "$1" = configure ]; then
     deb-systemd-helper enable erhai-display-power.socket >/dev/null
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload
-        systemctl start erhai-display-power.socket
+        # erhai-display-power-mode standard masks the socket; an upgrade
+        # keeps that choice rather than failing to start a masked unit.
+        if [ -e /etc/erhai/display-power-mode ] || [ -e /run/erhai/display-power-mode ]; then
+            echo "erhai-display-power: standard display power path selected;" \
+                 "not starting the backlight service" >&2
+        else
+            systemctl start erhai-display-power.socket
+        fi
     fi
 fi

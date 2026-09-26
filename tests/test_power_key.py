@@ -3,6 +3,7 @@
 import importlib.machinery
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -15,6 +16,8 @@ loader.exec_module(key)
 
 
 class PowerKeyTest(unittest.TestCase):
+    standard = False
+
     def run_action(self, mode, session_class='user', locked='no', failure=None):
         calls = []
         info = {'User': '1000', 'Class': session_class, 'LockedHint': locked}
@@ -30,10 +33,17 @@ class PowerKeyTest(unittest.TestCase):
                 calls.append(('power', value))
             return mode
 
+        def unused(_info, value=None):
+            raise AssertionError('the other display backend was used')
+
         wake = Mock()
+        used, other = ('mutter_mode', 'power_mode') if self.standard else (
+            'power_mode', 'mutter_mode')
         with patch.object(key, 'active_session', return_value=info), \
+                patch.object(key, 'standard_path', return_value=self.standard), \
                 patch.object(key, 'screensaver', side_effect=screen), \
-                patch.object(key, 'power_mode', side_effect=power):
+                patch.object(key, used, side_effect=power), \
+                patch.object(key, other, side_effect=unused):
             if failure:
                 with self.assertRaises(RuntimeError):
                     key.toggle(wake)
@@ -75,6 +85,51 @@ class PowerKeyTest(unittest.TestCase):
         calls, wake = self.run_action(-1, failure='unknown')
         self.assertEqual(calls, [])
         wake.wake.assert_not_called()
+
+
+class StandardPathTest(PowerKeyTest):
+    """The same boundaries when the key drives Mutter's PowerSaveMode."""
+    standard = True
+
+
+class MutterBackendTest(unittest.TestCase):
+    info = {'User': '1000', 'Class': 'greeter'}
+
+    def test_reads_and_sets_power_save_mode(self):
+        calls = []
+
+        def session(_info, dest, path, method, *args):
+            calls.append((dest, path, method, *args))
+            return '(<3>,)'
+        with patch.object(key, 'call_session', side_effect=session):
+            self.assertEqual(key.mutter_mode(self.info), 3)
+            self.assertEqual(key.mutter_mode(self.info, 0), 0)
+        interface = 'org.gnome.Mutter.DisplayConfig'
+        self.assertEqual(calls, [
+            (interface, '/org/gnome/Mutter/DisplayConfig',
+             'org.freedesktop.DBus.Properties.Get', interface, 'PowerSaveMode'),
+            (interface, '/org/gnome/Mutter/DisplayConfig',
+             'org.freedesktop.DBus.Properties.Set', interface, 'PowerSaveMode', '<0>')])
+
+    def test_unreadable_reply_is_refused(self):
+        for reply in ('', '(<"on">,)', '(3,)'):
+            with self.subTest(reply=reply), \
+                    patch.object(key, 'call_session', return_value=reply), \
+                    self.assertRaises(RuntimeError):
+                key.mutter_mode(self.info)
+
+    def test_marker_selects_the_backend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run, etc = Path(tmp) / 'run-marker', Path(tmp) / 'etc-marker'
+            with patch.object(key, 'MODE_MARKERS', (run, etc)):
+                self.assertFalse(key.standard_path())
+                etc.write_text('compat\n')
+                self.assertFalse(key.standard_path())
+                etc.write_text('standard\n')
+                self.assertTrue(key.standard_path())
+                etc.unlink()
+                run.write_text('standard\n')
+                self.assertTrue(key.standard_path())
 
 
 if __name__ == '__main__':

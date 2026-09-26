@@ -1,0 +1,337 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Choose how the tablet blanks its display: compat or standard.
+
+compat    The package default and the workaround for display power collapse
+          on kernels that cannot recover from it: a udev rule keeps the MDSS
+          parent runtime-active, GNOME Settings Daemon's display-power setter
+          is redirected to the backlight service, and the power-key handler
+          blanks through that service.  The display pipeline keeps running.
+standard  GNOME's own path: Mutter switches the connector off, the panel is
+          unprepared and the MDSS power domain collapses.  The key handler
+          sets Mutter's PowerSaveMode.  Needs a kernel that halts the VBIF AXI
+          ports before the collapse; without it the first unblank hangs.
+status    Read only: what is configured and what the running processes use.
+
+standard only adds overrides: /dev/null symlinks that mask the udev rule and
+the GSD drop-in, systemctl masks for the backlight service and its socket,
+and a marker the key handler reads.  They go to /etc, or with --runtime to
+/run, so the next boot returns to compat.  compat removes these overrides from
+both places and never deletes a file that is not a /dev/null symlink.  No
+distribution or package file is changed.
+
+A running gsd-power keeps the adapter it was started with.  Log out and in,
+reboot, or pass --restart-gsd-power, which kills each user's gsd-power so that
+systemd restarts it (the unit refuses a manual restart, and has
+Restart=on-failure).
+"""
+import argparse
+import os
+from pathlib import Path
+import pwd
+import subprocess
+import sys
+import time
+
+MARKER = 'erhai/display-power-mode'
+UDEV_RULE = 'udev/rules.d/81-erhai-display-power.rules'
+GSD_UNIT = 'org.gnome.SettingsDaemon.Power.service'
+GSD_DROPIN = f'systemd/user/{GSD_UNIT}.d/80-erhai-backlight.conf'
+ADAPTER = '/usr/lib/aarch64-linux-gnu/erhai/gsd-backlight-compat.so'
+UNITS = ('erhai-display-power.socket', 'erhai-display-power.service')
+MDSS = 'ae00000.display-subsystem'
+# The kernel side of the standard path: DPU runtime suspend halts the VBIF
+# AXI ports before the MDSS power domain collapses.
+FIX_SYMBOL = 'dpu_vbif_axi_halt_request'
+NULL = '/dev/null'
+
+
+class Refused(Exception):
+    pass
+
+
+def run_command(argv, uid=None):
+    """Run argv, as the user `uid` when given; (returncode, stdout)."""
+    kwargs = {}
+    if uid is not None:
+        account = pwd.getpwuid(uid)
+        runtime = f'/run/user/{uid}'
+        kwargs = {'user': uid, 'group': account.pw_gid, 'extra_groups': [],
+                  'env': {'PATH': '/usr/bin:/bin', 'HOME': account.pw_dir,
+                          'XDG_RUNTIME_DIR': runtime,
+                          'DBUS_SESSION_BUS_ADDRESS': f'unix:path={runtime}/bus'}}
+    result = subprocess.run(argv, text=True, capture_output=True, timeout=30, **kwargs)
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+class System:
+    """The paths and commands one switch touches, under `root` for tests."""
+
+    def __init__(self, root=Path('/'), run=run_command, sleep=time.sleep):
+        self.root = Path(root)
+        self.run = run
+        self.sleep = sleep
+
+    def base(self, runtime):
+        return self.root / ('run' if runtime else 'etc')
+
+    def bases(self):
+        return (self.base(False), self.base(True))
+
+    @property
+    def mdss_control(self):
+        return self.root / f'sys/bus/platform/devices/{MDSS}/power/control'
+
+    def log(self, message):
+        print(message, flush=True)
+
+    def check(self, argv, uid=None):
+        rc, text = self.run(argv, uid)
+        if rc:
+            raise Refused(f'{" ".join(argv)} failed ({rc}): {text}')
+        return text
+
+    # -- overrides --------------------------------------------------------
+
+    @staticmethod
+    def is_mask(path):
+        return path.is_symlink() and os.readlink(path) == NULL
+
+    def mask(self, path):
+        if self.is_mask(path):
+            return
+        if path.exists() or path.is_symlink():
+            raise Refused(f'{path} exists and is not a mask; not replacing it')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(NULL)
+        self.log(f'masked {path} -> {NULL}')
+
+    def unmask(self, path):
+        if self.is_mask(path):
+            path.unlink()
+            self.log(f'removed mask {path}')
+        elif path.exists() or path.is_symlink():
+            self.log(f'left {path} alone: not a mask this tool writes')
+
+    def masked_in(self, relative):
+        return [base.name for base in self.bases() if self.is_mask(base / relative)]
+
+    def marker_in(self):
+        found = []
+        for base in self.bases():
+            try:
+                if (base / MARKER).read_text().strip() == 'standard':
+                    found.append(base.name)
+            except OSError:
+                pass
+        return found
+
+    # -- kernel and processes ---------------------------------------------
+
+    def kernel_has_fix(self):
+        try:
+            with open(self.root / 'proc/kallsyms') as symbols:
+                return any(line.split()[2:3] == [FIX_SYMBOL] for line in symbols)
+        except OSError:
+            return False
+
+    def mdss(self):
+        try:
+            return self.mdss_control.read_text().strip()
+        except OSError:
+            return 'absent'
+
+    def set_mdss(self, value):
+        self.mdss_control.write_text(value + '\n')
+        found = self.mdss()
+        self.log(f'{MDSS} power/control={found}')
+        return found
+
+    def gsd_power(self):
+        """{pid: (uid, adapter mapped)} for every running gsd-power."""
+        found = {}
+        for proc in (self.root / 'proc').glob('[0-9]*'):
+            try:
+                if (proc / 'comm').read_text().strip() != 'gsd-power':
+                    continue
+                status = (proc / 'status').read_text()
+                uid = int(next(line.split()[1] for line in status.splitlines()
+                               if line.startswith('Uid:')))
+                maps = (proc / 'maps').read_text()
+            except (OSError, StopIteration, ValueError):
+                continue
+            found[int(proc.name)] = (uid, ADAPTER in maps)
+        return found
+
+    def user_managers(self):
+        managers = []
+        for runtime in (self.root / 'run/user').glob('[0-9]*'):
+            if (runtime / 'systemd/private').exists():
+                managers.append(int(runtime.name))
+        return sorted(managers)
+
+    def reload_user_managers(self):
+        for uid in self.user_managers():
+            rc, text = self.run(['systemctl', '--user', 'daemon-reload'], uid)
+            self.log(f'user {uid}: daemon-reload {"ok" if rc == 0 else "failed: " + text}')
+
+    def restart_gsd_power(self, want_adapter, timeout=15.0):
+        before = self.gsd_power()
+        for uid in sorted({uid for uid, _ in before.values()}):
+            old = {pid for pid, (owner, _) in before.items() if owner == uid}
+            self.check(['systemctl', '--user', 'kill', '--kill-whom=main',
+                        '--signal=SIGKILL', GSD_UNIT], uid)
+            deadline = time.monotonic() + timeout
+            while True:
+                fresh = {pid: mapped for pid, (owner, mapped) in self.gsd_power().items()
+                         if owner == uid and pid not in old}
+                if fresh and self.run(['systemctl', '--user', 'is-active', '--quiet',
+                                       GSD_UNIT], uid)[0] == 0:
+                    break
+                if time.monotonic() >= deadline:
+                    raise Refused(f'user {uid}: gsd-power did not come back')
+                self.sleep(0.5)
+            if any(mapped != want_adapter for mapped in fresh.values()):
+                raise Refused(f'user {uid}: restarted gsd-power '
+                              f'{"lacks" if want_adapter else "still maps"} the adapter')
+            self.log(f'user {uid}: gsd-power restarted as {sorted(fresh)}, '
+                     f'adapter {"loaded" if want_adapter else "absent"}')
+
+    # -- the two modes ----------------------------------------------------
+
+    def standard(self, runtime, restart):
+        if not self.kernel_has_fix():
+            raise Refused(f'the running kernel lacks {FIX_SYMBOL}; the standard path '
+                          'would hang the display at the first unblank')
+        if self.mdss() not in ('on', 'auto'):
+            raise Refused(f'no runtime PM control for {MDSS}')
+        base = self.base(runtime)
+        scope = ['--runtime'] if runtime else []
+        # 1. The key handler switches to Mutter's PowerSaveMode.
+        (base / MARKER).parent.mkdir(parents=True, exist_ok=True)
+        (base / MARKER).write_text('standard\n')
+        self.log(f'wrote {base / MARKER}')
+        # 2. Stopping the service switches the backlight back on.
+        self.check(['systemctl', 'stop', *UNITS])
+        self.check(['systemctl', 'mask', *scope, *UNITS])
+        # 3. Nothing pins the MDSS parent any more; let runtime PM have it.
+        self.mask(base / UDEV_RULE)
+        self.check(['udevadm', 'control', '--reload'])
+        if self.set_mdss('auto') != 'auto':
+            raise Refused(f'{MDSS} power/control did not read back auto')
+        # 4. gsd-power calls Mutter's own setter again once it restarts.
+        self.mask(base / GSD_DROPIN)
+        self.reload_user_managers()
+        if restart:
+            self.restart_gsd_power(want_adapter=False)
+
+    def compat(self, restart):
+        # 1. The backlight service first, so the key handler has it back.
+        self.check(['systemctl', 'unmask', '--runtime', *UNITS])
+        self.check(['systemctl', 'unmask', *UNITS])
+        self.check(['systemctl', 'start', UNITS[0]])
+        # 2. The udev rule pins the MDSS parent again.
+        for base in self.bases():
+            self.unmask(base / UDEV_RULE)
+        self.check(['udevadm', 'control', '--reload'])
+        self.check(['udevadm', 'trigger', '--action=change', '--subsystem-match=platform',
+                    f'--sysname-match={MDSS}'])
+        self.run(['udevadm', 'settle', '--timeout=10'])
+        if self.mdss() != 'on':
+            self.log('the udev rule did not pin the MDSS parent; writing on directly')
+            if self.set_mdss('on') != 'on':
+                raise Refused(f'{MDSS} power/control did not read back on')
+        # 3. gsd-power loads the adapter again when it restarts.
+        for base in self.bases():
+            self.unmask(base / GSD_DROPIN)
+        self.reload_user_managers()
+        if restart:
+            self.restart_gsd_power(want_adapter=True)
+        # 4. Last: the key handler goes back to the backlight service.
+        for base in self.bases():
+            marker = base / MARKER
+            if marker.is_file() and not marker.is_symlink():
+                marker.unlink()
+                self.log(f'removed {marker}')
+
+    def status(self):
+        """Every component's state as (key, value, mode it indicates or None)."""
+        rows = []
+        marker = self.marker_in()
+        rows.append(('marker', ','.join(marker) or 'none', 'standard' if marker else 'compat'))
+        udev = self.masked_in(UDEV_RULE)
+        rows.append(('udev_rule_masked', ','.join(udev) or 'no',
+                     'standard' if udev else 'compat'))
+        mdss = self.mdss()
+        rows.append(('mdss_power_control', mdss,
+                     {'auto': 'standard', 'on': 'compat'}.get(mdss)))
+        for unit in UNITS:
+            enabled = self.run(['systemctl', 'is-enabled', unit])[1] or 'unknown'
+            active = self.run(['systemctl', 'is-active', unit])[1] or 'unknown'
+            masked = enabled.startswith('masked')
+            if unit.endswith('.socket'):
+                indicates = ('standard' if masked and active != 'active' else
+                             'compat' if not masked and active == 'active' else None)
+            else:  # socket-activated: it may or may not be running in compat
+                indicates = 'standard' if masked and active != 'active' else (
+                    None if masked else 'compat')
+            rows.append((f'{unit.split(".")[1]}_state', f'{enabled}/{active}', indicates))
+        dropin = self.masked_in(GSD_DROPIN)
+        rows.append(('gsd_dropin_masked', ','.join(dropin) or 'no',
+                     'standard' if dropin else 'compat'))
+        processes = self.gsd_power()
+        mapped = {mapped for _, mapped in processes.values()}
+        rows.append(('gsd_power', ','.join(
+            f'{pid}:{uid}:{"adapter" if loaded else "plain"}'
+            for pid, (uid, loaded) in sorted(processes.items())) or 'none',
+            {frozenset({True}): 'compat', frozenset({False}): 'standard'}.get(frozenset(mapped))))
+        rows.append(('kernel_fix', 'yes' if self.kernel_has_fix() else 'no', None))
+        return rows
+
+
+def summary(rows):
+    """standard or compat when every component agrees, mixed otherwise."""
+    config = {mode for key, _, mode in rows if key not in ('gsd_power', 'kernel_fix')}
+    running = next(mode for key, _, mode in rows if key == 'gsd_power')
+    processes = next(value for key, value, _ in rows if key == 'gsd_power')
+    modes = config | ({running} if processes != 'none' else set())
+    return modes.pop() if len(modes) == 1 and None not in modes else 'mixed'
+
+
+def main(argv=None, system=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest='command', required=True)
+    standard = commands.add_parser('standard', help="GNOME's own display power path")
+    standard.add_argument('--runtime', action='store_true',
+                          help='write the overrides to /run: the next boot is compat again')
+    compat = commands.add_parser('compat', help='backlight-only blanking (package default)')
+    for sub in (standard, compat):
+        sub.add_argument('--restart-gsd-power', action='store_true',
+                         help="kill each user's gsd-power so systemd restarts it "
+                              'with the new setting')
+    commands.add_parser('status', help='show the configured and running state')
+    args = parser.parse_args(argv)
+    system = system or System()
+    if args.command != 'status' and os.geteuid() != 0 and system.root == Path('/'):
+        parser.error('must run as root')
+    status = 0
+    try:
+        if args.command == 'standard':
+            system.standard(args.runtime, args.restart_gsd_power)
+        elif args.command == 'compat':
+            system.compat(args.restart_gsd_power)
+    except Refused as error:
+        # A switch that stopped half way is reported as it stands; running
+        # compat again restores the package default.
+        print(f'erhai-display-power-mode: {error}', file=sys.stderr)
+        status = 1
+    rows = system.status()
+    for key, value, _ in rows:
+        print(f'{key}={value}')
+    print(f'mode={summary(rows)}')
+    return status
+
+
+if __name__ == '__main__':
+    sys.exit(main())

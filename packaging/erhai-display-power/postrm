@@ -6,6 +6,19 @@ remove) deb-systemd-helper mask erhai-display-power.socket >/dev/null || true ;;
 purge)
     deb-systemd-helper purge erhai-display-power.socket >/dev/null || true
     deb-systemd-helper unmask erhai-display-power.socket >/dev/null || true
+    # Overrides erhai-display-power-mode standard wrote: its marker and the
+    # /dev/null masks, and nothing that is not a /dev/null symlink.
+    for base in /etc /run; do
+        rm -f "$base/erhai/display-power-mode"
+        for path in "$base/udev/rules.d/81-erhai-display-power.rules" \
+            "$base/systemd/user/org.gnome.SettingsDaemon.Power.service.d/80-erhai-backlight.conf" \
+            "$base/systemd/system/erhai-display-power.socket" \
+            "$base/systemd/system/erhai-display-power.service"; do
+            if [ -L "$path" ] && [ "$(readlink "$path")" = /dev/null ]; then
+                rm -f "$path"
+            fi
+        done
+    done
     ;;
 esac
 if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi

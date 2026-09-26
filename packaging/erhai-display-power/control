@@ -14,3 +14,9 @@ Description: Backlight-only display blanking for the OnePlus Pad 2 Pro
  display-power setter; battery management and GNOME authentication remain in
  the original distribution processes. This workaround increases screen-off
  power and does not establish display recovery from system suspend.
+ .
+ erhai-display-power-mode switches to GNOME's own display power path
+ (standard) on kernels that recover from the display power collapse, and
+ back (compat, the default). It only writes overrides -- masks and a marker
+ in /etc, or in /run so that the next boot is compat again -- and changes no
+ packaged file.
