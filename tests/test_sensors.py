@@ -284,10 +284,35 @@ class DeliveryTest(unittest.TestCase):
         for name in ('SSC_SUSPEND_MODE', 'SSC_BATCH_PERIOD_US', 'SSC_FLUSH_PERIOD_US'):
             self.assertIn(f'"{name}"', patch)
             self.assertIn(name + '=', text)
-        # Default requests stay those of libssc 0.4.4: wake-up, no batching.
+        # Only stream requests carry the chosen delivery.
         self.assertIn('config_msg.suspend_mode = streaming ? delivery->suspend_mode : '
                       'SSC_SUSPEND_MODE_WAKEUP;', patch)
         self.assertIn('+#define SSC_SUSPEND_MODE_NO_WAKEUP\t1', patch)
+
+    def test_default_delivery_follows_the_sensor_type(self):
+        """0002: motion streams non-wakeup, everything else wake-up, env still overrides."""
+        lock = json.loads((INPUTS / 'sources.json').read_text())
+        libssc = next(s for s in lock['sources'] if s['name'] == 'libssc')
+        names = [Path(p['file']).name for p in libssc['patches']]
+        self.assertEqual(names[:2], [
+            '0001-libssc-select-the-delivery-and-batching-of-streams-at-run-time.patch',
+            '0002-libssc-choose-the-stream-delivery-by-sensor-type.patch'])
+        patch = (INPUTS / libssc['patches'][1]['file']).read_text()
+        table = patch.split('+static const gchar * const no_wakeup_data_types[] = {', 1)[1]
+        table = table.split('+};', 1)[0]
+        types = [l.strip('+\t ",') for l in table.splitlines() if l.strip('+\t ')]
+        self.assertEqual(types, ['accel', 'gyro', 'mag', 'rotv'])
+        # The sensor passes its data type with the stream request.
+        self.assertIn('+\tssc_client_send_for_sensor (priv->client,\n+\t\t\t\t    priv->data_type,', patch)
+        # Unset means per type; wakeup and nowakeup still override.
+        self.assertIn('+\tconfig->suspend_mode = SSC_SUSPEND_MODE_BY_SENSOR_TYPE;', patch)
+        self.assertIn('+\t\telse if (g_str_equal (mode, "wakeup"))', patch)
+        # The delivery type is the only per-type choice: batching comes from
+        # SSC_BATCH_PERIOD_US alone.
+        self.assertIn('+\t*delivery = *overrides;\n+\tif (delivery->suspend_mode == '
+                      'SSC_SUSPEND_MODE_BY_SENSOR_TYPE)\n', patch)
+        self.assertIn('Assisted-by: LLM', patch)
+        self.assertIn('by sensor type: accelerometer non-wakeup, no batching', DELIVERY.read_text())
 
 
 def scalars(sc):

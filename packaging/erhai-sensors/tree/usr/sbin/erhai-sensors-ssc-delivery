@@ -1,20 +1,26 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Select, for this boot only, how the ADSP sensor core delivers the
-# accelerometer stream to iio-sensor-proxy. Meant for measuring the ADSP
-# wake-ups the stream causes, one setting at a time.
+# Override, for this boot only, how the ADSP sensor core delivers the
+# accelerometer stream to iio-sensor-proxy: for measurements that change one
+# setting at a time, and as the fallback to the delivery libssc used to ask
+# for.
 #
 #   erhai-sensors-ssc-delivery [--no-restart] status
 #   erhai-sensors-ssc-delivery [--no-restart] default
 #   erhai-sensors-ssc-delivery [--no-restart] wakeup|nowakeup [BATCH_US [FLUSH_US]]
 #
-# The choice is an environment file under /run that the proxy unit reads
-# (drop-in 80-erhai-ssc.conf); libssc turns it into the delivery type and
-# batching of its stream requests. "default" removes the file, and so does
-# the next boot: libssc then sends wake-up delivery without batching, as
-# upstream. A running proxy is restarted to apply the change; the file
-# server stays attached and the ADSP is not restarted.
+# Without an override libssc chooses by sensor type: the accelerometer
+# stream is requested with non-wakeup delivery and without batching, so the
+# sensor core does not signal the application processor for every sample.
+# "wakeup" forces wake-up delivery, the requests of libssc 0.4.4; "nowakeup"
+# forces non-wakeup delivery. Both apply to every stream of the proxy.
+#
+# The override is an environment file under /run that the proxy unit reads
+# (drop-in 80-erhai-ssc.conf); "default" removes it, and so does the next
+# boot. A running proxy is restarted to apply the change; the file server
+# stays attached and the ADSP is not restarted. The sample gate's own
+# ssccli run at boot does not read the file.
 set -eu
 
 ENV_DIR=${ERHAI_SENSORS_SSC_ENV_DIR:-/run/erhai-sensors-ssc}
@@ -46,7 +52,7 @@ show() {
 	if [ -f "$ENV_FILE" ]; then
 		echo "selection: $(grep -v '^#' "$ENV_FILE" | tr '\n' ' ')"
 	else
-		echo 'selection: default (wake-up delivery, no batching)'
+		echo 'selection: default (by sensor type: accelerometer non-wakeup, no batching)'
 	fi
 	echo "proxy: $("$SYSTEMCTL" show "$UNIT" -p ActiveState -p MainPID | tr '\n' ' ')"
 }

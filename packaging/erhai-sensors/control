@@ -21,6 +21,9 @@ Description: OnePlus Pad 2 Pro (erhai) accelerometer for screen rotation
  exposed. The start-up sequence and gravity samples have been checked on
  hardware; the mount matrix is still to be confirmed by rotating the tablet.
  .
- For measurements, erhai-sensors-ssc-delivery can switch the accelerometer
- stream to non-wakeup delivery or batching for the current boot only; by
- default libssc requests wake-up delivery without batching, as upstream.
+ The accelerometer stream is requested with non-wakeup delivery and without
+ batching, so the sensor core does not interrupt the processor for every
+ sample; sensors that exist to wake the system keep wake-up delivery. For
+ measurements or as a fallback, erhai-sensors-ssc-delivery overrides the
+ delivery or adds batching for the current boot only ("wakeup" restores the
+ requests of upstream libssc).
