@@ -5,10 +5,14 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: sound
 Priority: optional
-Depends: alsa-ucm-conf (>= 1.2.4)
+Depends: alsa-ucm-conf (>= 1.2.4), python3
 Description: OnePlus Pad 2 Pro (erhai) audio topology and configuration
  Device-specific AudioReach topology built from pinned upstream sources.
  The current candidate provides the internal microphone capture graph and
  a UCM profile for the board's two analog microphones.
- A disabled speaker UCM candidate is included; speaker playback and USB
- headset support are still under development.
+ .
+ The internal speakers are a candidate that stays off: erhai-audio-speaker
+ enable offers them until the next boot, at an amplifier level 20 dB below
+ the stock profile, and disable withdraws them. The stock speaker protection
+ and tuning have no counterpart here yet. USB headset support is still under
+ development.

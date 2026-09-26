@@ -1,0 +1,175 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Offer or withdraw the internal speakers for the running boot.
+
+enable   create /run/erhai-audio/speaker-enabled, which the board's UCM
+         profile tests before it includes the Speaker device, then restart
+         each user's PipeWire and WirePlumber so they read the profile again.
+         The speakers become an output device -- the only one besides
+         headsets, so the default -- at the capped levels in Speaker.conf.
+disable  remove the flag, restart the sound servers the same way, then close
+         the speaker route if it is still open and nothing plays through it.
+status   read only: the flag, the route and gain controls, each user's
+         default sink.
+
+Nothing outside /run is written, so a reboot always comes back without the
+speakers. No packaged or distribution file is changed.
+"""
+import argparse
+import os
+from pathlib import Path
+import pwd
+import re
+import subprocess
+import sys
+
+FLAG = 'run/erhai-audio/speaker-enabled'
+CARD = 'OnePlus-Pad-2-Pro'
+ROUTE = 'Secondary TDM0 Audio Mixer MultiMedia1'
+GAINS = tuple(f'Amp{n} PCM Playback Volume' for n in (0, 1, 2, 3, 5, 6)) + (
+    'stream0.vol_ctrl0 MultiMedia1 Playback Volu',)
+UNITS = ('pipewire.service', 'pipewire-pulse.service', 'wireplumber.service')
+
+
+class Refused(Exception):
+    pass
+
+
+def run_command(argv, uid=None):
+    """Run argv, as the user `uid` when given; (returncode, output)."""
+    kwargs = {}
+    if uid is not None:
+        account = pwd.getpwuid(uid)
+        runtime = f'/run/user/{uid}'
+        kwargs = {'user': uid, 'group': account.pw_gid, 'extra_groups': [],
+                  'env': {'PATH': '/usr/bin:/bin', 'HOME': account.pw_dir,
+                          'XDG_RUNTIME_DIR': runtime,
+                          'DBUS_SESSION_BUS_ADDRESS': f'unix:path={runtime}/bus'}}
+    try:
+        result = subprocess.run(argv, text=True, capture_output=True, timeout=30, **kwargs)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return 127, str(error)
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+class System:
+    """The paths and commands a switch touches, under `root` for tests."""
+
+    def __init__(self, root=Path('/'), run=run_command):
+        self.root = Path(root)
+        self.run = run
+
+    @property
+    def flag(self):
+        return self.root / FLAG
+
+    def log(self, message):
+        print(message, flush=True)
+
+    def card(self):
+        """The card index of the board, or None."""
+        try:
+            text = (self.root / 'proc/asound/cards').read_text()
+        except OSError:
+            return None
+        found = re.findall(r'^\s*(\d+) \[.*\]: .* - ' + re.escape(CARD) + r'$', text, re.M)
+        return found[0] if len(found) == 1 else None
+
+    def control(self, card, name):
+        rc, text = self.run(['amixer', '-c', card, 'cget', f"name={name}"])
+        match = re.search(r'^\s*: values=(.*)$', text, re.M)
+        return match[1] if rc == 0 and match else None
+
+    def playing(self, card):
+        """True while any process holds the speaker PCM open."""
+        node = str(self.root / f'dev/snd/pcmC{card}D0p')
+        for proc in (self.root / 'proc').glob('[0-9]*'):
+            try:
+                if any(os.path.realpath(fd) == node for fd in (proc / 'fd').iterdir()):
+                    return True
+            except OSError:
+                continue
+        return False
+
+    def user_managers(self):
+        return sorted(int(r.name) for r in (self.root / 'run/user').glob('[0-9]*')
+                      if (r / 'systemd/private').exists())
+
+    def restart_sound(self):
+        for uid in self.user_managers():
+            rc, text = self.run(['systemctl', '--user', 'try-restart', *UNITS], uid)
+            self.log(f'user {uid}: sound servers {"restarted" if rc == 0 else "not restarted: " + text}')
+
+    def enable(self, restart):
+        if self.card() is None:
+            raise Refused(f'no {CARD} sound card')
+        self.flag.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        self.flag.write_text('enabled by erhai-audio-speaker for this boot\n')
+        self.flag.chmod(0o644)
+        self.log(f'wrote {self.flag}')
+        if restart:
+            self.restart_sound()
+
+    def disable(self, restart):
+        if self.flag.exists():
+            self.flag.unlink()
+            self.log(f'removed {self.flag}')
+        if restart:
+            self.restart_sound()
+        card = self.card()
+        if card is None:
+            return
+        route = self.control(card, ROUTE)
+        if route and route.split(',')[0] == 'on':
+            if self.playing(card):
+                raise Refused('the speaker route is open and the PCM is still in use; '
+                              'stop the player and run disable again')
+            rc, text = self.run(['amixer', '-q', '-c', card, 'cset', f'name={ROUTE}', 'off,off'])
+            if rc:
+                raise Refused(f'could not close the speaker route: {text}')
+            self.log('closed the speaker route')
+
+    def status(self):
+        rows = [('flag', 'present' if self.flag.exists() else 'absent')]
+        card = self.card()
+        rows.append(('card', card if card is not None else 'absent'))
+        if card is not None:
+            for name in (ROUTE,) + GAINS:
+                rows.append((name, self.control(card, name) or 'unknown'))
+        for uid in self.user_managers():
+            rc, text = self.run(['wpctl', 'inspect', '@DEFAULT_AUDIO_SINK@'], uid)
+            match = re.search(r'node\.name = "([^"]*)"', text)
+            rows.append((f'user {uid} default sink', match[1] if rc == 0 and match else 'none'))
+        return rows
+
+
+def main(argv=None, system=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest='command', required=True)
+    for name, text in (('enable', 'offer the speakers until reboot'),
+                       ('disable', 'withdraw the speakers')):
+        sub = commands.add_parser(name, help=text)
+        sub.add_argument('--no-restart', action='store_true',
+                         help='only change the flag; the sound servers pick it up when they restart')
+    commands.add_parser('status', help='show the flag, controls and default sinks')
+    args = parser.parse_args(argv)
+    system = system or System()
+    if args.command != 'status' and os.geteuid() != 0 and system.root == Path('/'):
+        parser.error('must run as root')
+    status = 0
+    try:
+        if args.command == 'enable':
+            system.enable(not args.no_restart)
+        elif args.command == 'disable':
+            system.disable(not args.no_restart)
+    except Refused as error:
+        print(f'erhai-audio-speaker: {error}', file=sys.stderr)
+        status = 1
+    for key, value in system.status():
+        print(f'{key}={value}')
+    return status
+
+
+if __name__ == '__main__':
+    sys.exit(main())
