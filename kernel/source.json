@@ -3,8 +3,8 @@
     "repository_layout": "separate Git, checked out at kernel/linux next to this repo's parent workspace",
     "upstream": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
     "baseline_tag": "v7.2",
-    "branch": "erhai/exp-dpu-quad-pipe",
-    "commit": "e66ca337c76c7fc3e3d154ab2269177ef33b232a",
+    "branch": "erhai/dev",
+    "commit": "b885abdc683cc59e940aa19eabf6aec071e07f71",
     "board_dts": "arch/arm64/boot/dts/qcom/sm8750-erhai.dts",
     "config_fragment": "arch/arm64/configs/erhai-firstboot.config",
     "toolchain": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1)"
