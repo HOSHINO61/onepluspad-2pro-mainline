@@ -59,15 +59,27 @@
       "release": "OPD2413_11.C.34_1340_202607031844",
       "license": "vendor firmware; redistribution permission not established",
       "origin": "Official OnePlus OTA payload, vendor partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
+    },
+    "qca-swiss-army-knife": {
+      "kind": "ath12k-bdencoder",
+      "path": "cache/tools/qca-swiss-army-knife-6df4dae3e2f5e4c2903f3cafd40996fc1b3639ce.tar.gz",
+      "sha256": "e01064b46b3787fc35d1ed593094670f305eaf3a94e8707eb5fa17111a4004db",
+      "url": "https://github.com/qca/qca-swiss-army-knife/archive/6df4dae3e2f5e4c2903f3cafd40996fc1b3639ce.tar.gz",
+      "tool": "qca-swiss-army-knife-6df4dae3e2f5e4c2903f3cafd40996fc1b3639ce/tools/scripts/ath12k/ath12k-bdencoder",
+      "tool_sha256": "fdcc8dc9628d67e500d496a1de22e82e136ddeaec32669ea1b3add93f2980652",
+      "license": "ISC (the encoder); it adds only the board-2.bin framing and board names, never firmware content",
+      "origin": "download the pinned archive; only --refresh-from-rom runs the encoder, over data taken from the other inputs"
     }
   },
   "notes": {
     "novatek/nt36536-xn242.bin": "the vendor keeps the touch application firmware as a property inside a dtbo overlay (nt36536@0/firmware-data-0); the driver loses it on every panel prepare and requests it again, so the installed root has to carry it",
     "qca/gngbtfw20.mbn": "what mainline hci_qca asks a WCN7860 for (qca/gngbtfw%02x.mbn plus a gngbtnv name built from the board id). Confirmed on this unit on 2026-09-22, once BT_EN was wired to the right PMIC: the driver requests exactly these two names and the controller comes up on them -- \"QCA Downloading qca/gngbtfw20.mbn\", then \"qca/gngbtnv20.bin\", then \"QCA FW build version: BTFW.GANGES.2.0.0-00440-PATCHZ-1_DEF\". No board-id variant is needed: btqca reads this unit's board id as 0 and so asks for the plain gngbtnv20.bin rather than a gngbtnv20.b<id>. The stock stack uses a different set entirely -- brhbtfw10.tlv and brhbtnv10.b* in bluetooth.img -- which this port does not use.",
-    "qcom/sm8750/gen80000_zap.mbn": "signed for Qualcomm reference devices; this retail unit's TZ rejects it and the GPU comes up through the SECVID_TRUST_CNTL fallback instead. Shipped because a unit whose TZ accepts it needs it",
+    "qcom/sm8750/gen80000_zap.mbn": "the linux-firmware zap, signed with the SecTools test root for Qualcomm reference devices; this retail unit's TZ rejects it. Kept because a unit whose TZ accepts the test root needs it. qcom/sm8750/erhai/gen80000_zap.mbn is the same shader signed for this product",
     "qcom/sm8750/erhai/": "the ADSP PIL set is per-firmware-build; it is the modem_a content of the ColorOS build this tablet runs, and the DT points remoteproc at adsp.mdt and adsp_dtb.mdt under this directory",
     "awinic/erhai/aw88261_acf.bin": "Unmodified /odm/firmware/aw882xx_acf.bin, verified against the running stock system. AW88261 V0 ACF; the codec firmware-name must select this board-specific path. Channel profiles are ROM data, not per-unit factory calibration. The kernel DT selects it for all six amplifiers; their DVDD supply is still a placeholder and playback is unverified.",
-    "qcom/sm8750/erhai/vpu35_4v.mbn": "Unmodified /vendor/firmware/vpu35_4v.mbn, the signed Iris (VPU 3.5) video core image of this ColorOS build. Upstream linux-firmware has no SM8750 Iris image, and a retail unit's TZ only authenticates the vendor-signed one, so the DT names this board-specific path with firmware-name. Staged for the video decoder bring-up; the iris node is not yet enabled in the shipped DT and decoding is unverified."
+    "qcom/sm8750/erhai/vpu35_4v.mbn": "Unmodified /vendor/firmware/vpu35_4v.mbn, the signed Iris (VPU 3.5) video core image of this ColorOS build. Upstream linux-firmware has no SM8750 Iris image, and a retail unit's TZ only authenticates the vendor-signed one, so the DT names this board-specific path with firmware-name. Staged for the video decoder bring-up; the iris node is not yet enabled in the shipped DT and decoding is unverified.",
+    "qcom/sm8750/erhai/gen80000_zap.mbn": "Unmodified /vendor/firmware/gen80000_zap.mbn of this ColorOS build. Its code segments are byte-identical to the linux-firmware zap; only the hash segment and signature differ: it chains to OPLUS ROOT CA 1, the root this unit's TZ already accepts for the ADSP image in the same directory. It replaces the test-signed zap on this unit only, selected by the gpu zap-shader node's firmware-name once the DT enables it; the shipped DT keeps that node disabled and loading it is unverified",
+    "ath12k/WCN7860/hw2.0/erhai/": "Board data candidate from this product's own ROM, next to the ROCKNIX set rather than over it. ath12k builds every board-* path from the fixed ath12k/<fw.dir>/ directory and firmware-name does not apply to board files, so the driver never reads this directory: switching means installing these two files at ath12k/WCN7860/hw2.0/board-2.bin and regdb.bin in place of the ROCKNIX pair, which erhai-firmware owns outright. board-2.bin is /odm/etc/wifi/peach/bdwlan.elf and regdb.bin packed by ath12k-bdencoder under the two names ROCKNIX's board-2.bin uses, the first of which is the name this unit's ath12k asks for (board_id 0xff); the stock Android WLAN driver loads the same two files from /odm/etc/wifi ahead of the modem partition. Radio behaviour is unverified"
   },
   "files": [
     {
@@ -120,6 +132,43 @@
       "size": 125288
     },
     {
+      "install": "ath12k/WCN7860/hw2.0/erhai/board-2.bin",
+      "from": "qca-swiss-army-knife",
+      "board": [
+        {
+          "names": [
+            "bus=pci,vendor=17cb,device=110e,subsystem-vendor=17cb,subsystem-device=110e,qmi-chip-id=2,qmi-board-id=255",
+            "bus=pci,qmi-chip-id=0,qmi-board-id=255"
+          ],
+          "input": "stock-odm",
+          "member": "etc/wifi/peach/bdwlan.elf",
+          "sha256": "5cbfe14329b1db894cb621fb3d65b161014f5d51594b44690b9466fe406ef953",
+          "size": 125264
+        }
+      ],
+      "regdb": [
+        {
+          "names": [
+            "bus=pci,vendor=17cb,device=110e,subsystem-vendor=17cb,subsystem-device=110e,qmi-chip-id=2,qmi-board-id=255",
+            "bus=pci,qmi-chip-id=0,qmi-board-id=255"
+          ],
+          "input": "stock-odm",
+          "member": "etc/wifi/peach/regdb.bin",
+          "sha256": "3e6136068496e6ea03bb1fec4cf84c418fd72687104aeda2f5930d5407e815be",
+          "size": 24278
+        }
+      ],
+      "sha256": "ebccfeb4eead62c8d408c2de58fa7f107486bcd5375bb277431e1841b7097a40",
+      "size": 149924
+    },
+    {
+      "install": "ath12k/WCN7860/hw2.0/erhai/regdb.bin",
+      "from": "stock-odm",
+      "member": "etc/wifi/peach/regdb.bin",
+      "sha256": "3e6136068496e6ea03bb1fec4cf84c418fd72687104aeda2f5930d5407e815be",
+      "size": 24278
+    },
+    {
       "install": "qca/gngbtfw20.mbn",
       "from": "rocknix-extra-firmware",
       "member": "extra-firmware-2b7207cfcb80c53c09dc6e04165789ecaf2d3348/SM8750/qca/gngbtfw20.mbn",
@@ -159,6 +208,13 @@
       "from": "linux-firmware",
       "member": "qcom/sm8750/gen80000_zap.mbn",
       "sha256": "0e3ae03f7dd3170621e7b231802639535410bbc2a1c3ba0829c15ab4cf3996cf",
+      "size": 12088
+    },
+    {
+      "install": "qcom/sm8750/erhai/gen80000_zap.mbn",
+      "from": "stock-vendor",
+      "member": "firmware/gen80000_zap.mbn",
+      "sha256": "06ae284fff4c953bdd0da2e628a28d531cfa6503e6a982fcbc3b7f75cc6b3746",
       "size": 12088
     },
     {

@@ -72,8 +72,10 @@ PY
 	# resolved by the loader next to firmware-name qcom/sm8750/erhai/adsp.mdt.
 	adsp_src="$firmware/qcom/sm8750/erhai"
 	adsp_dst=/lib/firmware/qcom/sm8750/erhai
-	# Adreno 830 firmware (linux-firmware): SQE/GMU/AQE by catalog name, zap
-	# via DT firmware-name qcom/sm8750/gen80000_zap.mbn.
+	# Adreno 830 firmware: SQE/GMU/AQE (linux-firmware) by catalog name. The
+	# GPU probes about 2 s into boot, before the root is mounted, so both zap
+	# shaders the DT firmware-name may select ride along: the linux-firmware
+	# one (test-signed) and the vendor-signed erhai/ one this unit's TZ takes.
 	gpu_src="$firmware/qcom"
 	# WCN7860 (ath12k) firmware; not in upstream linux-firmware, sourced from
 	# the ROCKNIX extra-firmware pack (Odin 3 set, same chip family).
@@ -115,17 +117,19 @@ trap 'rm -rf -- "$stage"' EXIT
 		printf 'file /lib/firmware/novatek/%s %s 0644 0 0\n' "$(basename -- "$fw")" "$fw"
 	done
 	if [[ -n ${gpu_src:-} ]]; then
-		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw sm8750/gen80000_zap.mbn; do
+		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw sm8750/gen80000_zap.mbn \
+			sm8750/erhai/gen80000_zap.mbn; do
 			[[ -f $gpu_src/$f ]] || { echo "GPU firmware not found: $gpu_src/$f" >&2; exit 1; }
 		done
 		printf 'dir /lib 0755 0 0\n'
 		printf 'dir /lib/firmware 0755 0 0\n'
 		printf 'dir /lib/firmware/qcom 0755 0 0\n'
 		printf 'dir /lib/firmware/qcom/sm8750 0755 0 0\n'
-		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw; do
+		printf 'dir /lib/firmware/qcom/sm8750/erhai 0755 0 0\n'
+		for f in gen80000_sqe.fw gen80000_gmu.bin gen80000_aqe.fw sm8750/gen80000_zap.mbn \
+			sm8750/erhai/gen80000_zap.mbn; do
 			printf 'file /lib/firmware/qcom/%s %s 0644 0 0\n' "$f" "$gpu_src/$f"
 		done
-		printf 'file /lib/firmware/qcom/sm8750/gen80000_zap.mbn %s 0644 0 0\n' "$gpu_src/sm8750/gen80000_zap.mbn"
 	fi
 	if [[ -n ${wifi_src:-} ]]; then
 		for f in amss.bin m3.bin board-2.bin regdb.bin qdss.cfg aux_ucode.bin bdwlan.elf; do

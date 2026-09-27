@@ -148,7 +148,7 @@ def run(command, **kwargs):
 # the ROM cache or the network.
 #
 # --refresh-from-rom is the other direction, for a later ROM version: extract
-# the closure again from the pinned inputs and diff it against the tree. Five
+# the closure again from the pinned inputs and diff it against the tree. Six
 # kinds of input, none of them a previous build's output:
 #   archive  an upstream tarball, by member path
 #   fat      a stock ROM partition image (FAT), read with mtools, no mount and
@@ -158,6 +158,10 @@ def run(command, **kwargs):
 #   dtb      an Android dtbo image; the touch firmware is a property inside one
 #            of its overlays, which is where the vendor keeps it
 #   url      a single upstream file, cached under cache/ by its pinned hash
+#   ath12k-bdencoder
+#            not firmware itself: the pinned qca-swiss-army-knife archive whose
+#            ath12k-bdencoder packs board data and regulatory databases taken
+#            out of the other inputs into an ath12k board-2.bin container
 
 
 FDT_BEGIN_NODE, FDT_END_NODE, FDT_PROP, FDT_NOP, FDT_END = 1, 2, 3, 4, 9
@@ -272,10 +276,60 @@ def firmware_sources(manifest, adopt):
     return resolved
 
 
+def encode_ath12k_board(source, spec, target, erofs_member, adopt):
+    """Pack an ath12k board-2.bin with the pinned ath12k-bdencoder.
+
+    Each board and regdb entry names its data as an EROFS member of another
+    input and the board names ath12k looks it up by. The container is only
+    the encoder's framing around those unmodified bytes, and the encoder is
+    deterministic, so a refresh reproduces the tree's file byte for byte.
+    """
+    with tempfile.TemporaryDirectory(prefix='erhai-bdencoder.') as work:
+        work = Path(work)
+        tool = work / 'ath12k-bdencoder'
+        extract_from_archive(source['resolved_path'], {'member': source['tool']}, tool)
+        if sha256_file(tool) != source['tool_sha256']:
+            die(f'{source["tool"]} is not the pinned ath12k-bdencoder')
+        mapping = {}
+        for section in ('board', 'regdb'):
+            for index, item in enumerate(spec.get(section, [])):
+                data = work / f'{section}-{index}'
+                shutil.copyfile(erofs_member(item['input'], item['member']), data)
+                digest, size = sha256_file(data), data.stat().st_size
+                if adopt:
+                    item['sha256'], item['size'] = digest, size
+                elif (digest, size) != (item['sha256'], item['size']):
+                    die(f'{item["member"]} is {digest}, the manifest pins {item["sha256"]}')
+                mapping.setdefault(section, []).append(
+                    {'names': item['names'], 'data': data.name})
+        (work / 'board-2.json').write_text(json.dumps([mapping], indent=4) + '\n')
+        run([sys.executable, str(tool), '--create', 'board-2.json',
+             '--output', str(target)], cwd=work)
+
+
 def extract_firmware(manifest, sources, base, adopt):
     """Extract the closure from the pinned inputs into <base>."""
     with ExitStack() as temporary:
         erofs_roots = {}
+
+        def erofs_member(name, path):
+            source = sources[name]
+            if source['kind'] != 'erofs':
+                die(f'{name} is not an EROFS input')
+            if shutil.which('fsck.erofs') is None:
+                die('erofs-utils (fsck.erofs) is required to refresh EROFS firmware')
+            if name not in erofs_roots:
+                root = Path(temporary.enter_context(
+                    tempfile.TemporaryDirectory(prefix='erhai-erofs.')))
+                run(['fsck.erofs', '--no-preserve', f'--extract={root}',
+                     str(source['resolved_path'])], timeout=300)
+                erofs_roots[name] = root
+            root = erofs_roots[name]
+            member = (root / path).resolve()
+            if not member.is_relative_to(root) or not member.is_file():
+                die(f'no regular EROFS member inside the image: {path}')
+            return member
+
         for spec in manifest['files']:
             source = sources[spec['from']]
             target = base / spec['install']
@@ -285,19 +339,9 @@ def extract_firmware(manifest, sources, base, adopt):
             elif source['kind'] == 'fat':
                 extract_from_fat(source['resolved_path'], spec, target)
             elif source['kind'] == 'erofs':
-                if shutil.which('fsck.erofs') is None:
-                    die('erofs-utils (fsck.erofs) is required to refresh EROFS firmware')
-                if spec['from'] not in erofs_roots:
-                    root = Path(temporary.enter_context(
-                        tempfile.TemporaryDirectory(prefix='erhai-erofs.')))
-                    run(['fsck.erofs', '--no-preserve', f'--extract={root}',
-                         str(source['resolved_path'])], timeout=300)
-                    erofs_roots[spec['from']] = root
-                root = erofs_roots[spec['from']]
-                member = (root / spec['member']).resolve()
-                if not member.is_relative_to(root) or not member.is_file():
-                    die(f'no regular EROFS member inside the image: {spec["member"]}')
-                shutil.copyfile(member, target)
+                shutil.copyfile(erofs_member(spec['from'], spec['member']), target)
+            elif source['kind'] == 'ath12k-bdencoder':
+                encode_ath12k_board(source, spec, target, erofs_member, adopt)
             elif source['kind'] == 'dtb':
                 extract_from_dtb(source['resolved_path'], spec, target)
             elif source['kind'] == 'url-base':

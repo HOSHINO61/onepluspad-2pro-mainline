@@ -1,6 +1,6 @@
 # Device firmware
 
-The 74 binaries under this directory provide the firmware for this tablet's
+The 77 binaries under this directory provide the firmware for this tablet's
 enabled drivers and its audio and video candidates, laid out exactly as they install under
 `/usr/lib/firmware`. `tools/build-debs.py` packs them into `erhai-firmware`
 after checking each one against the sha256 and size recorded in
@@ -14,18 +14,48 @@ provenance record: the input every file came from and its path inside it.
 | 59 | the OnePlus Pad 2 Pro official ColorOS OTA `OPD2413_11.C.34_1340_202607031844`: 58 out of `modem.img`, one out of `dtbo.img` | the ADSP PIL set under `qcom/sm8750/erhai/`, and the NT36536 touch application firmware, which the vendor keeps as an overlay property rather than as a file |
 | 1 | the same OTA, `odm.img:/firmware/aw882xx_acf.bin` | the unmodified AW88261 amplifier profile at `awinic/erhai/aw88261_acf.bin`; this is ROM content, not per-unit calibration |
 | 1 | the same OTA, `vendor.img:/firmware/vpu35_4v.mbn` | the vendor-signed Iris (VPU 3.5) video core image at `qcom/sm8750/erhai/vpu35_4v.mbn`; linux-firmware carries no SM8750 Iris image, and this unit's TZ authenticates only the vendor-signed one |
+| 1 | the same OTA, `vendor.img:/firmware/gen80000_zap.mbn` | the Adreno 830 zap shader signed for this product, at `qcom/sm8750/erhai/gen80000_zap.mbn`; see below |
+| 2 | the same OTA, `odm.img:/etc/wifi/peach/bdwlan.elf` and `regdb.bin` | this product's WCN7860 board data and regulatory database, a candidate at `ath12k/WCN7860/hw2.0/erhai/`; `board-2.bin` there is the two files packed by `ath12k-bdencoder` from qca-swiss-army-knife commit `6df4dae3`, `regdb.bin` is the plain file |
 | 9 | ROCKNIX `extra-firmware`, commit `2b7207cf` | WCN7860 Wi-Fi (`ath12k/`) and Bluetooth (`qca/`), which upstream linux-firmware does not carry |
-| 4 | linux-firmware | Adreno 830 SQE/GMU/AQE microcode and the SM8750 zap shader |
+| 4 | linux-firmware | Adreno 830 SQE/GMU/AQE microcode and the SM8750 zap shader signed with Qualcomm's test root |
 
-Nothing here is modified, recompiled or repacked: each file is the bytes its
-input holds, copied out and given mode 0644. `tools/build-debs.py
---refresh-from-rom` extracts the closure from those inputs again and diffs it
-against this directory, which is how a later ROM version gets in.
+Nothing here is modified or recompiled: each file is the bytes its input
+holds, copied out and given mode 0644. The one container, the candidate
+`board-2.bin`, wraps the two ODM files unchanged in the encoder's framing and
+board names; the encoder is deterministic, so a refresh reproduces it byte for
+byte. `tools/build-debs.py --refresh-from-rom` extracts the closure from
+those inputs again and diffs it against this directory, which is how a later
+ROM version gets in.
 Refreshing the ODM and vendor inputs requires `fsck.erofs` from erofs-utils
 and temporary space for the unpacked partitions. It runs without mounting or
 preserving ROM ownership, extracts each input once, and removes the temporary
 tree afterward.
-Ordinary package builds need neither this tool nor the ROM.
+Re-creating the candidate `board-2.bin` also takes the pinned
+qca-swiss-army-knife archive the manifest names; the encoder is run from it
+with the build's Python, never installed.
+Ordinary package builds need none of these tools nor the ROM.
+
+The two zap shaders are the same shader code: their loadable segments are
+byte-identical and only the hash segment and signature differ. The
+linux-firmware one chains to the SecTools test root that Qualcomm reference
+devices accept and this unit's TZ refuses; the vendor one chains to OPLUS ROOT
+CA 1, the same root as the ADSP image this unit already loads. Both are kept,
+since another SM8750 board may need the test-signed one. The shipped device
+tree leaves the zap node disabled; enabling it with `firmware-name =
+"qcom/sm8750/erhai/gen80000_zap.mbn"` selects the vendor one. The GPU probes
+before the root is mounted, so `tools/build-initramfs.sh` carries both zap
+files in the initramfs.
+
+The Wi-Fi files under `ath12k/WCN7860/hw2.0/erhai/` sit next to the ROCKNIX
+`board-2.bin` and `regdb.bin` rather than over them, and the driver does not
+read them. ath12k always takes `board-2.bin` from the fixed
+`ath12k/WCN7860/hw2.0/` directory -- `firmware-name` applies to its other
+files, never to board files -- and the ROCKNIX `board-2.bin` is ROCKNIX's
+own board data for another device under this chip's board name. Switching to
+this product's data means installing the candidate pair at the fixed path, in
+the manifest and in the initramfs alike, since ath12k is built in and may
+request the file before the root is mounted. That waits for an A/B comparison
+on the device.
 
 The Iris image is prepared for the video decoder candidate. The shipped device
 tree leaves the Iris node disabled, so no driver requests it yet; the node
@@ -46,10 +76,11 @@ that this device's port builds from one tree. The four linux-firmware files
 carry that project's `LICENSE.qcom` redistribution terms, and ROCKNIX
 redistributes its nine under the terms it received them.
 
-The 61 files taken out of the stock OTA are the ones to be careful with: this
+The 64 files taken out of the stock OTA are the ones to be careful with: this
 project has **not** established any redistribution permission for them from
 OnePlus or Qualcomm, and the OTA ships no license text granting one. They are
 here because the port needs them and the owner of this unit decided to publish
 them; anyone who redistributes this tree further stands in the same place.
 Dropping them from the manifest and from this directory is all it takes to
-build without them, at the cost of the ADSP, touchscreen, amplifier profiles and video decoder.
+build without them, at the cost of the ADSP, touchscreen, amplifier profiles, video decoder,
+vendor-signed zap shader and Wi-Fi board data candidate.
