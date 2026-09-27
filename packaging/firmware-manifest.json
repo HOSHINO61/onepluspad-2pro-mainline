@@ -49,6 +49,16 @@
       "release": "OPD2413_11.C.34_1340_202607031844",
       "license": "vendor firmware; redistribution permission not established",
       "origin": "Official OnePlus OTA payload, odm partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
+    },
+    "stock-vendor": {
+      "kind": "erofs",
+      "path": "cache/stock-c34-full/images/vendor.img",
+      "sha256": "e632b0ff3ad829a805e4dbb61c798eba2c22e79fd2331d273494fd979e12919a",
+      "url": "https://gauss-compota-c-cn.allawnfs.com/remove-b0608b3ac0ca59a1e916aec540e6a9f5/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/07/07/1d5489232fd6471cbdd222dd701e771a.zip",
+      "archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
+      "release": "OPD2413_11.C.34_1340_202607031844",
+      "license": "vendor firmware; redistribution permission not established",
+      "origin": "Official OnePlus OTA payload, vendor partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
     }
   },
   "notes": {
@@ -56,7 +66,8 @@
     "qca/gngbtfw20.mbn": "what mainline hci_qca asks a WCN7860 for (qca/gngbtfw%02x.mbn plus a gngbtnv name built from the board id). Confirmed on this unit on 2026-09-22, once BT_EN was wired to the right PMIC: the driver requests exactly these two names and the controller comes up on them -- \"QCA Downloading qca/gngbtfw20.mbn\", then \"qca/gngbtnv20.bin\", then \"QCA FW build version: BTFW.GANGES.2.0.0-00440-PATCHZ-1_DEF\". No board-id variant is needed: btqca reads this unit's board id as 0 and so asks for the plain gngbtnv20.bin rather than a gngbtnv20.b<id>. The stock stack uses a different set entirely -- brhbtfw10.tlv and brhbtnv10.b* in bluetooth.img -- which this port does not use.",
     "qcom/sm8750/gen80000_zap.mbn": "signed for Qualcomm reference devices; this retail unit's TZ rejects it and the GPU comes up through the SECVID_TRUST_CNTL fallback instead. Shipped because a unit whose TZ accepts it needs it",
     "qcom/sm8750/erhai/": "the ADSP PIL set is per-firmware-build; it is the modem_a content of the ColorOS build this tablet runs, and the DT points remoteproc at adsp.mdt and adsp_dtb.mdt under this directory",
-    "awinic/erhai/aw88261_acf.bin": "Unmodified /odm/firmware/aw882xx_acf.bin, verified against the running stock system. AW88261 V0 ACF; the codec firmware-name must select this board-specific path. Channel profiles are ROM data, not per-unit factory calibration. The kernel DT selects it for all six amplifiers; their DVDD supply is still a placeholder and playback is unverified."
+    "awinic/erhai/aw88261_acf.bin": "Unmodified /odm/firmware/aw882xx_acf.bin, verified against the running stock system. AW88261 V0 ACF; the codec firmware-name must select this board-specific path. Channel profiles are ROM data, not per-unit factory calibration. The kernel DT selects it for all six amplifiers; their DVDD supply is still a placeholder and playback is unverified.",
+    "qcom/sm8750/erhai/vpu35_4v.mbn": "Unmodified /vendor/firmware/vpu35_4v.mbn, the signed Iris (VPU 3.5) video core image of this ColorOS build. Upstream linux-firmware has no SM8750 Iris image, and a retail unit's TZ only authenticates the vendor-signed one, so the DT names this board-specific path with firmware-name. Staged for the video decoder bring-up; the iris node is not yet enabled in the shipped DT and decoding is unverified."
   },
   "files": [
     {
@@ -570,6 +581,13 @@
       "member": "firmware/aw882xx_acf.bin",
       "sha256": "97ae5a34df87637eb7b68e92dbfedf1930253a1843c0140389d9fb0ae09d1ac7",
       "size": 4976
+    },
+    {
+      "install": "qcom/sm8750/erhai/vpu35_4v.mbn",
+      "from": "stock-vendor",
+      "member": "firmware/vpu35_4v.mbn",
+      "sha256": "4fbe0a9709449bbb714a20acad9503b5e4e8feff51e0b76988370d1e753f9c65",
+      "size": 2417352
     }
   ]
 }
