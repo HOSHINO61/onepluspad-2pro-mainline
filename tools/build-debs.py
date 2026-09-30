@@ -1009,18 +1009,18 @@ def write_control(root, package, version, substitutions):
         (debian / 'md5sums').chmod(0o644)
 
 
-def source_date_epoch(kernel_out):
+def source_date_epoch(kernel_out=None):
     """A fixed timestamp for the archive members, so two builds match byte for byte.
 
     dpkg-deb clamps every mtime newer than SOURCE_DATE_EPOCH to it, and the
     staged files are all newer, so the whole archive lands on one timestamp.
-    The kernel commit is the natural choice: it is the newest real input.
+    Kernel sets use the kernel commit; component-only builds use this
+    integration repository. An exported tree can supply SOURCE_DATE_EPOCH.
     """
     if 'SOURCE_DATE_EPOCH' in os.environ:
         return os.environ['SOURCE_DATE_EPOCH']
-    source = Path(kernel_out) / 'source'
-    git = WS / 'kernel/linux'
-    if git.is_dir() or source.is_dir():
+    git = WS / 'kernel/linux' if kernel_out is not None else REPO
+    if (git / '.git').exists():
         result = subprocess.run(['git', '-C', str(git), 'show', '-s', '--format=%ct', 'HEAD'],
                                 capture_output=True, text=True)
         if result.returncode == 0 and result.stdout.strip().isdigit():
@@ -1083,8 +1083,9 @@ def main():
         package for package in PACKAGES if args.debug or package != 'erhai-debug')
 
     release_file = Path(args.kernel_out) / 'include/config/kernel.release'
-    release = release_file.read_text().strip() if release_file.is_file() else None
+    release = None
     if 'erhai-kernel' in wanted:
+        release = release_file.read_text().strip() if release_file.is_file() else None
         if not release:
             die(f'no kernel release at {release_file}; build the kernel first')
         if not re.fullmatch(r'[a-z0-9.+-]{1,64}', release):
@@ -1144,7 +1145,7 @@ def main():
         release_counter = read_release()
         version = release_counter + ('~dbg' if args.debug else '') + stamp
 
-        epoch = source_date_epoch(args.kernel_out)
+        epoch = source_date_epoch(args.kernel_out if kernel_meta else None)
         built = []
         for package in roots:
             architecture = 'arm64' if package in ('erhai-kernel', 'erhai-device', 'erhai-display-power', image_package) else 'all'
