@@ -12,23 +12,21 @@ for the exact baseline, branch and commit.
 
 ## Status and validation boundaries
 
-The installed audio baseline is 0.1.31. This development candidate adds a native
-eight-channel speaker graph, its kernel prerequisites, and a board description of
-the six speaker amplifiers and their secondary TDM link. An earlier kernel with
-the graph prerequisites passed a bounded RAM microphone regression; the amplifier
-and link description has offline checks only and has not been booted. The
-amplifier supply is a placeholder because the real rail is unknown. Stereo routing
-and physical playback remain incomplete. The microphone UCM remains the only
-enabled audio profile.
+The last hardware-validated installed kernel package is 0.1.57. Later kernel
+selections and the Turnip and ambient-light packages are development candidates;
+they have not inherited that baseline's hardware results. Six speaker amplifiers
+have passed low-level signal routing tests, but listening acceptance and final
+gain remain pending. Their DVDD supply description is still a placeholder.
+The microphone profile is enabled; the speaker profile remains opt-in for tests.
 
 | Area | State | Notes |
 |---|---|---|
 | Boot | Temporary RAM boot and installed GKI triplet verified | Installed Ubuntu and Android switch through the established active-slot layout; temporary installed-root tests use an explicit expiry. |
-| Display | DSI panel 3392x2400@120 native KMS; display and backlight-only wake visually verified | Full display-link shutdown/recovery remains broken; blanking keeps KMS running and switches the backlight. Both backlight chips now form one brightness control (candidate, not yet verified on hardware). |
+| Display | 3392x2400@120 KMS; physical backlight blank/wake verified | Full panel shutdown/recovery and unified brightness have passed automated hardware checks. Daily use still uses backlight blanking; physical acceptance of the standard path and unplugged power measurements remain pending. |
 | Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
 | Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
 | Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
-| Pogo keyboard | Driver candidate, not yet booted | A serdev driver follows the stock attach sequence (sense line with the supply off, switched connector supply, sync packet, heartbeats) and the stock framing: keys, media keys, a five-contact clickpad and the Caps Lock LED. No keyboard has been attached to a mainline kernel yet. |
+| Pogo keyboard | Driver installed; an attached keyboard synchronized and typing was confirmed | Full key/media-key/clickpad/Caps Lock and detach/reattach coverage remain pending. |
 | UFS | Installed Ubuntu root and active-slot boot-image updates verified | Boot, init_boot and vendor_boot are checked together; destructive layout changes require separate approval. |
 | Battery | Charge level/status and full-charge capacity available | The protocol-unit fix restores UPower energy and runtime estimates; net charging performance and control thresholds need separate validation. |
 | CPU frequency | SCMI policies and short per-cluster frequency transitions verified | Matching CPUCP mailbox modules are required. Governors and firmware OPPs are unchanged; sustained-load thermal control remains unverified. |
@@ -36,16 +34,18 @@ enabled audio profile.
 | Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
 | ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
 | Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
-| Speakers | Not enabled (offline candidate) | The six AW88261 amplifiers and the secondary TDM link with per-amplifier slots are described, with a placeholder amplifier supply because the real rail is unknown, and the SoC votes the TDM bit clock; not yet booted. There is no UCM playback device, so the desktop does not route sound to them. Stereo routing and physical playback remain incomplete. |
+| Speakers | Amplifier startup and low-level stereo signal routing verified; listening profile remains opt-in | The six AW88261 amplifiers have passed quiet signal tests. Physical listening, gain and pop/noise acceptance remain pending; the real DVDD rail is still unresolved. |
 | Type-C | pmic-glink + UCSI port, role follows plug | device/sink on a PC link, host for gadgets |
-| GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. Vulkan, sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
-| Wi-Fi (WCN7860) | Association, reconnect and per-device MAC verified | Throughput, roaming and power behavior need further validation. |
+| GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. The Turnip Vulkan driver is packaged but not yet run on the device; sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
+| Wi-Fi (WCN7860) | Association, boot reconnect, per-device MAC, short TCP transfers and controlled reconnect verified | Unexpected disconnects, sustained transfers, power saving, regulatory behavior and Bluetooth peripheral use need more coverage. |
 | Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The optional erhai-mesa package enables hardware rendering for GNOME; application coverage and physical interaction acceptance are tracked separately. |
+| Sensors | Accelerometer data chain installed; four-direction physical acceptance pending | The 0.1.5 candidate adds a lux sample gate and SSC light support for GNOME automatic brightness; it has not been run on the tablet. If either startup gate fails, the sensor proxy stays unavailable; keep the previous package for rollback. |
+| Video | Iris firmware and enabled device-tree candidate prepared | No hardware decoding/encoding result yet; this does not provide browser hardware decode automatically. |
 
 The current blanking workaround switches the panel backlight while keeping KMS
 running. The kernel drives both backlight chips through one led-backlight
 device, so that blanking and desktop brightness act on both chips together;
-this layout has not yet been verified on hardware. The failed touch/DSI
+both chips have matching register readback on the installed system. The failed touch/DSI
 retention diagnostics have been reverted.
 `erhai-display-power` adapts only the GNOME Settings Daemon 50 display-power
 setter; the original daemon continues to manage battery policy and inhibitors.
@@ -69,9 +69,11 @@ this tablet's model, HLOS VMID and unbound nodes, with a boot-time consistency
 check. Setting only the chassis name is insufficient because PID1 caches its
 own virtualization result.
 
-Not yet: full display-link shutdown/recovery and deep-suspend display recovery,
-complete graphics/application validation, audio, pogo keyboard, automatic rotation and USB-host
-peripheral acceptance.
+Deep suspend has completed RTC-woken 300-second cycles in both display modes,
+with the debug USB cable attached. Physical key wake, unplugged idle power and
+full peripheral recovery still require acceptance. Application coverage,
+speaker listening, four-direction rotation and USB-host peripherals are also
+unfinished. Camera capture and pen charging are not implemented.
 
 ## Repository layout
 
@@ -160,28 +162,49 @@ apt install build-essential meson ninja-build pkg-config libdrm-dev \
   wayland-protocols libx11-dev libx11-xcb-dev libxcb-dri2-0-dev \
   libxcb-dri3-dev libxcb-present-dev libxcb-randr0-dev libxcb-sync-dev \
   libxcb-xfixes0-dev libxcb-glx0-dev libxcb-shm0-dev libxshmfence-dev \
-  libxxf86vm-dev libxrandr-dev libglvnd-dev
+  libxxf86vm-dev libxrandr-dev libglvnd-dev glslang-tools python3-packaging \
+  libvulkan-dev vulkan-tools
 tools/build-mesa.py --source-archive mesa-26.2.3.tar.xz \
   --profile desktop --output out/mesa-desktop --jobs 2
 tools/package-mesa.py --build-output out/mesa-desktop --output out/mesa-debs
 ```
 
-The package owns libraries under `/usr/lib/erhai/mesa`, an `environment.d` file
-for systemd user applications and a GNOME Shell service drop-in (including GDM).
-It changes no Ubuntu-owned library or vendor configuration file. Dependencies
-are derived with the native distribution's `dpkg-shlibdeps`; source/build hashes,
-package checksums and the input recipe are recorded in its manifest. Increment
+On a host that is not ARM64, `tools/build-mesa-root.py --output DIR` runs the
+same two tools in a disposable Ubuntu 26.04 arm64 build root (qemu-user binfmt
+and an unprivileged user namespace, no root). The build root and its package
+versions are pinned in `packaging/mesa/build-root.json`; the output directory
+receives the package, its manifest and a record of the build root.
+
+The package owns libraries under `/usr/lib/erhai/mesa` and a systemd user
+environment generator. The generator selects them for every user manager (the
+GDM greeter's and each user's, so GNOME Shell and its applications) only while
+the Adreno GPU is bound to its kernel driver; otherwise the session uses
+Ubuntu's Mesa and its software renderer, which this build does not include. It
+decides at session start; a GPU failure later in a session is not caught. EGL is
+selected with `__EGL_VENDOR_LIBRARY_DIRS`, which sandboxed applications with
+their own graphics runtimes extend rather than lose.
+
+The Turnip Vulkan loader manifest is the one Ubuntu file this package takes
+over: Ubuntu's `freedreno_icd.aarch64.json` (from `mesa-vulkan-drivers`) is
+moved aside with `dpkg-divert` and replaced by one naming the private Turnip,
+because Ubuntu's Turnip has no entry for this chip and declines it. The other
+distribution Vulkan drivers stay in place. The diversion is to be removed once
+Ubuntu's Turnip recognises chip ID `0xffff44050001`. GTK 4 draws with Vulkan on
+Wayland when a hardware device is present, so installing this package moves
+GTK 4 applications from OpenGL to Turnip. No other Ubuntu-owned library or
+vendor configuration file changes. Dependencies are derived with the native
+distribution's `dpkg-shlibdeps`; source/build hashes, package checksums and
+the input recipe are recorded in its manifest. Increment
 `packaging/erhai-mesa/VERSION` for each new installable revision.
 
-Install the resulting deb with `apt install ./erhai-mesa_*.deb`, then cold boot:
-restarting the running compositor is unsafe while display-link recovery remains
-unfixed. Removal with `apt remove erhai-mesa` restores the distribution selection
+Install the resulting deb with `apt install ./erhai-mesa_*.deb`, then cold boot
+to apply the new environment to every user manager. Removal with `apt remove erhai-mesa` restores the distribution selection
 after the next cold boot. Ubuntu Mesa currently lacks this chip entry, so removal
 restores software rendering. Sandboxed applications with their own graphics
 runtimes need separate validation; this package does not replace their runtimes.
 
 The `probe` profile supplies minimal GBM/EGL/GLES; `desktop` also builds the
-Wayland, X11 and GLVND interfaces. Both build Freedreno only, without Vulkan or
+Wayland, X11 and GLVND interfaces and the Turnip Vulkan driver. Neither builds
 a software renderer. These are development profiles, not a complete supported
 desktop package. The manifest records build inputs, native package versions,
 staged file hashes and symlinks. Compatible outputs are incremental and locked
