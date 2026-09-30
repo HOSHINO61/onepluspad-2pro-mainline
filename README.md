@@ -121,10 +121,16 @@ never inputs to the next build.
 ## Quickstart
 
 ```sh
-tools/build-kernel.sh                  # Image + sm8750-erhai.dtb (incremental, ccache)
-PROFILE=ncm tools/build-initramfs.sh   # RAM userspace with the NCM evidence channel
-tools/build-erhai-abl-symbols.py       # packaging DTB ABL will accept
-tools/build-mainline-boot.py --output out/mainline-boot            # minimal session
+kernel_out="$PWD/out/kernel"
+OUT_DIR="$kernel_out" tools/build-kernel.sh
+PROFILE=ncm OUT_DIR="$PWD/out/initramfs" \
+  GEN_INIT_CPIO="$kernel_out/usr/gen_init_cpio" tools/build-initramfs.sh
+tools/build-erhai-abl-symbols.py --output out/abl-dtb \
+  --mainline-dtb "$kernel_out/arch/arm64/boot/dts/qcom/sm8750-erhai.dtb" \
+  --dtc "$kernel_out/scripts/dtc/dtc"
+tools/build-mainline-boot.py --output out/mainline-boot \
+  --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
+  --initramfs out/initramfs/initramfs-ncm.cpio.gz
 # add `--profile desktop` for the pinned RAM Ubuntu desktop cmdline
 fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
 ```
@@ -132,6 +138,12 @@ fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
 `build-erhai-abl-symbols.py` builds the contained overlay sink layout by
 default, the one daily deliveries use: the sink sits in a disabled container,
 so rpmhpd, the NoCs and the PSCI power domains reach `sync_state()`.
+It reads the original `cache/stock-c34/images/vendor_boot.img` and `dtbo.img`
+directly; `--vendor-boot` and `--dtbo-img` select other pinned originals.
+Base-tree index 6 supplies the identity for the recorded C.34 input; a different
+stock layout needs an explicitly verified `--identity-index`. No previous OUT
+tree is required. Extracted original trees remain an explicit alternative via
+`--base-dir` and, if needed, `--identity-base`.
 `--legacy-sink` builds the root-level sink that releases before 0.1.56 boot
 with; it holds `sync_state()` back and is kept for fallback and comparison
 images, so `build-mainline-boot.py`, `build-mainline-gki.py` and

@@ -12,6 +12,7 @@ import importlib.util
 from pathlib import Path
 import struct
 import sys
+import tempfile
 import unittest
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
@@ -199,6 +200,34 @@ def vendor_boot(dtb, page=4096, ramdisk=b'ramdisk'):
         return bytes(data) + b'\0' * (-len(data) % page)
 
     return padded(header) + padded(ramdisk) + padded(dtb) + b'AVBf' * 16
+
+
+class StockInputTest(unittest.TestCase):
+    def test_original_vendor_section_supplies_every_base_tree(self):
+        blobs = [fdt([f'soc@{i}']) for i in range(13)]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / 'vendor_boot.img'
+            image.write_bytes(vendor_boot(b''.join(blobs), ramdisk=b'x' * 5000))
+            paths = abl.extract_base_trees(image, root / 'bases')
+            self.assertEqual([p.read_bytes() for p in paths], blobs)
+            self.assertEqual(paths[6].name, 'base-06.dtb')
+
+    def test_malformed_concatenated_tree_is_refused(self):
+        blob = fdt(['soc@0'])
+        bad_size = bytearray(blob)
+        struct.pack_into('>I', bad_size, 4, 0)
+        for data in (blob + b'\0' * 8, bytes(bad_size), b'bad!' + blob[4:], blob[:-1]):
+            with self.subTest(data=data[:8]), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                image = root / 'vendor_boot.img'
+                image.write_bytes(vendor_boot(data))
+                with self.assertRaises(SystemExit):
+                    abl.extract_base_trees(image, root / 'bases')
+
+    def test_two_stock_sources_are_not_silently_mixed(self):
+        with self.assertRaises(SystemExit):
+            abl.build_parser().parse_args(['--vendor-boot', 'stock.img', '--base-dir', 'trees'])
 
 
 class LayoutReadbackTest(unittest.TestCase):

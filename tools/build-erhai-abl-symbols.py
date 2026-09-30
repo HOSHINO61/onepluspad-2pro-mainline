@@ -9,7 +9,8 @@ __symbols__ (a mainline DTB has none), and it validates the root identity
 (qcom,msm-id / qcom,board-id) against the stock tables. This tool rebuilds
 the packaging DTB offline, without touching the kernel DTS:
 
-* extract the dtbo.img entries (reusing byte-identical files), then map every
+* extract base trees directly from vendor_boot.img and the dtbo.img entries,
+  then map every
   symbol named by any stock base __symbols__ or any dtbo entry __fixups__ to
   an inert sink node carrying an explicit linux,phandle, so libufdt fragment
   merges land harmlessly in the sink;
@@ -50,10 +51,11 @@ import json
 import re
 import struct
 import subprocess
+import tempfile
 from pathlib import Path
 import os
 
-from lib.abl_layout import CONTAINED, LEGACY, USE as LAYOUT_USE
+from lib.abl_layout import CONTAINED, LEGACY, USE as LAYOUT_USE, LayoutError, vendor_boot_dtb
 
 REPO = Path(__file__).resolve().parent.parent
 # Workspace layout: when this repo is checked out at <workspace>/public/<name>,
@@ -66,9 +68,7 @@ else:
 DTC = WS / 'out/kernel-firstboot/scripts/dtc/dtc'
 MAINLINE_DTB = WS / 'out/kernel-firstboot/arch/arm64/boot/dts/qcom/sm8750-erhai.dtb'
 DTBO_IMG = WS / 'cache/stock-c34/images/dtbo.img'
-BASE_DIR = WS / 'out/stock-c34/trees'
-IDENTITY_BASE = BASE_DIR / 'base-06.dtb'
-DTBO_DIR = WS / 'out/stock-c34/dtbo'
+VENDOR_BOOT = WS / 'cache/stock-c34/images/vendor_boot.img'
 DEFAULT_OUT = WS / 'out/abl-dtb'
 CONTAINER_NAME = 'erhai-abl'
 SINK_NAME = 'overlay-sink'
@@ -162,6 +162,28 @@ def root_properties(text):
             if match:
                 props[match.group(1)] = stripped
     return props
+
+
+def extract_base_trees(image_path, out_dir):
+    """Decode the original concatenated FDT section, with no old output input."""
+    try:
+        data = vendor_boot_dtb(image_path.read_bytes())
+    except (LayoutError, struct.error) as error:
+        die(f'{image_path}: {error}')
+    out_dir.mkdir(parents=True, exist_ok=True)
+    offset = 0
+    paths = []
+    while offset < len(data):
+        if len(data) - offset < 40:
+            die(f'{image_path}: truncated base DTB header at {offset}')
+        magic, size = struct.unpack_from('>II', data, offset)
+        if magic != FDT_MAGIC or size < 40 or offset + size > len(data):
+            die(f'{image_path}: invalid base DTB at {offset}')
+        path = out_dir / f'base-{len(paths):02d}.dtb'
+        path.write_bytes(data[offset:offset + size])
+        paths.append(path)
+        offset += size
+    return paths
 
 
 def extract_dtbo_entries(img_path, out_dir):
@@ -321,9 +343,17 @@ def build_parser():
                         help='New output directory (existing DTB with --verify-only)')
     parser.add_argument('--mainline-dtb', type=Path, default=MAINLINE_DTB)
     parser.add_argument('--dtbo-img', type=Path, default=DTBO_IMG)
-    parser.add_argument('--base-dir', type=Path, default=BASE_DIR)
-    parser.add_argument('--identity-base', type=Path, default=IDENTITY_BASE)
-    parser.add_argument('--dtbo-dir', type=Path, default=DTBO_DIR)
+    stock = parser.add_mutually_exclusive_group()
+    stock.add_argument('--vendor-boot', type=Path,
+                       help='Original stock image (default: cache/stock-c34/images/vendor_boot.img)')
+    stock.add_argument('--base-dir', type=Path,
+                       help='Explicit original base-*.dtb inputs instead of a vendor_boot image')
+    parser.add_argument('--identity-base', type=Path,
+                        help='Explicit stock identity tree (default: selected base index)')
+    parser.add_argument('--identity-index', type=int, default=6,
+                        help='Base-tree index supplying identity; 6 matches the pinned C.34 input')
+    parser.add_argument('--dtbo-dir', type=Path,
+                        help='Decoded overlay cache (default: OUTPUT/stock-dtbo)')
     parser.add_argument('--dtc', type=Path, default=DTC)
     parser.add_argument('--verify-only', action='store_true',
                         help='Only re-verify OUTPUT/erhai-abl.dtb against the inputs')
@@ -340,14 +370,23 @@ def build_parser():
     return parser
 
 
-def main():
-    parser = build_parser()
-    args = parser.parse_args()
+def build(parser, args, temporary):
     legacy = args.sink_layout == LEGACY
     dtc = args.dtc.resolve()
-    for path in (dtc, args.mainline_dtb, args.dtbo_img, args.identity_base):
+    vendor_boot = None if args.base_dir else (args.vendor_boot or VENDOR_BOOT).resolve()
+    for path in (dtc, args.mainline_dtb, args.dtbo_img, *([vendor_boot] if vendor_boot else [])):
         if not path.is_file():
             parser.error(f'Missing input: {path}')
+    if args.identity_index < 0:
+        parser.error('--identity-index must be nonnegative')
+    base_dir = args.base_dir.resolve() if args.base_dir else temporary / 'stock-base'
+    if vendor_boot:
+        extract_base_trees(vendor_boot, base_dir)
+    identity_base = (args.identity_base or base_dir / f'base-{args.identity_index:02d}.dtb').resolve()
+    if not identity_base.is_file():
+        parser.error(f'Missing identity tree: {identity_base}')
+    identity_source = (f'{vendor_boot}:dtb[{args.identity_index}]'
+                       if vendor_boot and not args.identity_base else str(identity_base))
     out = args.output.resolve()
     final_dtb = out / 'erhai-abl.dtb'
     if args.verify_only:
@@ -356,13 +395,14 @@ def main():
     else:
         out.mkdir(parents=True, exist_ok=False)
 
-    entries = extract_dtbo_entries(args.dtbo_img.resolve(), args.dtbo_dir.resolve())
-    by_base, by_entry, union = symbol_union(dtc, args.base_dir.resolve(), entries)
-    base_root = root_properties(decompile(dtc, args.identity_base.resolve()))
+    entries = extract_dtbo_entries(args.dtbo_img.resolve(),
+                                   (args.dtbo_dir or out / 'stock-dtbo').resolve())
+    by_base, by_entry, union = symbol_union(dtc, base_dir, entries)
+    base_root = root_properties(decompile(dtc, identity_base))
     identity = {name: base_root[name] for name in IDENTITY_PROPS if name in base_root}
     skipped = [name for name in IDENTITY_PROPS if name not in base_root]
     if skipped:
-        print(f'note: {args.identity_base.name} root has no {", ".join(skipped)}; skipped')
+        print(f'note: {identity_base.name} root has no {", ".join(skipped)}; skipped')
 
     if not args.verify_only:
         text = decompile(dtc, args.mainline_dtb.resolve())
@@ -376,16 +416,16 @@ def main():
 
     report = verify(dtc, final_dtb, union, identity, by_entry, legacy)
     if not args.verify_only:
-        base_dir = args.base_dir.resolve()
         manifest = {
             'status': 'OFFLINE_CANDIDATE_NOT_DEVICE_TESTED',
             'purpose': 'packaging DTB that survives ABL stock-dtbo overlay application '
                        'and root identity checks',
             'abl_sink_layout': args.sink_layout,
             'abl_sink_use': LAYOUT_USE[args.sink_layout],
-            'inputs_sha256': {'dtbo.img': sha(args.dtbo_img.resolve()),
+            'inputs_sha256': ({'vendor_boot.img': sha(vendor_boot)} if vendor_boot else {}) | {
+                              'dtbo.img': sha(args.dtbo_img.resolve()),
                               'mainline_dtb': sha(args.mainline_dtb.resolve()),
-                              'identity_base': sha(args.identity_base.resolve()),
+                              'identity_base': sha(identity_base),
                               'base_dtbs': {name: sha(base_dir / name) for name in sorted(by_base)},
                               'dtc': sha(dtc)},
             'dtbo_entries': entries,
@@ -394,7 +434,7 @@ def main():
                         'union': len(union),
                         'union_file': 'symbols-union.txt',
                         'union_file_sha256': hashlib.sha256(union_text.encode()).hexdigest()},
-            'root_identity': {'source': str(args.identity_base.resolve()),
+            'root_identity': {'source': identity_source,
                               'copied': identity, 'absent_in_source_skipped': skipped},
             'sink': ({'layout': 'legacy-root', 'name': LEGACY_SINK_NAME,
                       'path': LEGACY_SINK_PATH, 'container': None}
@@ -412,6 +452,13 @@ def main():
                       'sink_layout': report['sink_layout'],
                       'symbols_union': len(union),
                       'fixups_coverage': report['fixups_coverage']}, indent=2))
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix='erhai-stock-trees-') as directory:
+        build(parser, args, Path(directory))
 
 
 if __name__ == '__main__':
