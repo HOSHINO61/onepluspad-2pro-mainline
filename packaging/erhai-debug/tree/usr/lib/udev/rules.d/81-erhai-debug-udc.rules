@@ -1,2 +1,3 @@
-# The port may boot in host mode. Its later device-role event restores NCM.
-ACTION=="add", SUBSYSTEM=="udc", TAG+="systemd", ENV{SYSTEMD_WANTS}+="erhai-debug-attach.service"
+# Start diagnostics after host-mode boot; preserve a live channel on role return.
+# The configfs network interface survives UDC removal and reattachment.
+ACTION=="add", SUBSYSTEM=="udc", TAG+="systemd", ENV{SYSTEMD_WANTS}+="erhai-debug.service"

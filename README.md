@@ -272,7 +272,9 @@ The initramfs and installed debug service share the NCM setup helper. They
 identify its actual interface by configfs and MAC address, preserve external
 USB NICs, and allow an installed system to boot while the port serves a
 peripheral. A UDC appearance requests diagnostic service restoration through
-udev/systemd. Debug kernel images from 0.1.70 require the matching helper
+udev/systemd. From 0.1.71 the rule starts the existing service directly: a
+live configfs interface and its listeners survive controller reattachment
+without an unnecessary restart. Debug kernel images from 0.1.70 require the matching helper
 interface in `erhai-debug >= 0.1.70`; ordinary images do not depend on it.
 These development tools and images are not a finished production release.
 
