@@ -47,7 +47,8 @@ class GateTest(unittest.TestCase):
 
     def fake(self, body):
         path = self.dir / 'ssccli'
-        path.write_text('#!/bin/sh\n' + body)
+        path.write_text('#!/bin/sh\nif [ "$1" = --sensor=light ]; then\n'
+                        'echo "Light sensor measurement: 120.000000 Lux"; exit 0\nfi\n' + body)
         path.chmod(0o755)
         return path
 
@@ -208,9 +209,9 @@ class RecipeTest(unittest.TestCase):
         self.assertIn('bin/ssccli', builder.PAYLOAD)
         self.assertIn(f'/{builder.PREFIX}/bin/ssccli', GATE.read_text())
 
-    def test_udev_rule_limits_proxy_to_accelerometer(self):
+    def test_udev_rule_limits_proxy_to_gated_sensors(self):
         rule = (TREE / 'usr/lib/udev/rules.d/81-erhai-sensors.rules').read_text()
-        self.assertIn('ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel"', rule)
+        self.assertIn('ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel ssc-light"', rule)
         self.assertIn('ENV{ACCEL_MOUNT_MATRIX}="0, 1, 0; -1, 0, 0; 0, 0, 1"', rule)
         self.assertIn('SYMLINK+="erhai-sensors-fastrpc"', rule)
         # Sensor interrupt lines belong to the DSP; nothing here claims a GPIO.

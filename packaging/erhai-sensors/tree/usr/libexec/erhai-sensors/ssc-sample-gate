@@ -24,7 +24,7 @@ fail() {
 }
 
 mkdir -p "$state"
-rm -f "$log" "$result"
+rm -f "$log" "$result" "$state/light-gate.log" "$state/light-gate.result"
 
 # Without the per-unit registry the sensor domain has no accelerometer
 # configuration; say so instead of timing out.
@@ -61,3 +61,32 @@ gravity=$(printf '%s\n' "$summary" | sed -n 's/.* gravity=\([0-9]*\) .*/\1/p')
 
 printf 'result=pass\n%s\n' "$summary" >"$result"
 printf 'ssc-sample-gate: %s\n' "$summary"
+
+# Light is an on-change sensor: one finite, nonnegative lux reading is
+# sufficient to prove data delivery. Darkness (zero lux) is valid; response
+# to changing illumination and the desktop brightness curve need hardware
+# acceptance. Do not publish an uninitialised light sensor to GNOME.
+log=$state/light-gate.log
+result=$state/light-gate.result
+rm -f "$log" "$result"
+status=0
+timeout --signal=TERM --kill-after=2s "${bound}s" \
+	"$ssccli" --sensor=light --timeout=5 >"$log" 2>&1 || status=$?
+[ "$status" -eq 0 ] || fail "light sampling did not close normally (ssccli exit $status)"
+if grep -qE 'Unable to |CRITICAL|assertion.*failed' "$log"; then
+	fail "light sensor reported a lifecycle error"
+fi
+summary=$(awk '
+	/^Light sensor measurement:/ {
+		n++
+		if ($4 !~ /^[0-9]+([.][0-9]+)?$/ || $5 != "Lux" || $4 > 200000)
+			bad++
+		last = $4
+	}
+	END { printf "samples=%d invalid=%d last=%s\n", n, bad, last }
+' "$log")
+samples=$(printf '%s\n' "$summary" | sed -n 's/^samples=\([0-9]*\) .*/\1/p')
+invalid=$(printf '%s\n' "$summary" | sed -n 's/.* invalid=\([0-9]*\) .*/\1/p')
+[ "$samples" -gt 0 ] && [ "$invalid" -eq 0 ] || fail "no valid light data ($summary)"
+printf 'result=pass\n%s\n' "$summary" >"$result"
+printf 'ssc-light-gate: %s\n' "$summary"

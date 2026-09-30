@@ -4,7 +4,7 @@
 # real measurements of gravity from it. One bounded attempt; a failure is
 # recorded under /run/erhai-sensors and is not retried.
 [Unit]
-Description=Accelerometer sample gate for the ADSP sensor core
+Description=Accelerometer and ambient light sample gate for the ADSP sensor core
 Requires=erhai-sensors-rpcd.service
 After=erhai-sensors-rpcd.service
 Before=iio-sensor-proxy.service
@@ -17,7 +17,7 @@ User=fastrpc
 Group=fastrpc
 Environment=LC_ALL=C
 ExecStart=/usr/libexec/erhai-sensors/ssc-sample-gate
-TimeoutStartSec=30s
+TimeoutStartSec=50s
 RuntimeDirectory=erhai-sensors
 RuntimeDirectoryPreserve=yes
 NoNewPrivileges=yes

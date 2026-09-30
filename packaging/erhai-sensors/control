@@ -7,19 +7,20 @@ Section: misc
 Priority: optional
 Depends: @DEPENDS@, iio-sensor-proxy, systemd, udev
 Conflicts: hexagonrpcd
-Description: OnePlus Pad 2 Pro (erhai) accelerometer for screen rotation
+Description: OnePlus Pad 2 Pro rotation and ambient light sensors
  Connects the Qualcomm Sensor Core on the ADSP to the desktop: a private
  hexagonrpcd file server attaches the ADSP sensor domain and serves it the
- stock sensor configuration, libssc reads the accelerometer over QRTR, and a
+ stock sensor configuration, libssc reads motion and light over QRTR, and a
  private iio-sensor-proxy build with SSC support replaces the distribution
  binary through a systemd drop-in. Distribution files are left unchanged;
  removing the package restores Ubuntu's iio-sensor-proxy at the next boot.
  .
  The per-unit sensor registry is not included. Import it once with
  erhai-sensors-import-registry from a copy of this tablet's Android persist
- data; until then the stack stays inactive. Only the accelerometer is
- exposed. The start-up sequence and gravity samples have been checked on
- hardware; the mount matrix is still to be confirmed by rotating the tablet.
+ data; until then the stack stays inactive. The accelerometer and ambient
+ light sensor are exposed only after bounded startup sampling succeeds.
+ Light integration is a development candidate awaiting hardware acceptance;
+ the accelerometer mount matrix still needs the four-orientation test.
  .
  The accelerometer stream is requested with non-wakeup delivery and without
  batching, so the sensor core does not interrupt the processor for every

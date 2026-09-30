@@ -209,6 +209,12 @@
           "origin": "xiaomipad-6pro-mainline (Xiaomi Pad 6 Pro port), unmodified",
           "origin_url": "https://github.com/yzddmr6/xiaomipad-6pro-mainline/blob/e08c1488ef03b2d737c16f01d0d22f7258fd3289/device/sensors/patches/0006-iio-sensor-proxy-broadcast-sensor-availability.patch",
           "upstream_status": "not upstream"
+        },
+        {
+          "file": "patches/iio-sensor-proxy/0005-iio-sensor-proxy-serialize-ssc-light-polling.patch",
+          "sha256": "0df2077947affd5d2e197d72b680f7e635f7b8a87c4764c41cbd105d1e358b47",
+          "origin": "Project adaptation of the existing SSC accelerometer polling serialization to the upstream light driver",
+          "upstream_status": "not submitted; offline candidate"
         }
       ]
     }
