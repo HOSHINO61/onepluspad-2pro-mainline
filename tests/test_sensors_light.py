@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
-"""Light startup evidence and a real nested Claim/Release reproducer."""
+"""Reproduce nested Claim/Release against the upstream SSC light driver."""
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,48 +11,6 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 INPUTS = REPO / 'packaging/sensors'
-GATE = REPO / 'packaging/erhai-sensors/tree/usr/libexec/erhai-sensors/ssc-sample-gate'
-
-
-class LightGate(unittest.TestCase):
-    def run_gate(self, body, bound=2):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / 'registry').mkdir()
-            (root / 'registry/config').write_text('{}')
-            cli = root / 'ssccli'
-            cli.write_text('#!/bin/sh\nif [ "$1" = --sensor=accelerometer ]; then\n' +
-                           "echo 'Accelerometer sensor measurement: X=0 Y=0 Z=9.81 m/s²'\n" * 3 +
-                           'exit 0\nfi\n' + body)
-            cli.chmod(0o755)
-            env = dict(os.environ, LC_ALL='C', ERHAI_SENSORS_REGISTRY=str(root / 'registry'),
-                       ERHAI_SENSORS_SSCCLI=str(cli), ERHAI_SENSORS_STATE=str(root / 'state'),
-                       ERHAI_SENSORS_BOUND=str(bound))
-            result = subprocess.run([str(GATE)], env=env, capture_output=True, text=True, timeout=12)
-            return result, (root / 'state/light-gate.result').read_text()
-
-    def test_single_on_change_sample_and_darkness(self):
-        for level in ('0.000000', '125.250000', '200000.000000'):
-            result, record = self.run_gate(f"echo 'Light sensor measurement: {level} Lux'\n")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('result=pass', record)
-
-    def test_missing_or_invalid_data(self):
-        for body in (':\n', "echo 'Light sensor measurement: nan Lux'\n",
-                     "echo 'Light sensor measurement: -1.000000 Lux'\n",
-                     "echo 'Light sensor measurement: 200001.000000 Lux'\n",
-                     "echo 'Light sensor measurement: 10.000000 raw'\n",
-                     "echo 'Light sensor measurement: 20.000000 Lux'\necho 'Light sensor measurement: inf Lux'\n"):
-            result, record = self.run_gate(body)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('result=fail', record)
-
-    def test_lifecycle_failure_after_data_is_not_pass(self):
-        prefix = "echo 'Light sensor measurement: 10.000000 Lux'\n"
-        for suffix in ('exit 2\n', "echo 'Unable to close light sensor: failed'\n", 'exec sleep 60\n'):
-            result, record = self.run_gate(prefix + suffix, bound=1)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('result=fail', record)
 
 
 PRELUDE = r'''

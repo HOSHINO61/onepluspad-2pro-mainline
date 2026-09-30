@@ -47,8 +47,7 @@ class GateTest(unittest.TestCase):
 
     def fake(self, body):
         path = self.dir / 'ssccli'
-        path.write_text('#!/bin/sh\nif [ "$1" = --sensor=light ]; then\n'
-                        'echo "Light sensor measurement: 120.000000 Lux"; exit 0\nfi\n' + body)
+        path.write_text('#!/bin/sh\n' + body)
         path.chmod(0o755)
         return path
 
@@ -70,6 +69,14 @@ class GateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('result=pass', record)
         self.assertIn('samples=3 gravity=3', record)
+
+    def test_light_unavailability_does_not_block_accelerometer(self):
+        cli = self.fake('[ "$1" = --sensor=accelerometer ] || exit 42\n' +
+                        self.samples((0, 0, 9.81)) * 3)
+        result, record = self.gate(cli)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('result=pass', record)
+        self.assertFalse((self.state / 'light-gate.result').exists())
 
     def test_wrong_scale_fails(self):
         cli = self.fake(self.samples((0.0, -1.0, 0.0), (0.0, -1.0, 0.0), (0.0, -1.0, 0.0)))

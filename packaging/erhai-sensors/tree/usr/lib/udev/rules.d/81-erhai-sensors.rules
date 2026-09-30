@@ -10,8 +10,8 @@
 #
 # IIO_SENSOR_PROXY_TYPE is *assigned*, not appended: the distribution rule
 # (80-) announces ssc-light and ssc-compass for every fastrpc-adsp* node, and
-# the compass has not been validated here. The sample gate requires real
-# acceleration and light readings before the proxy is allowed to start.
+# the compass has not been validated here. Light uses upstream discovery;
+# its availability is independent of the accelerometer startup sample gate.
 #
 # ACCEL_MOUNT_MATRIX is a candidate derived from the panel's landscape
 # scan-out versus the Android sensor frame. It has NOT been measured and is

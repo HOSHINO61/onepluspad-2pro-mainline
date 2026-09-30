@@ -17,8 +17,8 @@ Description: OnePlus Pad 2 Pro rotation and ambient light sensors
  .
  The per-unit sensor registry is not included. Import it once with
  erhai-sensors-import-registry from a copy of this tablet's Android persist
- data; until then the stack stays inactive. The accelerometer and ambient
- light sensor are exposed only after bounded startup sampling succeeds.
+ data; until then the stack stays inactive. The accelerometer startup gate checks
+ real gravity samples. Ambient light uses independent upstream discovery.
  Light integration is a development candidate awaiting hardware acceptance;
  the accelerometer mount matrix still needs the four-orientation test.
  .
