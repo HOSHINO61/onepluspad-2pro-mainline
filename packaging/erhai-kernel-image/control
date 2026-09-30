@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: kernel
 Priority: optional
-Depends: kmod
+Depends: kmod, erhai-firmware (>= 0.1.60~)
 Description: OnePlus Pad 2 Pro kernel and modules @KERNEL_RELEASE@
  Contains matching, signed boot images and the complete configured module
  tree. Standard kmod indices support module dependencies and modalias loading.
