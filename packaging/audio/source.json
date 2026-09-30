@@ -10,6 +10,7 @@
   "driver": "sm8750",
   "kernel_dai_widgets": [
     "TX_CODEC_DMA_TX_3 Capture",
-    "Secondary TDM0 Playback"
+    "Secondary TDM0 Playback",
+    "DISPLAY_PORT_RX_0 Playback"
   ]
 }

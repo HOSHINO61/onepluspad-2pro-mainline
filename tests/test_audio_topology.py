@@ -5,6 +5,7 @@ import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -159,6 +160,24 @@ class SpeakerMixing(unittest.TestCase):
         for name, private in build.topology_widgets(self.blob):
             if name != 'device40.mfc1':
                 self.assertIsNone(build.module_config(name, private)[1], name)
+
+    def test_module_instances_are_unique_across_simultaneous_streams(self):
+        owners = {}
+        for name, private in build.topology_widgets(self.blob):
+            tokens, _ = build.module_config(name, private)
+            instance = tokens.get(build.AR_TKN_U32_MODULE_INSTANCE_ID)
+            if instance is not None:
+                self.assertNotIn(instance, owners, (name, owners.get(instance)))
+                owners[instance] = name
+
+    def test_ucm_pcm_numbers_match_the_compiled_graph_directions(self):
+        pcms = {int(re.search(r'^\s*id\s+"(\d+)"', body, re.M)[1]): name.rsplit(' ', 1)[-1]
+                for name, body in build.topology_sections(self.conf, 'PCM')}
+        folder = REPO / 'packaging/erhai-audio/tree/usr/share/alsa/ucm2/Qualcomm/sm8750/OnePlus-Pad-2-Pro'
+        for path in folder.glob('*.conf'):
+            for direction, pcm in re.findall(r'(Playback|Capture)PCM "hw:\$\{CardId\},(\d+)"',
+                                              path.read_text()):
+                self.assertEqual(pcms.get(int(pcm)), direction, str(path))
 
     def test_maps_the_kernel_does_not_send(self):
         # Stock ACDB output map (FL FR FC LS RS CS LB RB) differs from the

@@ -18,6 +18,9 @@ they have not inherited that baseline's hardware results. Six speaker amplifiers
 have passed low-level signal routing tests, but listening acceptance and final
 gain remain pending. Their DVDD supply description is still a placeholder.
 The microphone profile is enabled; the speaker profile remains opt-in for tests.
+The DisplayPort audio candidate uses a separate PCM in HiFi, so capture remains
+available during external playback. Its UCM device is included only when the
+kernel supplies DP0 Jack; physical output and unplugged capture still need validation.
 
 | Area | State | Notes |
 |---|---|---|
@@ -36,7 +39,7 @@ The microphone profile is enabled; the speaker profile remains opt-in for tests.
 | Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
 | Speakers | Amplifier startup and low-level stereo signal routing verified; listening profile remains opt-in | The six AW88261 amplifiers have passed quiet signal tests. Physical listening, gain and pop/noise acceptance remain pending; the real DVDD rail is still unresolved. |
 | Type-C / USB peripherals | PC device/sink and debug link verified; physical host peripherals pending | UAS, exFAT and NTFS3 are enabled as upstream modules. The candidate kernel passed emulated xHCI/UAS filesystem read/write tests; tablet VBUS, real peripherals and desktop hotplug remain untested. |
-| External display | DP controller, connector graph and WCD939x SBU switch candidate prepared | Not hardware-tested. External output, EDID/link training, extension/mirroring and hotplug remain pending. |
+| External display | DP controller, connector graph, WCD939x SBU switch and audio candidate prepared | Not hardware-tested. External output, EDID/link training, extension/mirroring and hotplug remain pending. Audio has a separate 48 kHz/24-bit stereo PCM with standard DP jack reporting; playback is unverified. |
 | GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. The Turnip Vulkan driver is packaged but not yet run on the device; sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
 | Wi-Fi (WCN7860) | Association, boot reconnect, per-device MAC, short TCP transfers and controlled reconnect verified | Unexpected disconnects, sustained transfers, power saving, regulatory behavior and Bluetooth peripheral use need more coverage. |
 | Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The optional erhai-mesa package enables hardware rendering for GNOME; application coverage and physical interaction acceptance are tracked separately. |
@@ -178,7 +181,7 @@ tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-audio` | the board AudioReach topology, including an inactive native speaker graph, and UCM for the two internal microphones; speaker playback is not enabled |
+| `erhai-audio` | the board AudioReach topology and UCM for the internal microphones and DisplayPort candidate; internal speaker playback remains opt-in |
 | `erhai-display-power` | the backlight power service, its socket and the GNOME 50 display-power adapter; it requires the kernel's single led-backlight device |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the required device packages |
