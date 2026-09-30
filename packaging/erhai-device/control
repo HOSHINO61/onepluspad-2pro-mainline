@@ -5,8 +5,10 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: metapackages
 Priority: optional
-Depends: erhai-device-support (= @VERSION@), erhai-display-power (= @VERSION@), erhai-firmware (= @VERSION@), erhai-audio (= @VERSION@), erhai-kernel (= @VERSION@)
+Depends: erhai-device-support (>= 0.1.57~), erhai-display-power (>= 0.1.57~), erhai-firmware (>= 0.1.57~), erhai-audio (>= 0.1.57~), erhai-kernel (>= 0.1.57~)
 Description: OnePlus Pad 2 Pro (erhai) device metapackage
  Pulls in the whole device layer -- firmware, kernel and device support -- so
  that an otherwise untouched Ubuntu install becomes a running tablet, and
  removing this one package's dependencies takes the device layer back off.
+ Compatible component updates may advance independently of this bundle.
+ The kernel selector retains its exact versioned image/module dependency.

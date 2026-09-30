@@ -216,6 +216,14 @@ closure from the pinned stock ROM images and upstream archives again and diffs
 that against the tree, which is how a later ROM version gets in. Neither the
 AVB signing key nor avbtool ever enters a package.
 
+The `erhai-device` metapackage requires the validated 0.1.57 baseline or later,
+rather than an identical version of every component. Audio, firmware and desktop
+integration can therefore receive compatible updates without activating a new
+kernel. The `erhai-kernel` selector still depends on the exact versioned payload
+that contains matching images and modules. On development installations with an
+older metapackage, update that metadata-only package first; inspect the APT plan
+and reject any proposed kernel activation or removal for this step.
+
 Building `erhai-audio` also requires GNU m4, `alsatplg` from alsa-utils, and the
 original archive pinned in `packaging/audio/source.json`. Pass its path with
 `--audio-source`; the default is `cache/audioreach-topology-993a17dc.tar.gz` in
