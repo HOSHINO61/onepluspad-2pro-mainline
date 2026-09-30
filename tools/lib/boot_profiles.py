@@ -8,7 +8,6 @@ CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev'
 PROFILE_EXTRA = {
     'desktop': (
         'erhai.watchdog=900 erhai.session=5400 '
-        'erhai.rootfs=http://192.168.77.10:8000/rootfs-s5.squashfs '
         'erhai.switchroot=1'
     ),
     # The watchdog bounds initramfs. Persistent sessions do not expire.

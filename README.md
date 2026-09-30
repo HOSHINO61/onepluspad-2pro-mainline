@@ -5,8 +5,8 @@ board codename `erhai`), with bounded fastboot RAM-boot sessions and an
 installed Ubuntu/Android switching path for the established device layout.
 
 This repository is the **integration tooling**: kernel build, initramfs
-profiles, ABL-compatible image packaging and the RAM-rooted Ubuntu desktop
-delivery. The kernel itself lives in a separate Git (`linux-sm8750-erhai`,
+profiles, ABL-compatible image packaging and device packages for the official
+Ubuntu desktop. The kernel itself lives in a separate Git (`linux-sm8750-erhai`,
 checked out at `kernel/linux` in the workspace); see `kernel/source.json`
 for the exact baseline, branch and commit.
 
@@ -99,8 +99,9 @@ kernel/      source.json pinning the kernel repo identity and tool inputs
 
 Tools resolve their workspace automatically when this repo is checked out at
 `<workspace>/public/onepluspad-2pro-mainline`; standalone checkouts work too
-(`ERHAI_WORKSPACE` overrides). Build outputs always land in `out/` and are
-never inputs to the next build.
+(`ERHAI_WORKSPACE` overrides). Build outputs land in `out/`. Assemble each
+candidate from pinned original sources and that build's outputs; previous
+release images and modified root trees are comparison data.
 
 ## Inputs you must provide
 
@@ -109,14 +110,18 @@ never inputs to the next build.
 - Static ARM64 busybox, pinned sha256 (see `kernel/source.json`), at
   `cache/busybox-arm64`.
 - AOSP `mkbootimg.py` at `cache/tools/mkbootimg.py` (pinned sha256).
-- The stock `dtbo.img` and base DTB tables of *your* unit (payload.dumper from
-  the stock OTA package) at `cache/stock-c34/` — ABL requires the boot DTB to
+- The stock `dtbo.img` and `vendor_boot.img` of *your* unit (payload.dumper from
+  the stock OTA package) at `cache/stock-c34/images/` — ABL requires the boot DTB to
   carry the stock overlay symbols and root identity.
 - Nothing for firmware: `packaging/firmware/` already carries the closure this
   unit needs, and `packaging/firmware/README.md` says where every file came
   from. Only moving to a later stock ROM needs the ROM itself, through
   `tools/build-debs.py --refresh-from-rom`.
-- Ubuntu Base 26.04 ARM64 tarball (pinned sha256) for the desktop demo.
+- Official Ubuntu Desktop 26.04 ARM64 inputs for a desktop root. Use the
+  original `casper/minimal.squashfs` and `minimal.standard.squashfs` layers,
+  with device integration supplied by the `erhai-*` packages. The early
+  Ubuntu Base and overlay-merging tools are historical experiments, not the
+  desktop delivery recipe.
 
 ## Quickstart
 
@@ -131,7 +136,6 @@ tools/build-erhai-abl-symbols.py --output out/abl-dtb \
 tools/build-mainline-boot.py --output out/mainline-boot \
   --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
   --initramfs out/initramfs/initramfs-ncm.cpio.gz
-# add `--profile desktop` for the pinned RAM Ubuntu desktop cmdline
 fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
 ```
 
@@ -153,9 +157,20 @@ records the layout it read back from the DTB as `abl_sink_layout`.
 The session comes up with a USB NCM link (device `192.168.77.2`, telnet 2323,
 HTTP evidence on 8080) and reboots to Android on its own when the watchdog
 expires. Optional kernel cmdline flags: `erhai.watchdog=NN` (session length),
-`erhai.rootfs=<url>` (fetch+overlay-mount an Ubuntu squashfs over NCM),
+`erhai.rootfs=<url>` with `erhai.rootfs.sha256=<digest>` (fetch and verify a
+squashfs over NCM before mounting its RAM overlay),
 `erhai.switchroot=1` (hand PID1 to systemd with a matching expiry timer),
 `erhai.weston=1` (autostart the pixman weston desktop).
+
+For a RAM desktop test, add `--profile desktop --rootfs /path/to/desktop.squashfs
+--rootfs-url http://192.168.77.10:8000/desktop.squashfs` to the boot-image
+builder. Serve that exact file at the specified URL. The builder computes its
+SHA-256 and records the URL and digest in both the boot command line and
+manifest; it supplies no default root image. The initramfs refuses missing or
+mismatched hashes and failed downloads, keeping diagnostics and the original
+watchdog running. Whole-file and chunked HTTP/hash handling have been tested
+with the pinned ARM64 BusyBox; this updated RAM desktop path has not yet been
+booted on the tablet.
 
 For a temporary kernel using an already installed root, use the persistent
 profile with an explicit `erhai.session=90` (valid range 60–3600 seconds).

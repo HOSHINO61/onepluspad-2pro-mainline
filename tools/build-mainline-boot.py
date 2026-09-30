@@ -48,13 +48,36 @@ def main():
                         help='Appended to the standard cmdline (e.g. erhai.watchdog=1800 '
                              'to hold a demo session longer than 600s)')
     parser.add_argument('--profile', choices=tuple(PROFILE_EXTRA),
-                        help='Append a pinned cmdline: "desktop" runs the RAM Ubuntu '
+                        help='Append a cmdline policy: "desktop" runs a RAM desktop '
                              'session, "persistent" boots the installed UFS root')
+    parser.add_argument('--rootfs', type=Path,
+                        help='RAM desktop squashfs to hash; requires --profile desktop')
+    parser.add_argument('--rootfs-url',
+                        help='HTTP URL serving that squashfs to the tablet')
     add_layout_arguments(parser)
     args = parser.parse_args()
+    rootfs = None
+    if args.profile == 'desktop':
+        if not args.rootfs or not args.rootfs_url:
+            parser.error('--profile desktop requires --rootfs and --rootfs-url')
+        if not args.rootfs_url.startswith(('http://', 'https://')) or any(
+                c.isspace() or c in '\x00"' for c in args.rootfs_url):
+            parser.error('--rootfs-url must be one HTTP(S) URL without whitespace or quotes')
+        if not args.rootfs.is_file():
+            parser.error(f'Missing input: {args.rootfs}')
+        if any(token.startswith(('erhai.rootfs=', 'erhai.rootfs.sha256=', 'erhai.root='))
+               for token in args.cmdline_extra.split()):
+            parser.error('RAM desktop root inputs must use --rootfs and --rootfs-url')
+        with args.rootfs.open('rb') as stream:
+            rootfs = {'url': args.rootfs_url,
+                      'sha256': hashlib.file_digest(stream, 'sha256').hexdigest()}
+    elif args.rootfs or args.rootfs_url:
+        parser.error('--rootfs and --rootfs-url require --profile desktop')
     cmdline = CMDLINE
     if args.profile:
         cmdline += ' ' + PROFILE_EXTRA[args.profile]
+    if rootfs:
+        cmdline += f' erhai.rootfs={rootfs["url"]} erhai.rootfs.sha256={rootfs["sha256"]}'
     if args.cmdline_extra.strip():
         cmdline += ' ' + args.cmdline_extra.strip()
     kout = args.kernel_out.resolve()
@@ -98,6 +121,8 @@ def main():
                 'boot_sha256': sha(boot), 'boot_size': boot.stat().st_size,
                 'scope': 'fastboot boot only (header v2, ABL delivers kernel/ramdisk/dtb); '
                          'RAM userspace with NCM/HTTP evidence, telnet end, watchdog self-recovery.'}
+    if rootfs:
+        manifest['ram_rootfs'] = rootfs
     (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps({k: manifest[k] for k in ['status', 'kernel_commit', 'abl_sink_layout',
                                                    'boot_sha256', 'boot_size']}, indent=2))
