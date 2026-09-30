@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+# Ubuntu's Turnip (mesa-vulkan-drivers) has no entry for the Adreno 830v1 chip
+# ID and declines the GPU. Its loader manifest is moved aside, keeping the
+# .distrib name the Vulkan loader does not read, and this package's manifest,
+# naming the private Turnip, takes its place. Remove the diversion once
+# Ubuntu's Turnip recognises 0xffff44050001.
+ICD=/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json
+
+case "$1" in
+install | upgrade)
+	dpkg-divert --package erhai-mesa --add --rename --divert "$ICD.distrib" "$ICD"
+	;;
+esac
+
+exit 0

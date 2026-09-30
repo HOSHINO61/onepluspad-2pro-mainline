@@ -53,17 +53,23 @@ def main():
         prefix = '/usr/lib/erhai/mesa'
         flags = [f'--prefix={prefix}', '--libdir=lib', '--buildtype=release',
                  '--wrap-mode=nofallback', '-Db_ndebug=false',
-                 '-Dgallium-drivers=freedreno', '-Dvulkan-drivers=[]',
-                 '-Degl=enabled',
+                 '-Dgallium-drivers=freedreno', '-Degl=enabled',
                  '-Dgbm=enabled', '-Dgles1=disabled', '-Dgles2=enabled',
                  '-Dllvm=disabled', '-Dgallium-va=disabled', '-Dvideo-codecs=[]',
                  '-Dvalgrind=disabled', '-Dbuild-tests=false']
         if args.profile == 'desktop':
+            # Turnip's loader manifest is staged under the private prefix and
+            # names the private library by absolute path; where the loader
+            # finds it is the package's decision. SPIRV-Tools is optional in
+            # Mesa and pinned off, so an installed spirv-tools cannot add a
+            # runtime dependency.
             flags += ['-Dplatforms=wayland,x11', '-Dglx=dri', '-Dglvnd=enabled',
+                      '-Dvulkan-drivers=freedreno', '-Dspirv-tools=disabled',
                       f'-Dc_link_args=-Wl,-rpath,{prefix}/lib',
                       f'-Dcpp_link_args=-Wl,-rpath,{prefix}/lib']
         else:
-            flags += ['-Dplatforms=[]', '-Dglx=disabled', '-Dglvnd=disabled']
+            flags += ['-Dplatforms=[]', '-Dglx=disabled', '-Dglvnd=disabled',
+                      '-Dvulkan-drivers=[]']
         packages = subprocess.check_output(
             ['dpkg-query', '-W', '-f=${Package} ${Version}\\n'], text=True)
         identity = {'source': lock, 'flags': flags, 'profile': args.profile,
@@ -84,7 +90,12 @@ def main():
                 run(['patch', '-p1', '--batch', '--fuzz=0', '-i', INPUTS / patch['file']], cwd=src)
             identity_file.write_text(json.dumps(identity, indent=2) + '\n')
             (out / 'source-date-epoch').write_text(str(epoch))
+        # Mesa's isaspec generator orders instruction fields by iterating a
+        # Python set (src/compiler/isaspec/isa.py), so the generated ir3
+        # encoders, and the libgallium and Turnip code built from them, change
+        # with the string hash seed unless it is fixed.
         env = dict(os.environ, SOURCE_DATE_EPOCH=(out / 'source-date-epoch').read_text().strip(),
+                   PYTHONHASHSEED='0',
                    CFLAGS=f'-ffile-prefix-map={src}=/mesa', CXXFLAGS=f'-ffile-prefix-map={src}=/mesa')
         build = out / 'build'
         if not (build / 'build.ninja').exists():

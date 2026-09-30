@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Package a verified native desktop Mesa build without replacing Ubuntu files."""
+"""Package a verified native desktop Mesa build; of Ubuntu's files it takes over only
+the Turnip loader manifest, by diversion."""
 import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
+PREFIX = 'usr/lib/erhai/mesa'
+# Turnip and the loader manifest Mesa installs for it under the private prefix.
+# The package ships that manifest in place of Ubuntu's Turnip manifest, which
+# preinst diverts: Ubuntu's Turnip declines this chip, and Vulkan clients see
+# one driver for the GPU whatever their environment.
+VULKAN_DRIVER = PREFIX + '/lib/libvulkan_freedreno.so'
+VULKAN_ICD = PREFIX + '/share/vulkan/icd.d/freedreno_icd.aarch64.json'
+SYSTEM_ICD = 'usr/share/vulkan/icd.d/freedreno_icd.aarch64.json'
+SCRIPTS = ('preinst', 'postrm')
 
 
 def sha(path):
@@ -40,7 +51,12 @@ def main():
     for built, pinned in zip(identity['source']['patches'], source['patches']):
         if built['sha256'] not in [pinned['sha256'], *pinned.get('equivalent_sha256', [])]:
             parser.error('Mesa patch identity does not match the source lock')
+    if VULKAN_DRIVER not in result['files_sha256'] or VULKAN_ICD not in result['files_sha256']:
+        parser.error('the desktop build has no Turnip Vulkan driver')
     stage = build / 'stage'
+    icd = json.loads((stage / VULKAN_ICD).read_text())
+    if icd['ICD']['library_path'] != '/' + VULKAN_DRIVER:
+        parser.error('the Vulkan manifest does not name the private Turnip library')
     for name, digest in result['files_sha256'].items():
         if sha(stage / name) != digest:
             parser.error('build file changed: ' + name)
@@ -61,13 +77,13 @@ def main():
         work = Path(temporary)
         root = work / 'package'
         shutil.copytree(metadata / 'tree', root)
-        prefix = root / 'usr/lib/erhai/mesa'
+        prefix = root / PREFIX
         for name in sorted(set(result['files_sha256']) | set(result['symlinks'])):
             # Headers, static libraries and pkg-config files are build inputs,
             # not dependencies of an installed desktop.
-            if not (name.startswith('usr/lib/erhai/mesa/lib/') and '.so' in Path(name).name
-                    or name.startswith('usr/lib/erhai/mesa/share/glvnd/')
-                    or name.startswith('usr/lib/erhai/mesa/share/drirc.d/')):
+            if not (name.startswith(PREFIX + '/lib/') and '.so' in Path(name).name
+                    or name.startswith(PREFIX + '/share/glvnd/')
+                    or name.startswith(PREFIX + '/share/drirc.d/')):
                 continue
             dst = root / name
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +91,15 @@ def main():
                 dst.symlink_to(result['symlinks'][name])
             else:
                 shutil.copy2(stage / name, dst)
+        (root / SYSTEM_ICD).parent.mkdir(parents=True)
+        shutil.copy2(stage / VULKAN_ICD, root / SYSTEM_ICD)
+        # Every private path the selection entries name must be in this package.
+        for config in sorted((metadata / 'tree').rglob('*')):
+            if config.is_file():
+                text = config.read_text().replace('$prefix', '/' + PREFIX)
+                for path in re.findall(r'/usr/lib/erhai/mesa/[^\s:$"]+', text):
+                    if not (root / path.lstrip('/')).exists():
+                        parser.error(f'{config.name} names {path}, which is not packaged')
         libraries = [p for p in prefix.rglob('*') if p.is_file() and not p.is_symlink() and '.so' in p.name]
         debian = work / 'debian'
         debian.mkdir()
@@ -92,6 +117,9 @@ def main():
         text = (metadata / 'control').read_text().replace('@VERSION@', version).replace(
             '@DEPENDS@', deps.split('=', 1)[1])
         (control / 'control').write_text(text)
+        for name in SCRIPTS:
+            shutil.copy2(metadata / name, control / name)
+            (control / name).chmod(0o755)
         doc = root / 'usr/share/doc/erhai-mesa'
         doc.mkdir(parents=True)
         shutil.copy2(build / ('mesa-' + source['version']) / 'docs/license.rst', doc / 'copyright')

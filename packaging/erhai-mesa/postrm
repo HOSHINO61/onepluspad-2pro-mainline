@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -e
+
+# Paired with preinst: Ubuntu's Turnip manifest returns when this package's
+# goes, including when a first installation or the upgrade that introduced
+# the diversion is rolled back.
+ICD=/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json
+
+undivert() {
+	dpkg-divert --package erhai-mesa --remove --rename --divert "$ICD.distrib" "$ICD"
+}
+
+case "$1" in
+remove | abort-install | disappear)
+	undivert
+	;;
+abort-upgrade)
+	if dpkg --compare-versions "$2" lt 26.2.3+erhai3~; then
+		undivert
+	fi
+	;;
+esac
+
+exit 0
