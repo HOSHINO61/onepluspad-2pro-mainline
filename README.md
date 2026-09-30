@@ -220,7 +220,10 @@ The `erhai-device` metapackage requires the validated 0.1.57 baseline or later,
 rather than an identical version of every component. Audio, firmware and desktop
 integration can therefore receive compatible updates without activating a new
 kernel. The `erhai-kernel` selector still depends on the exact versioned payload
-that contains matching images and modules. On development installations with an
+that contains matching images and modules. Each payload declares the firmware
+minimum it actually consumes. Component-only builds also avoid reading a kernel
+output or kernel checkout; their archive epoch comes from the integration source
+or an explicit `SOURCE_DATE_EPOCH`. On development installations with an
 older metapackage, update that metadata-only package first; inspect the APT plan
 and reject any proposed kernel activation or removal for this step.
 
