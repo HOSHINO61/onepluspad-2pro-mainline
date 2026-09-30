@@ -25,21 +25,22 @@ import argparse
 import calendar
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import tarfile
 import tempfile
 import time
-import urllib.request
 
 REPO = Path(__file__).resolve().parents[1]
-if (REPO.parent.parent / 'AGENTS.md').is_file() and (REPO.parent.parent / 'kernel/linux').is_dir():
-    WS = Path(os.environ.get('ERHAI_WORKSPACE', REPO.parent.parent)).resolve()
-else:
-    WS = Path(os.environ.get('ERHAI_WORKSPACE', str(REPO))).resolve()
+_spec = importlib.util.spec_from_file_location('erhai_build_root', REPO / 'tools/lib/build_root.py')
+roots = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(roots)
+WS, HOST_CA = roots.WS, roots.HOST_CA
+sha256, fetch = roots.sha256, roots.fetch
+chroot, capture, prepare_root = roots.chroot, roots.capture, roots.prepare_root
 
 INPUTS = REPO / 'packaging/sensors'
 PACKAGE = REPO / 'packaging/erhai-sensors'
@@ -47,8 +48,6 @@ PREFIX = 'usr/lib/erhai/sensors'
 RPCD_ROOT = 'usr/share/erhai-sensors/hexagonrpcd'
 STATE = '/var/lib/erhai/sensors'
 MAINTAINER = 'Erwin <yzddmr7@gmail.com>'
-HOST_CA = Path('/etc/ssl/certs/ca-certificates.crt')
-CHROOT_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 # What the package takes from the staged installs. Headers, pkg-config files,
 # the CHRE client, the mock SSC server and the proxy's own unit, rules and
 # D-Bus policy are build by-products: Ubuntu's iio-sensor-proxy keeps owning
@@ -59,30 +58,6 @@ LIBRARIES = ('libhexagonrpc.so.', 'libssc.so.')
 
 def die(message):
     raise SystemExit(f'build-sensors: {message}')
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def fetch(url, target, expected):
-    """Download once into the cache; a cached file must still hash right."""
-    if target.is_file() and sha256(target) == expected:
-        return target
-    target.parent.mkdir(parents=True, exist_ok=True)
-    print(f'  fetching {url}', flush=True)
-    partial = target.with_name(target.name + '.part')
-    with urllib.request.urlopen(url, timeout=120) as response, open(partial, 'wb') as out:
-        shutil.copyfileobj(response, out)
-    if sha256(partial) != expected:
-        partial.unlink()
-        die(f'{url} does not match the pinned SHA-256')
-    partial.rename(target)
-    return target
 
 
 def verify_recipe(lock, rom):
@@ -100,76 +75,6 @@ def verify_recipe(lock, rom):
                    if p.is_file() and p not in listed)
     if stray:
         die(f'packaging/sensors/rom holds files rom-config.json does not list: {stray}')
-
-
-def chroot(root, script, env=None, log=None):
-    """Run a bash script as root inside the arm64 build root."""
-    variables = {'PATH': CHROOT_PATH, 'HOME': '/root', 'LC_ALL': 'C.UTF-8',
-                 'DEBIAN_FRONTEND': 'noninteractive', **(env or {})}
-    inner = ['/usr/bin/env', '-i', *[f'{k}={v}' for k, v in variables.items()],
-             '/bin/bash', '-euo', 'pipefail', '-c', script]
-    wrapper = ('mount --rbind /dev "$1/dev" && mount -t proc proc "$1/proc" && '
-               'shift && exec chroot "$@"')
-    command = ['unshare', '--map-root-user', '--mount', '--pid', '--fork',
-               '--kill-child', 'sh', '-c', wrapper, 'sh', str(root), str(root), *inner]
-    with open(log, 'a') if log else open(os.devnull, 'w') as sink:
-        result = subprocess.run(command, stdout=sink if log else None,
-                                stderr=subprocess.STDOUT if log else None)
-    if result.returncode:
-        die(f'build step failed ({result.returncode})' + (f'; see {log}' if log else ''))
-
-
-def capture(root, script):
-    result = subprocess.run(
-        ['unshare', '--map-root-user', '--mount', '--pid', '--fork', '--kill-child',
-         'sh', '-c', 'mount -t proc proc "$1/proc" && exec chroot "$1" /bin/bash -euo pipefail -c "$2"',
-         'sh', str(root), script],
-        capture_output=True, text=True, env={'PATH': CHROOT_PATH, 'LC_ALL': 'C.UTF-8'})
-    if result.returncode:
-        die(f'chroot query failed: {result.stderr.strip()}')
-    return result.stdout
-
-
-def prepare_root(work, lock, base, log):
-    """Unpack the pinned build root and install the pinned build dependencies."""
-    root = work / 'root'
-    identity = {'build_root': lock['build_root'], 'apt': lock['apt']}
-    marker = work / 'root.json'
-    if marker.is_file():
-        if json.loads(marker.read_text()) != identity:
-            die(f'{work} was prepared from different inputs; select a new --work')
-        return root
-    if root.exists():
-        die(f'{root} exists without a record of its inputs; select a new --work')
-    print('  unpacking the build root', flush=True)
-    root.mkdir(parents=True)
-    with tarfile.open(base) as tar:
-        members = [m for m in tar.getmembers()
-                   if not (m.isdev() or m.name.lstrip('./').startswith('dev/'))]
-        tar.extractall(root, members=members, filter='fully_trusted', numeric_owner=True)
-    (root / 'dev').mkdir(exist_ok=True)
-    apt = lock['apt']
-    sources = root / 'etc/apt/sources.list.d/ubuntu.sources'
-    sources.write_text(f'Types: deb\nURIs: {apt["uri"]}\nSuites: {" ".join(apt["suites"])}\n'
-                       f'Components: {" ".join(apt["components"])}\n'
-                       'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n')
-    (root / 'etc/apt/apt.conf.d/99erhai-build').write_text(
-        'APT::Sandbox::User "root";\n'
-        'Acquire::https::CaInfo "/etc/apt/erhai-build-ca.crt";\n'
-        'Acquire::Check-Valid-Until "false";\n'
-        'APT::Install-Recommends "false";\n'
-        'Acquire::Languages "none";\n')
-    shutil.copyfile(HOST_CA, root / 'etc/apt/erhai-build-ca.crt')
-    resolv = root / 'etc/resolv.conf'
-    if resolv.is_symlink() or resolv.exists():
-        resolv.unlink()
-    shutil.copyfile('/etc/resolv.conf', resolv)
-    print(f'  installing {len(apt["packages"])} build dependencies from snapshot '
-          f'{apt["snapshot"]} (slow under qemu-user)', flush=True)
-    chroot(root, 'apt-get update -q && apt-get install -y -q ' + ' '.join(apt['packages'])
-           + ' && apt-get clean && rm -rf /var/lib/apt/lists/*', log=log)
-    marker.write_text(json.dumps(identity, indent=2) + '\n')
-    return root
 
 
 BUILD = r'''
@@ -358,6 +263,7 @@ def main():
                         if p.is_file() and '__pycache__' not in p.parts
                         and (INPUTS / 'rom') not in p.parents}
         recipe_files['tools/build-sensors.py'] = sha256(Path(__file__))
+        recipe_files['tools/lib/build_root.py'] = sha256(REPO / 'tools/lib/build_root.py')
         recipe = {'sources': [{k: s[k] for k in ('name', 'version', 'url', 'sha256', 'upstream_commit')}
                               | {'patches': [{'file': p['file'], 'sha256': p['sha256']} for p in s['patches']]}
                               for s in lock['sources']],

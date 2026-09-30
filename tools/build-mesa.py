@@ -33,7 +33,9 @@ def main():
     parser.add_argument('--source-archive', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--jobs', type=int, default=2)
-    parser.add_argument('--profile', choices=('probe', 'desktop'), default='probe')
+    parser.add_argument('--configure-only', action='store_true',
+                        help='prepare the verified source and Ninja rules without compiling')
+    parser.add_argument('--profile', choices=('probe', 'desktop', 'gpu-2404'), default='probe')
     args = parser.parse_args()
     if platform.machine() not in ('aarch64', 'arm64'):
         parser.error('this recipe currently requires a native arm64 build environment')
@@ -50,23 +52,27 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     with (out / '.lock').open('w') as handle:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        prefix = '/usr/lib/erhai/mesa'
-        flags = [f'--prefix={prefix}', '--libdir=lib', '--buildtype=release',
+        content = args.profile == 'gpu-2404'
+        prefix = '/usr' if content else '/usr/lib/erhai/mesa'
+        libdir = 'lib/aarch64-linux-gnu' if content else 'lib'
+        drivers = 'freedreno,softpipe' if content else 'freedreno'
+        flags = [f'--prefix={prefix}', f'--libdir={libdir}', '--buildtype=release',
                  '--wrap-mode=nofallback', '-Db_ndebug=false',
-                 '-Dgallium-drivers=freedreno', '-Degl=enabled',
+                 f'-Dgallium-drivers={drivers}', '-Degl=enabled',
                  '-Dgbm=enabled', '-Dgles1=disabled', '-Dgles2=enabled',
                  '-Dllvm=disabled', '-Dgallium-va=disabled', '-Dvideo-codecs=[]',
                  '-Dvalgrind=disabled', '-Dbuild-tests=false']
-        if args.profile == 'desktop':
+        if args.profile in ('desktop', 'gpu-2404'):
             # Turnip's loader manifest is staged under the private prefix and
             # names the private library by absolute path; where the loader
             # finds it is the package's decision. SPIRV-Tools is optional in
             # Mesa and pinned off, so an installed spirv-tools cannot add a
             # runtime dependency.
             flags += ['-Dplatforms=wayland,x11', '-Dglx=dri', '-Dglvnd=enabled',
-                      '-Dvulkan-drivers=freedreno', '-Dspirv-tools=disabled',
-                      f'-Dc_link_args=-Wl,-rpath,{prefix}/lib',
-                      f'-Dcpp_link_args=-Wl,-rpath,{prefix}/lib']
+                      '-Dvulkan-drivers=freedreno', '-Dspirv-tools=disabled']
+            if not content:
+                flags += [f'-Dc_link_args=-Wl,-rpath,{prefix}/lib',
+                          f'-Dcpp_link_args=-Wl,-rpath,{prefix}/lib']
         else:
             flags += ['-Dplatforms=[]', '-Dglx=disabled', '-Dglvnd=disabled',
                       '-Dvulkan-drivers=[]']
@@ -100,6 +106,8 @@ def main():
         build = out / 'build'
         if not (build / 'build.ninja').exists():
             run(['meson', 'setup', build, src, *flags], env=env)
+        if args.configure_only:
+            return
         run(['meson', 'compile', '-C', build, '-j', args.jobs], env=env)
         stage = out / 'stage'
         run(['meson', 'install', '-C', build, '--no-rebuild', '--destdir', stage], env=env)
