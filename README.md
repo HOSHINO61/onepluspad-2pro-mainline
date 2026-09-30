@@ -79,6 +79,13 @@ full peripheral recovery still require acceptance. Application coverage,
 speaker listening, four-direction rotation and USB-host peripherals are also
 unfinished. Camera capture and pen charging are not implemented.
 
+The AppArmor kernel configuration is an independent development candidate.
+Native file allow/deny mediation and loading Ubuntu's snap-confine policy have
+passed in a VM. Stock snapd 2.74.1 still reports a missing legacy network
+feature on the upstream kernel; full Snap confinement and browser operation
+remain unverified. This candidate has not replaced the queued peripheral
+acceptance baseline. Policies continue to come from the distribution.
+
 ## Repository layout
 
 ```
