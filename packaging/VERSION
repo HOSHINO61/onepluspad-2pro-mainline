@@ -1,1 +1,9 @@
+# The erhai device package set's release counter.  One line, <epoch-free
+# upstream version>, and the last component is bumped by hand for each release
+# that is meant to be installed over the previous one.
+#
+# It is the only thing in the .deb version that dpkg's ordering ever reaches:
+# everything after it identifies the build, and two builds of the same release
+# never differ in it.  So a release that is not bumped will not install over
+# its predecessor, and apt is right to say so.
 0.1.63
