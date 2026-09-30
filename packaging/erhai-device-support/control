@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: systemd, python3, bluez, libglib2.0-bin, erhai-display-power (= @VERSION@)
+Depends: systemd, python3, bluez, libglib2.0-bin, erhai-display-power (>= 0.1.57~)
 Pre-Depends: dpkg (>= 1.17.14)
 Description: OnePlus Pad 2 Pro (erhai) device support
  Everything the mainline port needs in the running system that is neither a
