@@ -239,7 +239,13 @@ reference-board topology is renamed or used as a build input.
 Two builds of the same inputs produce the same bytes: the version carries a
 build id derived from payload and package metadata (`<release>[~dbg]+g<kernel>.b<id>`), the AVB footers
 use a salt derived from the image instead of avbtool's random default, and the
-archive timestamps are pinned to the kernel commit.
+archive timestamps are pinned to the kernel commit for kernel builds and to
+the integration commit for standalone component builds.
+
+Device support and display power can be updated independently from 0.1.72.
+Their shared socket/mode interface uses the validated 0.1.57 minimum; the
+display package still constrains the GNOME major ABI. The kernel selector
+continues to require the exact matching image/module package.
 
 `--debug` includes `erhai.debug=1` in the triplet, builds `erhai-debug` alongside
 the device set and marks the version `~dbg`. The normal build omits the optional
