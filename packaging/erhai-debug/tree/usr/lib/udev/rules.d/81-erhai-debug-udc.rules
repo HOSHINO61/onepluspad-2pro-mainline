@@ -1,0 +1,2 @@
+# The port may boot in host mode. Its later device-role event restores NCM.
+ACTION=="add", SUBSYSTEM=="udc", TAG+="systemd", ENV{SYSTEMD_WANTS}+="erhai-debug-attach.service"

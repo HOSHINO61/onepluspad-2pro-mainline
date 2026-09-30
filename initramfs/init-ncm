@@ -139,6 +139,7 @@ switch_to_newroot() {
 	# desktop needs the package that owns its services and dependencies.
 	if [ "$DEBUG_CHANNEL" = 1 ] &&
 	   { [ ! -f /newroot/usr/lib/systemd/system/erhai-debug.service ] ||
+	     [ ! -x /newroot/usr/libexec/erhai-ncm ] ||
 	     [ ! -x /newroot/usr/bin/busybox ]; }; then
 		echo DEBUG_PACKAGE_MISSING >> "$1"
 		return 1
@@ -291,8 +292,18 @@ fi
 # rootless initramfs session is itself the explicitly selected rescue profile.
 EARLY_DEBUG=$DEBUG_CHANNEL
 [ -n "$ROOT_SPEC" ] || EARLY_DEBUG=1
-if [ "$EARLY_DEBUG" = 0 ] || /bin/usb-ncm; then
-	if [ "$EARLY_DEBUG" = 1 ]; then
+NCM_READY=0
+if [ "$EARLY_DEBUG" = 1 ]; then
+	if /bin/usb-ncm; then
+		NCM_READY=1
+	else
+		echo ERHAI_NCM_UNAVAILABLE > /dev/kmsg
+	fi
+fi
+# Diagnostics may be unavailable while the USB-C port serves a peripheral.
+# A locally installed root must still boot; the runtime UDC event restores NCM.
+if [ "$EARLY_DEBUG" = 0 ] || [ "$NCM_READY" = 1 ] || [ -n "$ROOT_SPEC" ]; then
+	if [ "$NCM_READY" = 1 ]; then
 		dmesg > /run/evidence/dmesg.txt
 		cat /proc/mounts > /run/evidence/mounts.txt
 		httpd -p 192.168.77.2:8080 -h /run/evidence
@@ -300,7 +311,7 @@ if [ "$EARLY_DEBUG" = 0 ] || /bin/usb-ncm; then
 		( while :; do telnetd -b 192.168.77.2:2323 -l /bin/sh; sleep 2; done ) &
 		TELNET_LOOP_PID=$!
 		echo ERHAI_MAINLINE_READY
-	else
+	elif [ "$EARLY_DEBUG" = 0 ]; then
 		echo ERHAI_DEBUG_DISABLED > /dev/kmsg
 	fi
 

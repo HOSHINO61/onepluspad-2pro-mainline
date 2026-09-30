@@ -1,0 +1,8 @@
+[Unit]
+Description=Restore diagnostic NCM after the USB device controller appears
+ConditionKernelCommandLine=erhai.debug=1
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --no-block restart erhai-debug.service

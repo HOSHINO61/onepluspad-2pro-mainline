@@ -1126,6 +1126,7 @@ def main():
 
         substitutions = {'@KERNEL_RELEASE@': release or '',
                          '@KERNEL_PACKAGE@': image_package,
+                         '@DEBUG_DEPENDENCY@': ', erhai-debug (>= 0.1.70~)' if args.debug and kernel_meta else '',
                          '@MAINTAINER@': MAINTAINER}
 
         # One build id for the set, derived from everything the set contains:

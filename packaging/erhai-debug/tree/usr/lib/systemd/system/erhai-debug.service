@@ -1,7 +1,7 @@
 [Unit]
 Description=Explicitly enabled USB NCM diagnostics
 ConditionKernelCommandLine=erhai.debug=1
-ConditionPathExists=/sys/class/net/usb0
+ConditionPathExistsGlob=/sys/class/udc/*
 After=local-fs.target
 Wants=erhai-debug-http.service erhai-debug-shell.service erhai-debug-dhcp.service
 Before=erhai-debug-http.service erhai-debug-shell.service erhai-debug-dhcp.service
@@ -11,9 +11,8 @@ Type=oneshot
 RemainAfterExit=yes
 RuntimeDirectory=erhai-debug
 RuntimeDirectoryMode=0700
-ExecStart=/usr/sbin/ip link set dev usb0 up
-ExecStart=/usr/sbin/ip address replace 192.168.77.2/24 dev usb0
-ExecStop=-/usr/sbin/ip address del 192.168.77.2/24 dev usb0
+ExecStart=/usr/libexec/erhai-ncm start
+ExecStop=/usr/libexec/erhai-ncm stop
 
 [Install]
 WantedBy=multi-user.target

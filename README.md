@@ -268,6 +268,12 @@ installed boots skip the initramfs NCM channel, and the packaged services each
 check the kernel flag. Removing `erhai-debug` removes its activation and payload;
 the distribution's BusyBox dependency can continue to receive normal updates.
 Rootless rescue initramfs sessions still expose their bounded diagnostic channel.
+The initramfs and installed debug service share the NCM setup helper. They
+identify its actual interface by configfs and MAC address, preserve external
+USB NICs, and allow an installed system to boot while the port serves a
+peripheral. A UDC appearance requests diagnostic service restoration through
+udev/systemd. Debug kernel images from 0.1.70 require the matching helper
+interface in `erhai-debug >= 0.1.70`; ordinary images do not depend on it.
 These development tools and images are not a finished production release.
 
 ## License

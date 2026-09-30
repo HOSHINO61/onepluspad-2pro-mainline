@@ -31,7 +31,9 @@ acm) init_src="$repo/initramfs/init"; usb_src="$repo/initramfs/usb-acm"
 	apps='sh mount mkdir cat uname sleep setsid cttyhack getty ln ls dmesg poweroff reboot'
 	image_name=initramfs.cpio.gz ;;
 ncm) init_src="$repo/initramfs/init-ncm"; usb_src="$repo/initramfs/usb-ncm"
-	apps='sh mount mkdir cat cp uname sleep ip ln touch udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink timeout devmem awk od grep'
+	apps='sh mount mkdir cat cp uname sleep ip ln touch chmod sed udhcpd httpd telnetd dmesg reboot poweroff ls dd sha256sum sync tr date mv fdisk readlink timeout devmem awk od grep'
+	ncm_helper="$repo/packaging/erhai-debug/tree/usr/libexec/erhai-ncm"
+	ncm_config="$repo/packaging/erhai-debug/tree/usr/lib/erhai/debug/udhcpd.conf"
 	image_name=initramfs-ncm.cpio.gz
 	# DRM writeback diagnostic (erhai.wb=1): statically linked against the
 	# workspace kernel uapi headers. Skipped in standalone checkouts that
@@ -91,6 +93,7 @@ trap 'rm -rf -- "$stage"' EXIT
 	sha256sum "$init_src" "$usb_src" | cut -d' ' -f1
 	[[ -z ${extra_bins:-} ]] || sha256sum "$wb_src" | cut -d' ' -f1
 	[[ -z ${identity_src:-} ]] || sha256sum "$identity_src" | cut -d' ' -f1
+	[[ -z ${ncm_helper:-} ]] || sha256sum "$ncm_helper" "$ncm_config" | cut -d' ' -f1
 	printf '%s\n' "$expected"
 } | sha256sum | cut -d' ' -f1 >"$stage/build-id"
 {
@@ -107,6 +110,13 @@ trap 'rm -rf -- "$stage"' EXIT
 		printf 'file /bin/%s %s 0755 0 0\n' "$(basename -- "$b")" "$b"
 	done
 	printf 'file /etc/build-id %s 0644 0 0\n' "$stage/build-id"
+	if [[ -n ${ncm_helper:-} ]]; then
+		for d in /usr /usr/libexec /usr/lib /usr/lib/erhai /usr/lib/erhai/debug; do
+			printf 'dir %s 0755 0 0\n' "$d"
+		done
+		printf 'file /usr/libexec/erhai-ncm %s 0755 0 0\n' "$ncm_helper"
+		printf 'file /usr/lib/erhai/debug/udhcpd.conf %s 0644 0 0\n' "$ncm_config"
+	fi
 	if [[ -n ${fw_files:-} ]]; then
 		printf 'dir /lib 0755 0 0\n'
 		printf 'dir /lib/firmware 0755 0 0\n'

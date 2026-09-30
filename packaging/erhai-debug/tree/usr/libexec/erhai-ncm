@@ -1,0 +1,73 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Shared initramfs/runtime NCM setup. Never configure an unrelated USB NIC.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+g=/sys/kernel/config/usb_gadget/erhai-mainline
+run=/run/erhai-debug
+mac=02:00:00:77:00:02
+
+fail() { echo "erhai-ncm: $*" >&2; exit 1; }
+
+prepare() {
+	mkdir -p /sys/kernel/config
+	[ -d /sys/kernel/config/usb_gadget ] || mount -t configfs configfs /sys/kernel/config
+	if [ ! -d "$g" ]; then
+		mkdir "$g"
+		echo 0x1d6b > "$g/idVendor"
+		echo 0x0104 > "$g/idProduct"
+		mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409"
+		echo erhai-mainline-dev > "$g/strings/0x409/serialnumber"
+		echo 'erhai development' > "$g/strings/0x409/manufacturer"
+		echo 'Mainline first-boot evidence' > "$g/strings/0x409/product"
+		echo 'NCM diagnostics' > "$g/configs/c.1/strings/0x409/configuration"
+		echo 100 > "$g/configs/c.1/MaxPower"
+		mkdir "$g/functions/ncm.usb0"
+		echo "$mac" > "$g/functions/ncm.usb0/dev_addr"
+		echo 02:00:00:77:00:01 > "$g/functions/ncm.usb0/host_addr"
+		ln -s "$g/functions/ncm.usb0" "$g/configs/c.1/ncm.usb0"
+	fi
+	[ "$(cat "$g/idVendor")" = 0x1d6b ] &&
+	[ "$(cat "$g/idProduct")" = 0x0104 ] &&
+	[ "$(cat "$g/functions/ncm.usb0/dev_addr")" = "$mac" ] &&
+	[ "$(cat "$g/functions/ncm.usb0/host_addr")" = 02:00:00:77:00:01 ] ||
+		fail 'existing gadget is not the expected diagnostic function'
+}
+
+interface() {
+	iface=$(cat "$g/functions/ncm.usb0/ifname") || return 1
+	case "$iface" in ''|*[!a-zA-Z0-9_.-]*) return 1;; esac
+	[ "$(cat "/sys/class/net/$iface/address" 2>/dev/null)" = "$mac" ] || return 1
+	printf '%s\n' "$iface"
+}
+
+case "${1:-}" in
+prepare) prepare ;;
+interface) interface ;;
+start)
+	prepare
+	if [ -z "$(cat "$g/UDC")" ]; then
+		set -- /sys/class/udc/*
+		[ -e "$1" ] && [ "$#" -eq 1 ] || fail 'no unique UDC available'
+		echo "${1##*/}" > "$g/UDC"
+	fi
+	udc=$(cat "$g/UDC")
+	[ "$(cat "/sys/class/udc/$udc/function" 2>/dev/null)" = "${g##*/}" ] ||
+		fail "the controller did not bind the diagnostic gadget"
+	iface=$(interface) || fail 'the diagnostic network interface is not ready'
+	ip link set dev "$iface" up
+	ip address replace 192.168.77.2/24 dev "$iface"
+	mkdir -p "$run"
+	chmod 700 "$run"
+	printf '%s\n' "$iface" > "$run/interface"
+	sed "s/^interface .*/interface $iface/" /usr/lib/erhai/debug/udhcpd.conf > "$run/udhcpd.conf"
+	touch "$run/udhcpd.leases"
+	;;
+stop)
+	# The same name might now refer to a host-mode NIC after a role change.
+	iface=$(interface) || exit 0
+	ip address del 192.168.77.2/24 dev "$iface" 2>/dev/null || true
+	;;
+*) fail 'usage: erhai-ncm prepare|start|stop|interface' ;;
+esac
