@@ -123,6 +123,36 @@ release images and modified root trees are comparison data.
   Ubuntu Base and overlay-merging tools are historical experiments, not the
   desktop delivery recipe.
 
+## Desktop root filesystem
+
+`tools/build-desktop-rootfs.py` assembles the two original Desktop layers and
+explicit device packages. It requires rootful Docker on amd64, an existing
+ARM64 binfmt interpreter, Python 3.11+ and `dpkg-dev`. Pull the assembly image
+pinned in `packaging/desktop/source.json` first; the builder downloads and
+verifies the locked native tools and Ubuntu runtime dependencies itself.
+
+```sh
+args=()
+for deb in /path/to/selected-device-packages/*.deb; do args+=(--device-deb "$deb"); done
+python3 tools/build-desktop-rootfs.py --layers /path/to/iso/casper \
+  --output out/desktop-root "${args[@]}"
+```
+
+Select one version of each desired device component, including the matching
+kernel selector and payload. The container has no network and uses kernel
+OverlayFS to apply the original layers, including whiteouts. Its additional
+SYS_ADMIN capability and container-only unconfined AppArmor setting permit
+trusted attributes and the overlay mount; target package processes drop that
+added capability. Package installation uses a temporary local APT source and
+service-start policy. The target's normal Ubuntu APT sources remain intact.
+
+The output includes `rootfs.squashfs`, package and file manifests, extended
+attributes and input hashes. Machine identifiers, radio addresses, sensor
+calibration and the Android rollback set must be supplied on installation.
+This is an assembly candidate; it does not establish tablet boot, rendering,
+Snap compatibility or peripheral support. Local commands and build logs stay
+separate from the image and its portable input manifest.
+
 ## Quickstart
 
 ```sh
