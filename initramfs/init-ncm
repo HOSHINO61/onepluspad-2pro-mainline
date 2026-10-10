@@ -173,7 +173,7 @@ switch_to_newroot() {
 		mkdir -p /newroot/run/systemd/system/sysinit.target.wants || return 1
 		# Keep disk writeback from indefinitely delaying the recovery attempt.
 		# -n prevents reboot from starting another unbounded sync afterwards.
-		# This still needs a running userspace/kernel, not just a hardware watchdog.
+		# Userspace recovery cannot cover a stalled kernel or scheduler.
 		cat > /newroot/run/systemd/system/erhai-test-session.service <<EOF || return 1
 [Unit]
 Description=Bound a temporary kernel test on the installed root

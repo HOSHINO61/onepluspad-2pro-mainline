@@ -12,5 +12,6 @@
     "TX_CODEC_DMA_TX_3 Capture",
     "Secondary TDM0 Playback",
     "DISPLAY_PORT_RX_0 Playback"
-  ]
+  ],
+  "bundled_archive": "packaging/audio/audioreach-topology-993a17dc.tar.gz"
 }

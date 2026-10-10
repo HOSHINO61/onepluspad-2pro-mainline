@@ -1,4 +1,6 @@
 /out/
+/cache/
+/keys/
 __pycache__/
 *.pyc
 /kernel/*

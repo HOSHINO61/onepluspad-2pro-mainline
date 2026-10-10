@@ -1,0 +1,40 @@
+{
+  "release": "OPD2413_11.C.34_1340_202607031844",
+  "model": "OPD2413",
+  "purpose": "Original, unmodified stock inputs for ABL device-tree extraction and AVB partition/footer metadata during builds",
+  "origin": {
+    "url": "https://gauss-compota-c-cn.allawnfs.com/remove-b0608b3ac0ca59a1e916aec540e6a9f5/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/07/07/1d5489232fd6471cbdd222dd701e771a.zip",
+    "archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
+    "note": "Official OnePlus full OTA payload. A fresh vendor download signature is required to retrieve the original OTA."
+  },
+  "archive": "stock-boot-inputs.tar.gz",
+  "archive_sha256": "1b24be16afffd3bdfc97690ef48a97db51974fda0a280e42dec4e6b2db47e231",
+  "destination": "cache/stock-c34/images",
+  "files": [
+    {
+      "path": "boot.img",
+      "partition": "boot",
+      "sha256": "2225e3447ee3c3833dea11aedc82f3123d3d391ab231b791c4b90a65e56169ce",
+      "bytes": 100663296
+    },
+    {
+      "path": "init_boot.img",
+      "partition": "init_boot",
+      "sha256": "1789152bca2cb037c5bf0b67240d76c004ab3e112d547592ccf1624691ea2aac",
+      "bytes": 8388608
+    },
+    {
+      "path": "vendor_boot.img",
+      "partition": "vendor_boot",
+      "sha256": "c2b5d48f652cfffe205549ba0bd421238d4af89924d702259623df80f15448b1",
+      "bytes": 100663296
+    },
+    {
+      "path": "dtbo.img",
+      "partition": "dtbo",
+      "sha256": "3830055b17ed9963d3809e3661221a01de83ad0a08e17425611258301ec101d2",
+      "bytes": 25165824
+    }
+  ],
+  "license": "Original vendor and third-party terms apply; this project grants no license over the stock images. Redistribution basis remains unresolved, as for the stock device firmware."
+}
