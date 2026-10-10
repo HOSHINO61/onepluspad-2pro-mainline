@@ -26,6 +26,9 @@ cleanup() {
     if [ "$policy_installed" = 1 ]; then cleanup_policy || status=1; fi
     if [ "$proc_mounted" = 1 ]; then umount -R "$root/proc" || status=1; fi
     if [ "$mounted" = 1 ]; then umount "$root" || status=1; fi
+    if [ "$status" = 0 ]; then
+        rm -rf /work/minimal /work/standard /work/changes /work/overlay-work "$root"
+    fi
     exit "$status"
 }
 trap cleanup EXIT
