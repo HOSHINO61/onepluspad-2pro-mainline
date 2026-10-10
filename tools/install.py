@@ -150,8 +150,8 @@ dumpsys battery
 
     def load_backup(self):
         plan = json.loads((self.work / 'backup.json').read_text())
-        if plan['serial'] != self.args.serial:
-            raise RuntimeError('Backup belongs to another tablet')
+        if plan['serial'] != self.args.serial or plan['slot'] != '_a':
+            raise RuntimeError('Backup belongs to another tablet or unsupported slot')
         for name in PARTS:
             if sha256(self.work / 'android' / (name + '.img')) != plan['android_sha256'][name]:
                 raise RuntimeError('Android backup has changed')
@@ -249,7 +249,7 @@ dumpsys battery
         if set(prepared['images']) != {'linux_rootfs', 'linux_data'}:
             raise RuntimeError('Both Linux images are required')
         for name in PARTS:
-            live = self.android('sha256sum ' + current['partitions'][name + '_a']['device']).split()[0]
+            live = self.android('sha256sum ' + shlex.quote(current['partitions'][name + '_a']['device'])).split()[0]
             if live != saved['android_sha256'][name]:
                 raise RuntimeError('Live Android boot set changed since backup')
         self.run(['adb', '-s', self.args.serial, 'reboot', 'bootloader'])
@@ -280,7 +280,7 @@ dumpsys battery
         # The existing switcher owns activation and readback of all boot images.
         self.android(shlex.quote(KSU_SWITCH) + ' to-ubuntu --no-reboot', timeout=180)
         for name in PARTS:
-            live = self.android('sha256sum ' + current['partitions'][name + '_a']['device']).split()[0]
+            live = self.android('sha256sum ' + shlex.quote(current['partitions'][name + '_a']['device'])).split()[0]
             if live != prepared['ubuntu_sha256'][name]:
                 raise RuntimeError(f'{name}: activated boot partition differs from the prepared set')
         (self.work / 'installed.json').write_text(json.dumps({
@@ -301,7 +301,7 @@ dumpsys battery
         self.wait_adb()
         restored = self.inspect(minimum_battery=0)
         for name in PARTS:
-            got = self.android('sha256sum ' + restored['partitions'][name + '_a']['device']).split()[0]
+            got = self.android('sha256sum ' + shlex.quote(restored['partitions'][name + '_a']['device'])).split()[0]
             if got != plan['android_sha256'][name]:
                 raise RuntimeError('Android recovery readback mismatch')
         print('Android restored and all three boot partitions verified', flush=True)
