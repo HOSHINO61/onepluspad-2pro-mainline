@@ -68,53 +68,7 @@ echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
   timeout -k 1 5 sync; reboot -f -n
   sleep 15; echo s > /proc/sysrq-trigger; echo b > /proc/sysrq-trigger ) &
 WATCHDOG_PID=$!
-
-# Display chain state: DRM cards/connectors, backlights, fbdev, and the
-# driver binding state of the display chain and its i2c clients. Refreshed
-# by the heartbeat loop because display probing finishes after boot.
-dump_drm() {
-	ls -l /sys/class/drm
-	for c in /sys/class/drm/card*-*/; do
-		[ -d "$c" ] || continue
-		echo "-- $c"
-		cat "$c/status" "$c/enabled" "$c/modes"
-	done
-	ls -l /sys/class/backlight
-	for b in /sys/class/backlight/*/; do
-		[ -d "$b" ] || continue
-		echo "-- $b"
-		cat "$b/max_brightness" "$b/brightness" "$b/actual_brightness" "$b/bl_power"
-	done
-	ls -l /sys/class/graphics
-	[ -e /sys/class/graphics/fb0 ] &&
-		cat /sys/class/graphics/fb0/virtual_size /sys/class/graphics/fb0/bits_per_pixel /sys/class/graphics/fb0/state
-
-	for d in /sys/bus/platform/devices/ae00000.display-subsystem \
-		 /sys/bus/platform/devices/ae01000.display-controller \
-		 /sys/bus/platform/devices/ae94000.dsi \
-		 /sys/bus/platform/devices/ae96000.dsi \
-		 /sys/bus/platform/devices/ae95000.phy \
-		 /sys/bus/platform/devices/ae97000.phy; do
-		[ -e "$d" ] || continue
-		l=$(readlink "$d/driver" 2>/dev/null)
-		echo "platform ${d##*/} driver=${l##*/}"
-	done
-	for m in /sys/bus/mipi-dsi/devices/*; do
-		[ -e "$m" ] || continue
-		l=$(readlink "$m/driver" 2>/dev/null)
-		echo "mipi-dsi ${m##*/} driver=${l##*/}"
-	done
-	ls /sys/bus/i2c/devices
-	for i in /sys/bus/i2c/devices/*-0011; do
-		[ -e "$i" ] || continue
-		l=$(readlink "$i/driver" 2>/dev/null)
-		echo "i2c ${i##*/} name=$(cat "$i/name") driver=${l##*/}"
-	done
-	mkdir -p /sys/kernel/debug
-	[ -e /sys/kernel/debug/devices_deferred ] || mount -t debugfs none /sys/kernel/debug
-	echo '-- devices_deferred --'
-	cat /sys/kernel/debug/devices_deferred
-}
+echo "erhai: initramfs running; recovery timer armed" > /dev/console
 
 # Resolve PARTLABEL=<name> to a block device. The initramfs has no blkid and
 # no udev, but the partition uevents carry PARTNAME for every GPT entry.
@@ -203,8 +157,6 @@ EOF
 	date > /run/evidence/heartbeat.tmp
 	cat /proc/uptime >> /run/evidence/heartbeat.tmp
 	dmesg > /run/evidence/dmesg-live.txt
-	dump_drm > /run/evidence/drm.tmp 2>&1
-	mv /run/evidence/drm.tmp /run/evidence/drm.txt
 	mv /run/evidence/heartbeat.tmp /run/evidence/heartbeat.txt
 	sleep 10
   done ) &
@@ -226,59 +178,10 @@ cat /proc/iomem > /run/evidence/iomem.txt
 cat /proc/partitions > /run/evidence/partitions.txt
 cat /proc/modules > /run/evidence/modules.txt
 
-# Storage evidence is strictly read-only: sysfs, partition tables and blkid
-# identities for the install layout. Nothing is mounted or written.
-{
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		[ -e /sys/class/block/sda ] && break
-		sleep 2
-	done
-	echo '== /proc/partitions =='
-	cat /proc/partitions
-	echo '== /sys/class/block =='
-	ls -l /sys/class/block
-	echo '== sector sizes =='
-	for f in /sys/class/block/sd*/size /sys/class/block/sd*/queue/logical_block_size; do
-		[ -e "$f" ] && echo "$f: $(cat "$f")"
-	done
-	echo '== fdisk -l =='
-	for n in /dev/sd?; do fdisk -l "$n"; done
-} > /run/evidence/storage.txt 2>&1
-# Raw GPT header+entries per LUN for host-side name/GUID parsing (read-only).
-# UFS logical block size is 4096 on this device.
-for n in /dev/sd?; do
-	dd if="$n" of="/run/evidence/gpt-${n##*/}.bin" bs=4096 count=8 2>/dev/null
-done
-# No block device is ever mounted rw by this initramfs; declare it so the
-# orchestrator may end the session over telnet instead of waiting out the
-# watchdog.
+# Ordinary boot must not read unpowered display registers or clock debugfs.
+# Those bring-up probes can stall the SoC before any recovery channel exists.
+# The partition inventory above is sufficient for the rescue channel.
 echo 'BLOCK_READONLY=true' > /run/evidence/block-guard.txt
-
-# Clock state of the display pipeline (is the MDP core really at its OPP
-# ceiling?) and the panel-side DCS readback when the TEMP debugfs probe is
-# in the kernel. One-shot; debugfs may need the mount here.
-mkdir -p /sys/kernel/debug
-[ -e /sys/kernel/debug/devices_deferred ] || mount -t debugfs none /sys/kernel/debug
-grep -E "disp_cc|mdp|dpu|dsi|gpu_cc|gpucc" /sys/kernel/debug/clk/clk_summary > /run/evidence/clks.txt 2>/dev/null
-[ -e /sys/kernel/debug/nt36536-panel/status ] &&
-	cat /sys/kernel/debug/nt36536-panel/status > /run/evidence/panel-status.txt 2>&1
-
-# Display-link ground truth while fbcon is actively driving (deterministic:
-# this runs after the panel probes, before any desktop blanking). The INTF
-# frame counter sampled twice tells whether frames complete at all; the DSI
-# CTRL/STATUS0 tell whether the link is enabled and the video engine busy.
-{
-	for a in 0x0ae94000 0x0ae96000; do
-		echo "dsi@$a ctrl=$(devmem $a 32) status0=$(devmem $((a+4)) 32) dsc=$(devmem $((a+668)) 32)"
-	done
-	for a in 0x0ae36000 0x0ae37000; do
-		echo "intf@$a te_en=$(devmem $a 32) frame=$(devmem $((a+172)) 32) status=$(devmem $((a+620)) 32)"
-	done
-	sleep 1
-	for a in 0x0ae36000 0x0ae37000; do
-		echo "intf@$a frame2=$(devmem $((a+172)) 32)"
-	done
-} > /run/evidence/dsiregs.txt 2>&1
 
 # Optional writeback capture (erhai.wb=1): grab what the DPU actually scans
 # out (fbcon content, then known color bars painted into fb0). Runs before
@@ -297,6 +200,7 @@ EARLY_DEBUG=$DEBUG_CHANNEL
 [ -n "$ROOT_SPEC" ] || EARLY_DEBUG=1
 NCM_READY=0
 if [ "$EARLY_DEBUG" = 1 ]; then
+	echo "erhai: preparing USB network" > /dev/console
 	if /bin/usb-ncm; then
 		NCM_READY=1
 	else
