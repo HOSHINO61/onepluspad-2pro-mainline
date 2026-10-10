@@ -17,9 +17,11 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 class SessionRecovery(unittest.TestCase):
-    def expire(self, sync_body):
+    def expire(self, sync_body, ram=False):
         source = (REPO / 'initramfs/init-ncm').read_text()
-        start = source.index('cat > /newroot/run/systemd/system/erhai-test-session.service')
+        marker = ('cat > /newroot/etc/systemd/system/erhai-session-expiry.service' if ram
+                  else 'cat > /newroot/run/systemd/system/erhai-test-session.service')
+        start = source.index(marker)
         unit = source[start:].split('\nEOF', 1)[0]
         command = next(line.removeprefix('ExecStart=') for line in unit.splitlines()
                        if line.startswith('ExecStart='))
@@ -42,7 +44,8 @@ class SessionRecovery(unittest.TestCase):
                                          'RECOVERY_TEST_ROOT': directory})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertLess(time.monotonic() - started, 10)
-            self.assertEqual((root / 'session.started').read_text(), 'started\n')
+            if not ram:
+                self.assertEqual((root / 'session.started').read_text(), 'started\n')
             self.assertEqual((root / 'session.expired').read_text(), 'expired\n')
             # Repeating sync in reboot would defeat the preceding timeout.
             self.assertEqual((root / 'reboot-args').read_text(), '-f -n bootloader\n')
@@ -55,6 +58,15 @@ class SessionRecovery(unittest.TestCase):
 
     def test_writeback_ignoring_term_cannot_block_reboot(self):
         self.expire("trap '' TERM\nexec sleep 30")
+
+    def test_ram_root_expiry_with_successful_sync(self):
+        self.expire('exit 0', ram=True)
+
+    def test_ram_root_expiry_with_failed_sync(self):
+        self.expire('exit 1', ram=True)
+
+    def test_ram_root_expiry_with_blocked_sync(self):
+        self.expire("trap '' TERM\nexec sleep 30", ram=True)
 
 
 if __name__ == '__main__':

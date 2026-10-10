@@ -65,7 +65,7 @@ echo "WATCHDOG_ARMED=$WATCHDOG_SECONDS" > /run/evidence/watchdog-armed.txt
   timer_pid=$!
   wait "$timer_pid"
   echo "WATCHDOG_FIRED uptime=$(cat /proc/uptime)" > /run/evidence/watchdog.txt
-  sync; sleep 1; reboot -f
+  timeout -k 1 5 sync; reboot -f -n
   sleep 15; echo s > /proc/sysrq-trigger; echo b > /proc/sysrq-trigger ) &
 WATCHDOG_PID=$!
 
@@ -383,7 +383,7 @@ if [ "$EARLY_DEBUG" = 0 ] || [ "$NCM_READY" = 1 ] || [ -n "$ROOT_SPEC" ]; then
 Description=Reboot back to Android at the end of the RAM session
 [Service]
 Type=oneshot
-ExecStart=/sbin/reboot -f
+ExecStart=/bin/sh -c 'echo expired > /run/erhai-test-session.expired; echo ERHAI_TEST_SESSION_EXPIRED > /dev/kmsg; timeout -k 1 5 sync; /sbin/reboot -f -n bootloader'
 EOF
 		cat > /newroot/etc/systemd/system/erhai-session-expiry.timer <<EOF
 [Unit]
@@ -404,7 +404,7 @@ After=local-fs.target
 DefaultDependencies=no
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'echo SYSTEMD-ALIVE-$(cat /proc/uptime) > /dev/tcp/192.168.77.10/9998 || true'
+ExecStart=/bin/bash -c 'echo started > /run/erhai-test-session.started; echo SYSTEMD-ALIVE-$(cat /proc/uptime) > /dev/tcp/192.168.77.10/9998 || true'
 [Install]
 WantedBy=multi-user.target
 EOF
