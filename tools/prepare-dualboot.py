@@ -7,6 +7,7 @@ Android userdata; the caller must explicitly request --erase-android.
 Partition editing uses the distribution's sgdisk, not a private GPT writer.
 """
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -90,32 +91,34 @@ def main():
     if os.geteuid() != 0:
         parser.error('Run as root in the temporary RAM desktop')
     os.umask(0o077)
-    table, command = inspect()
-    record = args.backup.with_suffix('.json')
-    serial = next((x.split('=', 1)[1] for x in Path('/proc/cmdline').read_text().split()
-                   if x.startswith(('oplusboot.serialno=', 'androidboot.serialno='))), None)
-    if not serial:
-        raise RuntimeError('Device serial is missing')
-    print(table)
-    print('New layout: Android 200 GiB, Linux root 60 GiB, Linux home uses the remainder.')
-    if not args.erase_android:
-        if args.backup.exists() or record.exists():
-            raise RuntimeError('Backup already exists; keep it and use --erase-android only after saving it on the host')
-        run('sgdisk', '--backup=' + str(args.backup), DISK)
-        record.write_text(json.dumps({'serial': serial, 'table': table, 'command': command}, indent=2) + '\n')
-        print(f'Saved {args.backup} and {record}. Copy both to the host before applying.')
-        return
-    saved = json.loads(record.read_text())
-    if saved['serial'] != serial or saved['table'] != table or saved['command'] != command or not args.backup.is_file():
-        raise RuntimeError('Saved partition plan does not match this tablet')
-    print('Applying the layout. Android data will no longer be usable.', flush=True)
-    print(run(*command))
-    verification = run('sgdisk', '--verify', DISK)
-    print(verification)
-    if 'No problems found' not in verification:
-        raise RuntimeError('Partition verification failed; keep the backup and do not erase userdata')
-    print('Layout written. Reboot to Fastboot, erase userdata and metadata, then boot Android.')
-    print('Keep the GPT backup on the host. Do not run the preparation step again.')
+    with Path('/run/erhai-partition.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        table, command = inspect()
+        record = args.backup.with_suffix('.json')
+        serial = next((x.split('=', 1)[1] for x in Path('/proc/cmdline').read_text().split()
+                       if x.startswith(('oplusboot.serialno=', 'androidboot.serialno='))), None)
+        if not serial:
+            raise RuntimeError('Device serial is missing')
+        print(table)
+        print('New layout: Android 200 GiB, Linux root 60 GiB, Linux home uses the remainder.')
+        if not args.erase_android:
+            if args.backup.exists() or record.exists():
+                raise RuntimeError('Backup already exists; keep it and use --erase-android only after saving it on the host')
+            run('sgdisk', '--backup=' + str(args.backup), DISK)
+            record.write_text(json.dumps({'serial': serial, 'table': table, 'command': command}, indent=2) + '\n')
+            print(f'Saved {args.backup} and {record}. Copy both to the host before applying.')
+            return
+        saved = json.loads(record.read_text())
+        if saved['serial'] != serial or saved['table'] != table or saved['command'] != command or not args.backup.is_file():
+            raise RuntimeError('Saved partition plan does not match this tablet')
+        print('Applying the layout. Android data will no longer be usable.', flush=True)
+        print(run(*command))
+        verification = run('sgdisk', '--verify', DISK)
+        print(verification)
+        if 'No problems found' not in verification:
+            raise RuntimeError('Partition verification failed; keep the backup and do not erase userdata')
+        print('Layout written. Reboot to Fastboot, erase userdata and metadata, then boot Android.')
+        print('Keep the GPT backup on the host. Do not run the preparation step again.')
 
 
 if __name__ == '__main__':
