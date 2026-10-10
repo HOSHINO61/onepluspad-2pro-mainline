@@ -42,27 +42,22 @@ decides at session start; a GPU failure later in a session is not caught. EGL is
 selected with `__EGL_VENDOR_LIBRARY_DIRS`, which sandboxed applications with
 their own graphics runtimes extend rather than lose.
 
-The Turnip Vulkan loader manifest is the one Ubuntu file this package takes
-over: Ubuntu's `freedreno_icd.aarch64.json` (from `mesa-vulkan-drivers`) is
-moved aside with `dpkg-divert` and replaced by one naming the private Turnip,
-because Ubuntu's Turnip has no entry for this chip and declines it. The other
-distribution Vulkan drivers stay in place. The diversion is to be removed once
-Ubuntu's Turnip recognises chip ID `0xffff44050001`. GTK 4 draws with Vulkan on
-Wayland when a hardware device is present, so installing this package moves
-GTK 4 applications from OpenGL to Turnip. No other Ubuntu-owned library or
-vendor configuration file changes. Dependencies are derived with the native
-distribution's `dpkg-shlibdeps`; source/build hashes, package checksums and
-the input recipe are recorded in its manifest. Increment
-`packaging/erhai-mesa/VERSION` for each new installable revision.
+The desktop package enables OpenGL and GLES. Turnip is excluded after hardware
+validation triggered a GPU timeout. Upgrading from the experimental Vulkan
+package removes its ICD diversion and restores Ubuntu's original loader entry;
+fresh installations do not divert it. The package continues to leave Ubuntu's
+Mesa libraries under APT ownership. Dependencies and source/build hashes are
+recorded in the package manifest.
 
-Install the resulting deb with `apt install ./erhai-mesa_*.deb`, then cold boot
+Install the resulting deb with `sudo apt install ./out/mesa-debs/erhai-mesa_*.deb`, then cold boot
 to apply the new environment to every user manager. Removal with `apt remove erhai-mesa` restores the distribution selection
 after the next cold boot. Ubuntu Mesa currently lacks this chip entry, so removal
 restores software rendering. Sandboxed applications with their own graphics
 runtimes need separate validation; this package does not replace their runtimes.
 
 The `probe` profile supplies minimal GBM/EGL/GLES; `desktop` also builds the
-Wayland, X11 and GLVND interfaces and the Turnip Vulkan driver. Neither builds
+Wayland, X11 and GLVND interfaces. The separate core24 candidate still includes
+Turnip and remains unvalidated on hardware. Neither desktop profile builds
 a software renderer. These are development profiles, not a complete supported
 desktop package. The manifest records build inputs, native package versions,
 staged file hashes and symlinks. Compatible outputs are incremental and locked
@@ -72,6 +67,10 @@ driver. Hardware drawing, compositor correctness and physical display output
 are separate checks.
 
 ## Graphics for core24 snaps
+
+This experimental provider requires a separately prepared kernel and Snap
+environment with working confinement. The v0.1.0 kernel does not enable AppArmor;
+installing this provider alone does not make Snap applications supported.
 
 A desktop deb cannot supply libraries inside a snap with its own graphics runtime.
 The desktop build uses Ubuntu 26.04 and requires its newer glibc. The separate
@@ -83,11 +82,12 @@ tools/build-mesa-root.py --target gpu-2404 --work out/mesa-core24-build \
   --output out/mesa-core24-package --jobs 6
 ```
 
-For the architecture-independent NIR Python generator, `--native-nir` uses the
-host Python executable named by Mesa's configured Ninja rule and records its
+For the architecture-independent NIR Python generator, `--native-nir` uses a compatible
+host Python executable in Mesa's configured Ninja rule and records its
 version/hash, template-library versions, Ninja hash and generated C hash. The
-host needs that Python minor version, Mako, MarkupSafe and native Ninja; use
-`--ninja PATH` for an unpacked Ninja executable. This avoids running a large
+host needs Python 3.10 or newer, Mako and MarkupSafe. For the amd64 desktop build, the helper downloads the
+Ninja version pinned in `packaging/mesa/native-tools.json`, matching the SDK
+build-log format. Use `--ninja PATH` to provide a matching executable yourself. This avoids running a large
 Python generator under CPU emulation. Target C/C++ compilation and packaging
 remain in the ARM64 SDK.
 
@@ -114,7 +114,7 @@ consumer's base, plug and current connection with `snap info` / `snap connection
 For a compatible Firefox installation, local acceptance uses:
 
 ```sh
-sudo snap install --dangerous ./erhai-mesa-2404_*.snap
+sudo snap install --dangerous ./out/mesa-core24-package/erhai-mesa-2404_*.snap
 sudo snap connect firefox:gpu-2404 erhai-mesa-2404:gpu-2404
 ```
 

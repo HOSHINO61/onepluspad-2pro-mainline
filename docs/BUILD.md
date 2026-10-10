@@ -22,6 +22,19 @@ Place the matching checkout
 at `kernel/linux` under this checkout, or set `ERHAI_WORKSPACE` to a workspace
 containing `kernel/linux`. Do not substitute an unmodified upstream kernel.
 
+Use Git checkouts so the build can record the source revisions:
+
+```sh
+git clone https://github.com/yzddmr6/onepluspad-2pro-mainline.git
+cd onepluspad-2pro-mainline
+git clone --filter=blob:none https://github.com/yzddmr6/linux-sm8750-erhai.git kernel/linux
+kernel_commit=$(python3 -c 'import json; print(json.load(open("kernel/source.json"))["kernel"]["commit"])')
+git -C kernel/linux checkout "$kernel_commit"
+```
+
+Kernel builds reject another commit by default. `ALLOW_UNPINNED_KERNEL=1` is an
+explicit development override.
+
 Run the commands below from the integration repository root. Python build tools
 provide `--help`; shell tools use the environment variables shown below.
 
@@ -150,7 +163,7 @@ python3 tools/build-debs.py --output out/device-packages \
 | `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
 | `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
 | `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-audio` | the board AudioReach topology and UCM for the internal microphones and DisplayPort candidate; internal speaker playback remains opt-in |
+| `erhai-audio` | the board AudioReach topology and UCM for the internal microphones; DisplayPort audio is disabled in the default profile, and internal speaker playback remains opt-in |
 | `erhai-display-power` | the backlight power service, its socket and the GNOME 50 display-power adapter; it requires the kernel's single led-backlight device |
 | `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
 | `erhai-device` | a metapackage depending on the required device packages |
@@ -258,11 +271,23 @@ ARM64 binfmt interpreter, Python 3.11+ and `dpkg-dev`. Pull the assembly image
 pinned in `packaging/desktop/source.json` first; the builder downloads and
 verifies the locked native tools and Ubuntu runtime dependencies itself.
 
-The following example uses Bash.
+The desktop needs the Mesa package for hardware rendering and the sensor
+package for sensor integration. Build both, then assemble them with the device
+packages created above. Keep one selected version per component in these output
+directories. Both component builders use unprivileged `unshare`, so the host
+must permit user namespaces and provide ARM64 binfmt. `--native-nir` also needs
+Mako and MarkupSafe in the host Python (`python3-mako` and
+`python3-markupsafe` on Ubuntu). These builds run outside the assembly Docker
+container. The following example uses Bash.
 
 ```sh
+python3 tools/build-mesa-root.py --output out/mesa-debs --jobs 6 --native-nir
+python3 tools/build-sensors.py --output out/sensor-debs
+
 args=()
-for deb in /path/to/selected-device-packages/*.deb; do args+=(--device-deb "$deb"); done
+for deb in out/device-packages/*.deb out/mesa-debs/*.deb out/sensor-debs/*.deb; do
+  args+=(--device-deb "$deb")
+done
 python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper" \
   --output out/desktop-root "${args[@]}"
 ```
@@ -278,8 +303,8 @@ service-start policy. The target's normal Ubuntu APT sources remain intact.
 The output includes `rootfs.squashfs`, package and file manifests, extended
 attributes and input hashes. Machine identifiers, radio addresses, sensor
 calibration and the Android rollback set must be supplied on installation.
-This is an assembly candidate; it does not establish tablet boot, rendering,
-Snap compatibility or peripheral support. Local commands and build logs stay
+Use the [installation guide](FLASHING.md) for the supported layout and device
+checks. Building alone does not verify hardware support. Local commands and build logs stay
 separate from the image and its portable input manifest.
 
 ## Existing dual-boot installations

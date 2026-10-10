@@ -12,7 +12,19 @@
 OpenSSL/ELF 开发头文件与 kmod；ccache 可选。音频构建另需 m4 和 alsa-utils。
 内核版本、配置位置和工具输入见 [kernel/source.json](../kernel/source.json)。
 
-独立 checkout 使用以下布局，命令均从集成仓库根目录执行：
+使用 Git 获取源码，保留构建记录所需的提交身份：
+
+```sh
+git clone https://github.com/yzddmr6/onepluspad-2pro-mainline.git
+cd onepluspad-2pro-mainline
+git clone --filter=blob:none https://github.com/yzddmr6/linux-sm8750-erhai.git kernel/linux
+kernel_commit=$(python3 -c 'import json; print(json.load(open("kernel/source.json"))["kernel"]["commit"])')
+git -C kernel/linux checkout "$kernel_commit"
+```
+
+内核构建默认拒绝与清单不一致的提交。`ALLOW_UNPINNED_KERNEL=1` 仅用于明确的开发实验。
+
+独立 checkout 使用以下布局，后续命令均从集成仓库根目录执行：
 
 ```text
 onepluspad-2pro-mainline/
@@ -124,11 +136,18 @@ python3 tools/prepare-inputs.py --desktop
 dpkg-dev。先拉取清单固定的容器镜像。装配期间容器需要额外的挂载能力；这是可信
 本机构建操作，不用于运行未审阅的外部代码。
 
-把同一候选选定的设备 deb 放在独立目录，每个组件只放一个版本：
+桌面硬件加速和传感器需要各自的软件包。先完成这两个组件的构建，再将它们与
+前面生成的设备包一起装入根系统；每个输出目录只保留本次选定的一个版本。
+这两个组件通过非特权 `unshare` 构建，主机需允许 user namespace；`--native-nir`
+还要求主机 Python 可导入 Mako 与 MarkupSafe（Ubuntu：`python3-mako`、
+`python3-markupsafe`）。它们使用 ARM64 binfmt，不在装配用的 Docker 容器内构建：
 
 ```sh
+python3 tools/build-mesa-root.py --output out/mesa-debs --jobs 6 --native-nir
+python3 tools/build-sensors.py --output out/sensor-debs
+
 args=()
-for deb in /path/to/selected-device-packages/*.deb; do
+for deb in out/device-packages/*.deb out/mesa-debs/*.deb out/sensor-debs/*.deb; do
   args+=(--device-deb "$deb")
 done
 python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper" \
@@ -139,5 +158,5 @@ python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/u
 装配通过官方 APT 包加入运行依赖和设备组件，保留 Ubuntu 正常的软件源。
 账户、校准、无线地址与 Android 回退镜像需要在后续安装阶段处理，不进入通用根树。
 
-当前根树装配已经完成离线检查，新的 RAM 桌面启动路径尚未在平板验证。
-构建产物不是完整安装包；不要使用旧实验根树或上一版镜像拼接新版本。
+安装范围与操作见[试用、安装与恢复](FLASHING.zh-CN.md)。
+构建清单记录本次选定的输入；请将启动镜像、根系统与校验和作为一套使用。

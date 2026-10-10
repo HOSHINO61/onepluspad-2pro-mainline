@@ -2,8 +2,8 @@
 
 [English](FLASHING.md) · [项目首页](../README.zh-CN.md)
 
-当前尚无面向新设备的完整安装包。本文说明已验证范围与恢复要求，不提供通用分区或
-首次刷机步骤。仅编译出启动镜像，不能据此安装到原厂平板。
+本指南涵盖既有双系统布局的 Linux 重装、系统切换和 Android 恢复。
+尚未划分 Linux 分区的原厂设备不适用；本项目不提供通用重分区工具。
 
 ## 适用范围
 
@@ -16,7 +16,7 @@
 RAM 临时启动不替换启动分区，但使用已安装根系统的临时内核仍可能写入文件和日志。
 必须区分“全 RAM 根系统”和“临时内核启动持久根系统”。
 
-RAM 桌面试用尚未完成整体验证，当前没有面向新用户的一键试用入口。开发者试用需要
+开发用 RAM 桌面已验证启动、图形驱动与限时恢复，尚未提供一键试用入口。开发者试用需要
 匹配的启动镜像、根系统与校验和，并确认会话超时后的恢复方式。不要混用不同构建的产物。
 
 开发会话须绑定目标设备、有明确超时，并具备用户态恢复；panic/用户态定时器不能
@@ -33,6 +33,50 @@ RAM 桌面试用尚未完成整体验证，当前没有面向新用户的一键�
 
 两个方向的切换在既有测试布局上已有验证。切换会改写三个启动分区，不能用于尚未
 安装、缺失回退镜像或布局不一致的设备。
+
+写入中断后的自动恢复尚不完整，不能依赖再次点击切换来修复混合启动镜像。
+请保留电脑上的完整 Android 三件套备份；中断后使用下文的 Fastboot 恢复入口。
+
+## 既有 Linux 分区的全新安装
+
+安装器适用于已建立 `linux_rootfs` 与 `linux_data`、当前活动槽为 **A** 的 OPD2413 双系统布局。这一路径已完成清空重装、启动三件套读回、普通重启和双系统往返验证。
+它保留 Android 数据和 GPT；清空两个 Linux 分区，并通过既有切换器安装
+Ubuntu 启动三件套。尚未划分 Linux 分区的原厂设备不适用这一流程。
+
+主机需要 amd64 Linux、rootful Docker、Android platform-tools、ARM64 binfmt、原生 C 编译器及 `dpkg-deb`。平板从 Android 开始，电量至少 50%，USB 调试与 KernelSU
+root 可用，且已安装本项目的切换模块。固件须在[已验证组合](../packaging/installation.json)中；
+同型号的其它 OTA 不会自动获准刷入。准备构建指南生成的 `rootfs.squashfs` 及同目录
+`manifest.json`，备份目录应有足够空间存放系统安装镜像。安装器自动从固定输入构建
+AOSP `ext2simg`，按 ext4 已分配块转换，保留必要的零元数据。
+
+`backup` 只保存 Android 启动镜像、分区表和设备数据，不备份 Linux 用户文件。
+需要保留的 Linux 文件请事先另行导出；下面的备份无法恢复它们。
+
+从项目目录依次执行；序列号使用 `adb devices` 列出的本机值：
+
+```sh
+device_serial=DEVICE_SERIAL
+install_work="$PWD/out/install-device"
+python3 tools/install.py --serial "$device_serial" --work "$install_work" --phase backup
+python3 tools/install.py --serial "$device_serial" --work "$install_work" --phase prepare \
+  --rootfs out/desktop-root/rootfs.squashfs
+python3 tools/install.py --serial "$device_serial" --work "$install_work" --phase install --erase-linux
+```
+
+前两步读取本机启动备份、校准并在电脑上准备镜像。第三步的 `--erase-linux` 明确确认
+删除 Linux 系统和用户文件。安装器核对设备、分区和输入，清除并写入两个 Linux 分区，
+返回 Android 后调用切换器，读回全部启动三件套再重启 Ubuntu。首次账户设置在平板上完成。
+
+`install_work` 包含设备专属备份及校准，应私密保存，不上传至仓库或作为公共镜像发布。
+安装器报告写入完成后，仍需检查首次启动、触控、桌面和双系统切换。
+
+若 Ubuntu 启动失败，进入 Fastboot 后可写回本机已校验的 Android 备份：
+
+```sh
+python3 tools/install.py --serial "$device_serial" --work "$install_work" --phase restore-android
+```
+
+该命令恢复 Android 启动三件套并读回核对；Linux 分区保持重装后的内容。
 
 ## 异常与完整恢复
 

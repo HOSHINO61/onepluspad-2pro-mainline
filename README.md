@@ -18,8 +18,8 @@ primarily in Chinese.
 - **Device scope:** OnePlus Pad 2 Pro, **OPD2413 / erhai / SM8750P**. Testing has
   used a **16 GB RAM / 512 GB storage** unit. OnePlus Pad 3, other capacities and
   other firmware or partition layouts have not been validated.
-- **Installation scope:** dual-boot switching has been tested on an existing
-  installation; a general first-install procedure is not available. Read the
+- **Installation scope:** clean reinstallation and dual-boot switching have been
+  tested on an existing Linux layout; general repartitioning is not provided. Read the
   [installation and recovery notes](docs/FLASHING.md) before using the tools.
   The switcher does not install Ubuntu on a fresh tablet.
 - **Power:** reliable net charging under Linux is unresolved. Return to Android
@@ -125,8 +125,8 @@ development are not included in the supported feature set.
 | Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
 | Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
 | Suspend and resume | Linux power management | 🟡 | Timed wake cycles passed with USB attached. Power-button wake, unplugged standby life and peripheral recovery need testing. |
-| RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after an abnormal restart and requires time synchronization. |
-| Snap applications | AppArmor / snapd / graphics runtime | 🔧 | Compatibility work is in progress; full confinement and browser operation need validation. |
+| RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after restarting and requires time synchronization. |
+| Snap applications | AppArmor / snapd / graphics runtime | ❌ | Full confinement and graphical Snap apps are unsupported in this release. The selected kernel does not enable AppArmor. |
 | Android applications | Android runtime | ❌ | Waydroid is not integrated. |
 
 ## Use and Maintenance
