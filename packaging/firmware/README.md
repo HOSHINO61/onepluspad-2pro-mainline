@@ -40,9 +40,10 @@ byte-identical and only the hash segment and signature differ. The
 linux-firmware one chains to the SecTools test root that Qualcomm reference
 devices accept and this unit's TZ refuses; the vendor one chains to OPLUS ROOT
 CA 1, the same root as the ADSP image this unit already loads. Both are kept,
-since another SM8750 board may need the test-signed one. The shipped device
-tree leaves the zap node disabled; enabling it with `firmware-name =
-"qcom/sm8750/erhai/gen80000_zap.mbn"` selects the vendor one. The GPU probes
+since another SM8750 board may need the test-signed one. The current kernel
+candidate selects the vendor one with `firmware-name =
+"qcom/sm8750/erhai/gen80000_zap.mbn"`; this authentication path still needs
+hardware validation. The GPU probes
 before the root is mounted, so `tools/build-initramfs.sh` carries both zap
 files in the initramfs.
 
@@ -57,15 +58,14 @@ the manifest and in the initramfs alike, since ath12k is built in and may
 request the file before the root is mounted. That waits for an A/B comparison
 on the device.
 
-The Iris image is prepared for the video decoder candidate. The shipped device
-tree leaves the Iris node disabled, so no driver requests it yet; the node
-selects this board-specific path with the standard `firmware-name` property once
-it is enabled.
+The current kernel candidate enables Iris and selects the board-specific image
+with the standard `firmware-name` property. Firmware authentication and actual
+decoding/encoding still need hardware validation; the older installed baseline
+does not enable Iris.
 
-The AW88261 file is prepared for the audio candidate. It does not enable a
-sound card: amplifier power supplies, DSP routes and playback/capture still
-require bring-up. Its board-specific filename is selected with the codec's
-standard `firmware-name` property once those dependencies are resolved.
+The AW88261 profile is selected by the codec's `firmware-name` property.
+Amplifier startup and signal routing have been tested; physical listening and
+final gain remain unverified, and the actual DVDD supply rail is unresolved.
 
 ## License
 
@@ -76,11 +76,9 @@ that this device's port builds from one tree. The four linux-firmware files
 carry that project's `LICENSE.qcom` redistribution terms, and ROCKNIX
 redistributes its nine under the terms it received them.
 
-The 64 files taken out of the stock OTA are the ones to be careful with: this
-project has **not** established any redistribution permission for them from
-OnePlus or Qualcomm, and the OTA ships no license text granting one. They are
-here because the port needs them and the owner of this unit decided to publish
-them; anyone who redistributes this tree further stands in the same place.
-Dropping them from the manifest and from this directory is all it takes to
-build without them, at the cost of the ADSP, touchscreen, amplifier profiles, video decoder,
-vendor-signed zap shader and Wi-Fi board data candidate.
+Redistribution permission for the 64 stock OTA files has not been established
+from OnePlus or Qualcomm. Their inclusion and provenance records do not grant
+such permission; the applicable distribution conditions remain to be resolved.
+These inputs support the ADSP, touchscreen, amplifier profiles, video decoder,
+vendor-signed zap shader and Wi-Fi board-data candidate. Omitting them requires
+a corresponding change to the enabled features and build recipe.

@@ -1,363 +1,159 @@
-# onepluspad-2pro-mainline
+# Ubuntu for OnePlus Pad 2 Pro
 
-Mainline Linux and Ubuntu on the OnePlus Pad 2 Pro (OPD2413, Qualcomm SM8750P,
-board codename `erhai`), with bounded fastboot RAM-boot sessions and an
-installed Ubuntu/Android switching path for the established device layout.
+Run Ubuntu Desktop 26.04 with GNOME on the OnePlus Pad 2 Pro, using a device-adapted
+kernel based on upstream Linux. [中文](README.zh-CN.md)
 
-This repository is the **integration tooling**: kernel build, initramfs
-profiles, ABL-compatible image packaging and device packages for the official
-Ubuntu desktop. The kernel itself lives in a separate Git (`linux-sm8750-erhai`,
-checked out at `kernel/linux` in the workspace); see `kernel/source.json`
-for the exact baseline, branch and commit.
+## 📮 Follow & Discuss
 
-## Status and validation boundaries
+Project updates, usage notes and discussion are available through these channels,
+primarily in Chinese.
 
-The last hardware-validated installed kernel package is 0.1.57. Later kernel
-selections and the Turnip and ambient-light packages are development candidates;
-they have not inherited that baseline's hardware results. Six speaker amplifiers
-have passed low-level signal routing tests, but listening acceptance and final
-gain remain pending. Their DVDD supply description is still a placeholder.
-The microphone profile is enabled; the speaker profile remains opt-in for tests.
-The DisplayPort audio candidate uses a separate PCM in HiFi, so capture remains
-available during external playback. Its UCM device is included only when the
-kernel supplies DP0 Jack; physical output and unplugged capture still need validation.
+| WeChat: 熵减矩阵 | Xiaohongshu: yzddmr6 |
+|:---:|:---:|
+| <img src="docs/assets/gzh-qr.png" width="200" alt="WeChat: 熵减矩阵"> | <img src="docs/assets/xhs-qr.jpg" width="200" alt="Xiaohongshu: yzddmr6"> |
+| Progress and technical notes | Usage and discussion |
 
-| Area | State | Notes |
-|---|---|---|
-| Boot | Temporary RAM boot and installed GKI triplet verified | Installed Ubuntu and Android switch through the established active-slot layout; temporary installed-root tests use an explicit expiry. |
-| Display | 3392x2400@120 KMS; physical backlight blank/wake verified | Full panel shutdown/recovery and unified brightness have passed automated hardware checks. Daily use still uses backlight blanking; physical acceptance of the standard path and unplugged power measurements remain pending. |
-| Power button | Physical blank/wake and the restored main UI verified by the user on 0.1.18 | GNOME retains authentication. Screen-off power is higher because the display pipeline stays active. |
-| Platform identity | System and desktop identify a physical tablet | Corrected before PID1 starts; VM/container/confidential-VM detection and systemd conditions verified on hardware. |
-| Touch (NT36536) | Finger input and login interaction verified by the user | The backlight-only blanking workaround leaves touch firmware running; deep-suspend recovery is not covered. |
-| Pogo keyboard | Driver installed; an attached keyboard synchronized and typing was confirmed | Full key/media-key/clickpad/Caps Lock and detach/reattach coverage remain pending. |
-| UFS | Installed Ubuntu root and active-slot boot-image updates verified | Boot, init_boot and vendor_boot are checked together; destructive layout changes require separate approval. |
-| Battery | Charge level/status and full-charge capacity available | The protocol-unit fix restores UPower energy and runtime estimates; net charging performance and control thresholds need separate validation. |
-| CPU frequency | SCMI policies and short per-cluster frequency transitions verified | Matching CPUCP mailbox modules are required. Governors and firmware OPPs are unchanged; sustained-load thermal control remains unverified. |
-| Board temperature | Two PMIC die and three thermistor channels verified through native IIO reads | Uses the upstream ADC5 Gen3 driver. These measurements do not reproduce the OEM's estimated enclosure temperatures or establish a complete thermal policy. |
-| Bluetooth | HCI, firmware loading, discovery and per-device address verified | Pairing and target data/audio use remain separate acceptance work. |
-| ADSP | DSP `running`, stock glink channels up | stock modem_a firmware, 80.5M carveout |
-| Microphones | Two-channel ALSA/UCM capture and repeated PipeWire recording verified | Speech quality, gain and acoustic noise still need physical acceptance. |
-| Speakers | Amplifier startup and low-level stereo signal routing verified; listening profile remains opt-in | The six AW88261 amplifiers have passed quiet signal tests. Physical listening, gain and pop/noise acceptance remain pending; the real DVDD rail is still unresolved. |
-| Type-C / USB peripherals | PC device/sink and debug link verified; physical host peripherals pending | UAS, exFAT, NTFS3 and CH340/CH341 USB serial are enabled as upstream modules. The preceding peripheral baseline passed emulated xHCI/UAS and stock UDisks mount/read/write tests; matching CH341 module loading and unloading are checked separately. UTF-8 filesystem defaults preserve Chinese NTFS names when read independently with ntfs-3g. Tablet VBUS, real peripherals, serial transmit/receive and desktop authorization remain untested. |
-| External display | DP controller, connector graph, WCD939x SBU switch and audio candidate prepared | Not hardware-tested. External output, EDID/link training, extension/mirroring and hotplug remain pending. Audio has a separate 48 kHz/24-bit stereo PCM with standard DP jack reporting; playback is unverified. |
-| GPU (A830) | Private Mesa 26.2.3 device package: GLES pixel tests and physical GDM hardware renderer verified | Includes the upstream A830v1 entry missing from Ubuntu Mesa 26.0.3. The Turnip Vulkan driver is packaged but not yet run on the device; sustained load and lifecycle validation remain incomplete; the kernel still bypasses rejected zap loading. |
-| Wi-Fi (WCN7860) | Association, boot reconnect, per-device MAC, short TCP transfers and controlled reconnect verified | Unexpected disconnects, sustained transfers, power saving, regulatory behavior and Bluetooth peripheral use need more coverage. |
-| Desktop | Official Ubuntu Desktop 26.04 with device packages, GNOME login and input verified | The optional erhai-mesa package enables hardware rendering for GNOME; application coverage and physical interaction acceptance are tracked separately. |
-| Sensors | Accelerometer data chain installed; four-direction physical acceptance pending | The 0.1.6 candidate adds SSC light support for GNOME automatic brightness using upstream sensor discovery; light acceptance is an explicit test, not a startup requirement for rotation. It has not been run on the tablet. |
-| Video | Iris firmware and enabled device-tree candidate prepared | No hardware decoding/encoding result yet; this does not provide browser hardware decode automatically. |
+## ⚠️ Read Before Installing
 
-The current blanking workaround switches the panel backlight while keeping KMS
-running. The kernel drives both backlight chips through one led-backlight
-device, so that blanking and desktop brightness act on both chips together;
-both chips have matching register readback on the installed system. The failed touch/DSI
-retention diagnostics have been reverted.
-`erhai-display-power` adapts only the GNOME Settings Daemon 50 display-power
-setter; the original daemon continues to manage battery policy and inhibitors.
-The adapter is loaded through a service drop-in, without overwriting Ubuntu
-files. It is scoped to the supported GNOME major version; a desktop major
-upgrade requires checking that generated setter ABI and updating the package.
-Physical wake, the main UI, touch and login were confirmed on 0.1.18.
-Keeping the display pipeline running increases screen-off power consumption.
-Automatic blanking and automatic suspend remain disabled by default; retaining
-MDSS at runtime does not establish working display recovery from system suspend.
+- **Device scope:** OnePlus Pad 2 Pro, **OPD2413 / erhai / SM8750P**. Testing has
+  used a **16 GB RAM / 512 GB storage** unit. OnePlus Pad 3, other capacities and
+  other firmware or partition layouts have not been validated.
+- **Installation scope:** dual-boot switching has been tested on an existing
+  installation; a general first-install procedure is not available. Read the
+  [installation and recovery notes](docs/FLASHING.md) before using the tools.
+  The switcher does not install Ubuntu on a fresh tablet.
+- **Power:** reliable net charging under Linux is unresolved. Return to Android
+  to charge; Fastboot is not a charging fallback. Backlight-only screen blanking
+  also consumes more power than normal standby.
+- **Data and recovery:** unlocking the bootloader erases user data. Back up
+  personal files and obtain matching stock firmware before changing the device.
+  Keep factory calibration and device addresses specific to each tablet.
+- **Debug access:** USB diagnostics are for development. When enabled, they
+  expose an unauthenticated root shell and HTTP service. Connect only to a
+  trusted computer and keep these services off public networks.
 
-The button handler requests a GNOME lock before blanking a user session; at
-the login screen it only blanks. A subsequent press requests display wake,
-while authentication stays with GNOME. The on-screen keyboard is enabled by
-default. A separate logged-in password-reentry test has not been recorded.
+## 🚀 Getting Started
 
-The firmware's Gunyah HLOS description triggers a generic VM heuristic on this
-board. The initramfs covers that unused userspace export before PID1 starts;
-the kernel device tree and raw FDT remain intact. The policy is restricted to
-this tablet's model, HLOS VMID and unbound nodes, with a boot-time consistency
-check. Setting only the chassis name is insufficient because PID1 caches its
-own virtualization result.
-
-Deep suspend has completed RTC-woken 300-second cycles in both display modes,
-with the debug USB cable attached. Physical key wake, unplugged idle power and
-full peripheral recovery still require acceptance. Application coverage,
-speaker listening, four-direction rotation and USB-host peripherals are also
-unfinished. Camera capture and pen charging are not implemented.
-
-The AppArmor kernel configuration is an independent development candidate.
-Native file allow/deny mediation and loading Ubuntu's snap-confine policy have
-passed in a VM. Stock snapd 2.74.1 still reports a missing legacy network
-feature on the upstream kernel; full Snap confinement and browser operation
-remain unverified. This candidate has not replaced the queued peripheral
-acceptance baseline. Policies continue to come from the distribution.
-
-## Repository layout
-
-```
-tools/       build & packaging entry points (see below)
-initramfs/   RAM userspace profiles (USB ACM console / NCM evidence channel)
-switch/      dual-boot switcher and its KernelSU module (see switch/README.md)
-packaging/   debian metadata for the device .deb set (see tools/build-debs.py),
-             and firmware/ -- the device firmware closure it packs
-kernel/      source.json pinning the kernel repo identity and tool inputs
-```
-
-Tools resolve their workspace automatically when this repo is checked out at
-`<workspace>/public/onepluspad-2pro-mainline`; standalone checkouts work too
-(`ERHAI_WORKSPACE` overrides). Build outputs land in `out/`. Assemble each
-candidate from pinned original sources and that build's outputs; previous
-release images and modified root trees are comparison data.
-
-## Inputs you must provide
-
-- A cross toolchain (`aarch64-linux-gnu-gcc`) and the kernel checkout
-  (`kernel/source.json`).
-- Static ARM64 busybox, pinned sha256 (see `kernel/source.json`), at
-  `cache/busybox-arm64`.
-- AOSP `mkbootimg.py` at `cache/tools/mkbootimg.py` (pinned sha256).
-- The stock `dtbo.img` and `vendor_boot.img` of *your* unit (payload.dumper from
-  the stock OTA package) at `cache/stock-c34/images/` — ABL requires the boot DTB to
-  carry the stock overlay symbols and root identity.
-- Nothing for firmware: `packaging/firmware/` already carries the closure this
-  unit needs, and `packaging/firmware/README.md` says where every file came
-  from. Only moving to a later stock ROM needs the ROM itself, through
-  `tools/build-debs.py --refresh-from-rom`.
-- Official Ubuntu Desktop 26.04 ARM64 inputs for a desktop root. Use the
-  original `casper/minimal.squashfs` and `minimal.standard.squashfs` layers,
-  with device integration supplied by the `erhai-*` packages. The early
-  Ubuntu Base and overlay-merging tools are historical experiments, not the
-  desktop delivery recipe.
-
-## Desktop root filesystem
-
-`tools/build-desktop-rootfs.py` assembles the two original Desktop layers and
-explicit device packages. It requires rootful Docker on amd64, an existing
-ARM64 binfmt interpreter, Python 3.11+ and `dpkg-dev`. Pull the assembly image
-pinned in `packaging/desktop/source.json` first; the builder downloads and
-verifies the locked native tools and Ubuntu runtime dependencies itself.
-
-```sh
-args=()
-for deb in /path/to/selected-device-packages/*.deb; do args+=(--device-deb "$deb"); done
-python3 tools/build-desktop-rootfs.py --layers /path/to/iso/casper \
-  --output out/desktop-root "${args[@]}"
-```
-
-Select one version of each desired device component, including the matching
-kernel selector and payload. The container has no network and uses kernel
-OverlayFS to apply the original layers, including whiteouts. Its additional
-SYS_ADMIN capability and container-only unconfined AppArmor setting permit
-trusted attributes and the overlay mount; target package processes drop that
-added capability. Package installation uses a temporary local APT source and
-service-start policy. The target's normal Ubuntu APT sources remain intact.
-
-The output includes `rootfs.squashfs`, package and file manifests, extended
-attributes and input hashes. Machine identifiers, radio addresses, sensor
-calibration and the Android rollback set must be supplied on installation.
-This is an assembly candidate; it does not establish tablet boot, rendering,
-Snap compatibility or peripheral support. Local commands and build logs stay
-separate from the image and its portable input manifest.
-
-## Quickstart
-
-```sh
-kernel_out="$PWD/out/kernel"
-OUT_DIR="$kernel_out" tools/build-kernel.sh
-PROFILE=ncm OUT_DIR="$PWD/out/initramfs" \
-  GEN_INIT_CPIO="$kernel_out/usr/gen_init_cpio" tools/build-initramfs.sh
-tools/build-erhai-abl-symbols.py --output out/abl-dtb \
-  --mainline-dtb "$kernel_out/arch/arm64/boot/dts/qcom/sm8750-erhai.dtb" \
-  --dtc "$kernel_out/scripts/dtc/dtc"
-tools/build-mainline-boot.py --output out/mainline-boot \
-  --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
-  --initramfs out/initramfs/initramfs-ncm.cpio.gz
-fastboot -s <serial> boot out/mainline-boot/boot-mainline.img
-```
-
-`build-erhai-abl-symbols.py` builds the contained overlay sink layout by
-default, the one daily deliveries use: the sink sits in a disabled container,
-so rpmhpd, the NoCs and the PSCI power domains reach `sync_state()`.
-It reads the original `cache/stock-c34/images/vendor_boot.img` and `dtbo.img`
-directly; `--vendor-boot` and `--dtbo-img` select other pinned originals.
-Base-tree index 6 supplies the identity for the recorded C.34 input; a different
-stock layout needs an explicitly verified `--identity-index`. No previous OUT
-tree is required. Extracted original trees remain an explicit alternative via
-`--base-dir` and, if needed, `--identity-base`.
-`--legacy-sink` builds the root-level sink that releases before 0.1.56 boot
-with; it holds `sync_state()` back and is kept for fallback and comparison
-images, so `build-mainline-boot.py`, `build-mainline-gki.py` and
-`build-debs.py` take such a DTB only with their own `--legacy-sink`. Each
-records the layout it read back from the DTB as `abl_sink_layout`.
-
-The session comes up with a USB NCM link (device `192.168.77.2`, telnet 2323,
-HTTP evidence on 8080) and reboots to Android on its own when the watchdog
-expires. Optional kernel cmdline flags: `erhai.watchdog=NN` (session length),
-`erhai.rootfs=<url>` with `erhai.rootfs.sha256=<digest>` (fetch and verify a
-squashfs over NCM before mounting its RAM overlay),
-`erhai.switchroot=1` (hand PID1 to systemd with a matching expiry timer),
-`erhai.weston=1` (autostart the pixman weston desktop).
-
-For a RAM desktop test, add `--profile desktop --rootfs /path/to/desktop.squashfs
---rootfs-url http://192.168.77.10:8000/desktop.squashfs` to the boot-image
-builder. Serve that exact file at the specified URL. The builder computes its
-SHA-256 and records the URL and digest in both the boot command line and
-manifest; it supplies no default root image. The initramfs refuses missing or
-mismatched hashes and failed downloads, keeping diagnostics and the original
-watchdog running. Whole-file and chunked HTTP/hash handling have been tested
-with the pinned ARM64 BusyBox; this updated RAM desktop path has not yet been
-booted on the tablet.
-
-For a temporary kernel using an already installed root, use the persistent
-profile with an explicit `erhai.session=90` (valid range 60–3600 seconds).
-The initramfs places an expiry service only in the new root's `/run`; once
-userspace starts, it returns the tablet to the bootloader after that bound.
-Normal persistent boots omit this parameter and do not expire. The runtime
-marker `/run/erhai-test-session.started` distinguishes a running userspace
-watchdog from a boot that never reached the service.
-
-## Graphics packages
-
-The optional `erhai-mesa` deb supplies the native desktop driver. Core24 Snap
-applications need a separate `gpu-2404` content provider, built against their
-own runtime ABI. Both use the same pinned Mesa source and A830v1 patch.
-Build, installation and rollback instructions are in [GRAPHICS.md](docs/GRAPHICS.md).
-Hardware drawing, application behavior and physical display output have separate
-acceptance requirements; development candidates are not validated releases.
-
-## Dual boot
-
-`switch/` holds the persistent-install half: Android and Ubuntu take turns in
-the **active** A/B slot, because this unit's B slot carries an older firmware
-chain that can never boot and its ABL will not run a kernel out of `recovery`.
-Every image written into `boot`/`init_boot`/`vendor_boot` must carry an AVB
-hash footer (`tools/sign-boot-triplet.py`), self-signed included — `vbmeta`
-lists `boot` as a chain partition, so a missing footer is malformed metadata
-that even an unlocked bootloader refuses. See `switch/README.md`.
-
-## Device packages
-
-The installed system is Canonical's Ubuntu, unpacked as it ships. The
-functional device layer is packaged separately. The GNOME adapter's major
-version constraint is noted above; diagnostics are a separate optional package.
-
-```sh
-tools/build-debs.py --avb-key <key>.pem --avbtool <aosp avbtool.py>
-```
-
-| Package | Owns |
+| I want to | Read |
 |---|---|
-| `erhai-device-support` | `/usr/sbin/erhai-switch{,-install-ubuntu-images}`, the store directory and its logrotate snippet, the "Switch to Android" desktop entry and its polkit action, the power settings this port needs until suspend/resume works, and the two programs that give this unit its own Bluetooth and Wi-Fi addresses (`erhai-bt-address` with its units, `erhai-wifi-address` with its udev rule and NetworkManager drop-in), and the systemd hardware-watchdog policy: off by default, with an opt-in 30 s variant to copy into `/etc/systemd/system.conf.d/`. The addresses themselves live in `/var/lib/erhai/` and are in **no** package: they are machine-specific data, written on the tablet at first boot |
-| `erhai-kernel` | selects a versioned kernel payload; configuration activates its triplet through the switcher without rebooting |
-| `erhai-kernel-image-<release>` | matching signed boot images and configured modules; installation only populates files and runs `depmod`, allowing RAM validation before selection |
-| `erhai-firmware` | the firmware closure the mainline drivers ask for and the distribution does not ship under those names |
-| `erhai-audio` | the board AudioReach topology and UCM for the internal microphones and DisplayPort candidate; internal speaker playback remains opt-in |
-| `erhai-display-power` | the backlight power service, its socket and the GNOME 50 display-power adapter; it requires the kernel's single led-backlight device |
-| `erhai-debug` (optional) | USB diagnostic DHCP, HTTP and root-shell units, using Ubuntu's `busybox-static`; all units require `erhai.debug=1` |
-| `erhai-device` | a metapackage depending on the required device packages |
+| Check whether the tablet meets my needs | [Hardware support](#hardware-support) |
+| Switch between Android and Ubuntu | [Dual boot](#dual-boot) |
+| Build the kernel and device components | [Build guide](docs/BUILD.md) |
+| Check installation requirements and recovery | [Installation and recovery](docs/FLASHING.md) |
+| Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
+| Contribute code or report a problem | [Contributing](CONTRIBUTING.md) |
 
-The kernel build includes all configured modules and records their hashes.
-Its release suffix identifies the source, configuration and compiler so that
-different builds use different module directories. Runtime modules are staged
-with Kbuild's `modules_install`; the target's kmod generates dependency indices.
-Build/source symlinks into a developer workspace are excluded.
+## Dual Boot
 
-Versioned payload packages coexist. The selector protects the running kernel
-and the switcher's current/previous selections from automatic package removal;
-unreferenced kernels can be removed normally. Immutable kernel identity is kept
-in the store's `kernel.json`, separate from deployment information in `meta.json`.
-Module autoload, SCMI CPU frequency, installed upgrade and booting the previous
-unversioned kernel have been verified on hardware. Booting and returning between
-two versioned module ABIs has also been verified. The actual installer and APT
-parser pass isolated store-rotation tests; removal of unreferenced old payloads
-remains separate acceptance work.
+On a tablet with both systems installed, Ubuntu uses a separate Linux root
+partition while Android retains its own system and data. Routine switching
+requires a reboot; it does not reinstall either system or erase user files.
 
-When installing a complete local deb set explicitly, mark the versioned payload
-as an automatic dependency after verifying the selector. The selector's exact
-dependency and the generated retention rules then retain selected kernels
-without making every historical payload a permanent manual installation.
+| Current system | How to switch |
+|---|---|
+| Ubuntu → Android | Open **Switch to Android** from the application list, enter the administrator password and wait for the automatic reboot. |
+| Android → Ubuntu | Open the **erhai dual boot switch** module's WebUI in KernelSU and select **Reboot to Ubuntu**. |
 
-The build needs no root (`dpkg-deb --root-owner-group` on a staged tree) and
-takes its firmware from `packaging/firmware/`, checking every file against the
-sha256 and size recorded in `packaging/firmware-manifest.json` before packing
-it — so `erhai-firmware` builds out of this checkout alone, with no ROM cache
-and no network. `--refresh-from-rom` runs the other direction: it extracts the
-closure from the pinned stock ROM images and upstream archives again and diffs
-that against the tree, which is how a later ROM version gets in. Neither the
-AVB signing key nor avbtool ever enters a package.
+Both systems use the same active boot slot; the tested layout uses slot A.
+The switcher writes the target system's `boot`, `init_boot` and `vendor_boot`
+images as a set, reads them back for verification, then reboots. The other
+system's images remain in the switcher storage on the Linux partition.
+Routine switching does not change the active slot.
 
-The `erhai-device` metapackage requires the validated 0.1.57 baseline or later,
-rather than an identical version of every component. Audio, firmware and desktop
-integration can therefore receive compatible updates without activating a new
-kernel. The `erhai-kernel` selector still depends on the exact versioned payload
-that contains matching images and modules. Each payload declares the firmware
-minimum it actually consumes. Component-only builds also avoid reading a kernel
-output or kernel checkout; their archive epoch comes from the integration source
-or an explicit `SOURCE_DATE_EPOCH`. On development installations with an
-older metapackage, update that metadata-only package first; inspect the APT plan
-and reject any proposed kernel activation or removal for this step.
+Switching writes the boot partitions. Do not interrupt power or force a restart
+during the operation. See [installation and recovery](docs/FLASHING.md) for
+requirements and recovery, and the [switcher reference](switch/README.md) for
+implementation details.
 
-Building `erhai-audio` also requires GNU m4, `alsatplg` from alsa-utils, and the
-original archive pinned in `packaging/audio/source.json`. Pass its path with
-`--audio-source`; the default is `cache/audioreach-topology-993a17dc.tar.gz` in
-the workspace. The builder verifies the archive, compiles the board source and
-decodes the result as a format check. Local topology helpers under `packaging/audio/`
-are tracked with the board recipe. Tool versions, hashes, source identity
-and the upstream BSD license are included in the audio package. No prebuilt
-reference-board topology is renamed or used as a build input.
+## Hardware Support
 
-Two builds of the same inputs produce the same bytes: the version carries a
-build id derived from payload and package metadata (`<release>[~dbg]+g<kernel>.b<id>`), the AVB footers
-use a salt derived from the image instead of avbtool's random default, and the
-archive timestamps are pinned to the kernel commit for kernel builds and to
-the integration commit for standalone component builds.
+The tables below describe current hardware support and known limitations.
+“Working” means tested on hardware within the stated scope. Features under
+development are not included in the supported feature set.
 
-Device support and display power can be updated independently from 0.1.72.
-Their shared socket/mode interface uses the validated 0.1.57 minimum; the
-display package still constrains the GNOME major ABI. The kernel selector
-continues to require the exact matching image/module package.
+✅ Working · 🟡 Partial · 🔧 In development / Awaiting testing · ❌ Unsupported
 
-`--debug` includes `erhai.debug=1` in the triplet, builds `erhai-debug` alongside
-the device set and marks the version `~dbg`. The normal build omits the optional
-package and the flag. The metapackage does not require diagnostics. A root used
-for an explicit debug handoff must already contain `erhai-debug`; initramfs no
-longer copies binaries or creates persistent diagnostic units in that root.
+### Platform, Display and Input
 
-`erhai-device-support` retires recognized, unowned files generated by earlier
-initramfs versions on both normal and debug upgrades. Originals remain under
-`/var/lib/erhai/debug/legacy/`; package removal does not reactivate them. An
-already enabled diagnostic channel keeps its enabled link during migration.
-Unknown edited files are preserved and cause the migration to stop for review.
-The revised migration is still awaiting final installed-device validation.
+| Feature | Component / Implementation | Status | Scope and limitations |
+|---|---|---|---|
+| Boot and storage | SM8750P / UFS | ✅ | Ubuntu boot and storage access work. Dual-boot switching is limited to the tested layout described above. |
+| Internal display | Dual DSI / DSC | ✅ | 3392 × 2400 at 120 Hz. Other refresh rates await hardware testing. |
+| Touch | Novatek NT36536 | ✅ | Finger input, desktop interaction and login verified. Pen support is tracked separately. |
+| GPU and desktop | Adreno 830 / Freedreno / Mesa | 🟡 | GNOME uses GPU acceleration and OpenGL rendering has passed testing. Vulkan, sandboxed applications and sustained-load behavior need validation. |
+| Brightness | Dual KTZ8868 / one backlight interface | 🟡 | Unified brightness control and blanking are integrated; the slider’s usable brightness range needs physical testing. |
+| Magnetic keyboard | Pogo keyboard / touchpad | 🟡 | Keyboard input works. Full key mapping, touchpad gestures and detach/reattach need testing. |
+| Active pen | NT36536 pen input | 🔧 | Pen input code is available; position, pressure and buttons await physical testing. |
+| Pen charging | CPS8601 | ❌ | Charging, battery reporting and automatic scan control are not implemented. |
 
-## Safety
+### Wireless and USB
 
-`fastboot boot` does not replace boot partitions. A temporary kernel using an
-installed root still permits normal filesystem/journal writes there. The
-switcher and kernel-package installer write the established active slot's
-three boot partitions. Formatting, repartitioning and layout changes require
-separate, explicit authorization.
+| Feature | Component / Implementation | Status | Scope and limitations |
+|---|---|---|---|
+| Wi-Fi | WCN7860 / ath12k | ✅ | Networking, automatic reconnect at boot and short transfers work. Roaming, hotspot operation and sustained transfers need testing. |
+| Bluetooth | WCN7860 / BlueZ | 🟡 | Controller, firmware, discovery and per-device address verified; keyboard, mouse and headset use remain unverified. |
+| USB device mode | USB-C / NCM | ✅ | USB networking and diagnostics with a PC are verified. Reconnecting to a PC after peripheral use needs testing. |
+| USB host peripherals | HID, storage, network and digital audio | 🔧 | Common peripheral drivers are configured. Emulated storage/audio tests passed; tablet power delivery and real accessories remain untested. |
+| USB storage formats | UAS, exFAT and NTFS3 | 🔧 | Emulated filesystem tests include independent verification of Chinese NTFS filenames. Real drives and desktop mounting remain untested. |
+| External display | USB-C DisplayPort Alt Mode | 🔧 | Display-output code is available; a physical monitor has not been tested. |
+| External display audio | DisplayPort / ALSA / PipeWire | 🔧 | 48 kHz, 24-bit stereo is configured. Detection, playback and hotplug need hardware testing. |
 
-The debug channel is an **unauthenticated root telnet** and filesystem HTTP
-server on USB NCM, intended for explicitly enabled local development. Ordinary
-installed boots skip the initramfs NCM channel, and the packaged services each
-check the kernel flag. Removing `erhai-debug` removes its activation and payload;
-the distribution's BusyBox dependency can continue to receive normal updates.
-Rootless rescue initramfs sessions still expose their bounded diagnostic channel.
-The initramfs and installed debug service share the NCM setup helper. They
-identify its actual interface by configfs and MAC address, preserve external
-USB NICs, and allow an installed system to boot while the port serves a
-peripheral. A UDC appearance requests diagnostic service restoration through
-udev/systemd. From 0.1.71 the rule starts the existing service directly: a
-live configfs interface and its listeners survive controller reattachment
-without an unnecessary restart. Debug kernel images from 0.1.70 require the matching helper
-interface in `erhai-debug >= 0.1.70`; ordinary images do not depend on it.
-These development tools and images are not a finished production release.
+### Audio, Video and Sensors
 
-## License
+| Feature | Component / Implementation | Status | Scope and limitations |
+|---|---|---|---|
+| Internal microphones | WCD939x / ALSA / PipeWire | 🟡 | Two-channel capture and repeated recording passed. Speech quality, gain and background noise need listening tests. |
+| Speakers | Six AW88261 amplifiers / AudioReach | 🔧 | Playback is disabled by default. Low-level signal tests passed; listening, volume and noise need hardware testing. |
+| USB-C analog audio | WCD939x headset path | ❌ | Analog adapters and headset detection are not implemented. Digital USB audio is tracked above. |
+| H.264 software playback | Ubuntu GStreamer packages | 🔧 | Software decoding passed under emulation; player video and sound on the tablet need testing. |
+| Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
+| Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
+| Automatic rotation | SSC / iio-sensor-proxy | 🟡 | The orientation sensor is integrated with the desktop; portrait/landscape changes and touch alignment need physical testing. |
+| Automatic brightness | SSC ambient light / GNOME | 🔧 | Light-sensor and desktop integration code is available; light response and brightness changes need testing. |
+| Other sensors | Gyroscope, compass, proximity and Hall | ❌ | Complete application-facing support is not implemented. |
 
-GPL-2.0-only (see LICENSE), matching the integration scripts' SPDX headers.
-Kernel and third-party inputs keep their own licenses and authors.
+### Power, Time and Applications
 
-`packaging/firmware/` contains 77 proprietary
-Qualcomm, OnePlus and Awinic binaries, redistributed here exactly as they came so that
-the port builds from one tree. The project claims no copyright and grants no
-license over them, and GPL-2.0-only does not reach them. 64 of them were
-extracted from this unit's stock OnePlus OTA, for which no redistribution
-permission from OnePlus or Qualcomm has been established. Per-file provenance
-is in `packaging/firmware-manifest.json` and the terms are spelled out in
-[`packaging/firmware/README.md`](packaging/firmware/README.md).
+| Feature | Component / Implementation | Status | Scope and limitations |
+|---|---|---|---|
+| Power button | Linux input / GNOME | 🟡 | Physical screen blank/wake verified. Only the backlight turns off; password re-entry after locking needs testing. |
+| CPU frequency and temperature | SCMI / IIO / thermal | 🟡 | Frequency scaling and temperature readings work. Sustained-load thermal control and enclosure-temperature management remain incomplete. |
+| Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
+| Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
+| Suspend and resume | Linux power management | 🟡 | Timed wake cycles passed with USB attached. Power-button wake, unplugged standby life and peripheral recovery need testing. |
+| RTC | Qualcomm PMIC RTC | ✅ | Time read/write and retention across tested reboots verified. |
+| Snap applications | AppArmor / snapd / graphics runtime | 🔧 | Compatibility work is in progress; full confinement and browser operation need validation. |
+| Android applications | Android runtime | ❌ | Waydroid is not integrated. |
+
+## Use and Maintenance
+
+The base system comes from the official Ubuntu Desktop image. Device support is
+delivered as separate `erhai-*` packages; Ubuntu packages remain managed by APT.
+The display-power adapter currently targets GNOME Settings Daemon 50; desktop
+major-version upgrades need compatibility checks.
+
+For problem reports, include the model, firmware and package versions,
+reproduction steps and relevant logs. Remove credentials, serial numbers and
+personal information before sharing. Use the channels above for discussion.
+
+## Development and Contributions
+
+| Repository | Owns |
+|---|---|
+| [onepluspad-2pro-mainline](https://github.com/yzddmr6/onepluspad-2pro-mainline) | Device packages, userspace integration, build tools and documentation |
+| [linux-sm8750-erhai](https://github.com/yzddmr6/linux-sm8750-erhai) | Linux kernel source, drivers, device trees and kernel configuration |
+
+The kernel revision used for builds is recorded in [kernel/source.json](kernel/source.json).
+See the [build guide](docs/BUILD.md) and [contribution guide](CONTRIBUTING.md).
+
+## Acknowledgements and License
+
+This project builds on Linux, Ubuntu, GNOME, Freedreno/Mesa and the Linux Qualcomm
+community. Device integration draws on work from
+[ROCKNIX](https://github.com/ROCKNIX/distribution), OnePlus and LineageOS, and
+uses AudioReach and the SSC sensor stack.
+
+Original integration code is licensed under **GPL-2.0-only**, unless a file
+states otherwise. The Linux kernel and third-party components retain their own
+licenses and authorship. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the
+[firmware provenance and distribution restrictions](packaging/firmware/README.md).

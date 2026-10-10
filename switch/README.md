@@ -3,20 +3,13 @@
 Android and mainline Ubuntu take turns in the **active** A/B slot. Whichever
 system is not installed lives as three files on the Linux root filesystem.
 
-This is not the obvious design, and the obvious ones do not work on this
-tablet:
+This design was validated on the project's established installation. On that
+device, slot B contains an older firmware chain that did not boot; the tested
+ABL also did not load a separate Linux kernel from `recovery`. These observations
+do not establish the state of every tablet or firmware revision.
 
-* **Boot the other slot.** The B slot carries a whole older firmware chain
-  (xbl/tz/abl from an earlier ColorOS). It never completes a boot, and making
-  it bootable means writing 30+ partitions including anti-rollback-sensitive
-  ones.
-* **Put Linux in `recovery`.** This ABL treats the recovery partition as a
-  pure ramdisk: with a kernel in it the tablet drops to fastboot, and the
-  kernel always comes from `boot`. The stock kernel is built without
-  `CONFIG_KEXEC`, so there is no second hop either.
-
-What is left is one slot, two systems, and a switch that swaps the three boot
-partitions as a set.
+The switcher requires the matching partition layout and complete system-image
+store described below. It is not a first-install or repartitioning tool.
 
 ## Hard requirement: AVB footers
 
@@ -31,10 +24,12 @@ missing structure is not.
 So every image that goes into `boot` / `init_boot` / `vendor_boot` is signed:
 
 ```sh
-../tools/sign-boot-triplet.py --triplet out/mainline-gki-mNNN \
-    --stock cache/stock-c34/images \
-    --key <your test key>.pem --output out/mainline-gki-mNNN-avb
+python3 tools/sign-boot-triplet.py --triplet /path/to/unsigned-triplet \
+    --stock /path/to/stock/images --avbtool /path/to/avbtool.py \
+    --key /path/to/signing-key.pem --output out/signed-triplet
 ```
+
+Run this from the integration repository root with your own matching inputs.
 
 Partition sizes and rollback indices come from the stock images of the
 firmware the device is actually running, so they are matched rather than

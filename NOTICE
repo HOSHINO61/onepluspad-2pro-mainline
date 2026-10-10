@@ -1,0 +1,67 @@
+Third-party notices
+===================
+
+The GPL-2.0-only license in LICENSE covers original integration code unless a
+file states otherwise. It does not replace third-party licenses or grant rights
+to firmware. File-level notices and original authorship remain applicable.
+
+Linux kernel
+------------
+The kernel is maintained separately. Its COPYING, LICENSES, file-level SPDX
+identifiers and authorship are retained. kernel/source.json records the selected
+revision, upstream baseline and configuration location.
+
+Upstream kernel: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/
+
+Platform sources and references
+-------------------------------
+ROCKNIX supplies SM8750 platform patches used by this port:
+https://github.com/ROCKNIX/distribution
+
+OnePlus vendor sources inform board wiring and device protocols:
+https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8750
+
+LineageOS provides an additional reference for erhai device configuration:
+https://github.com/LineageOS/android_device_oneplus_erhai
+
+The Xiaomi Pad 6 Pro Linux project provided build and recovery design references,
+sensor-stack integration experience and patches:
+https://github.com/yzddmr6/xiaomipad-6pro-mainline
+
+Graphics, audio and sensors
+--------------------------
+Mesa and its device-table patch retain upstream authorship and licenses;
+packaging/mesa/source.json identifies the inputs, and Mesa's docs/license.rst
+and file notices apply. See docs/GRAPHICS.md for the integration boundary.
+Project source: https://gitlab.freedesktop.org/mesa/mesa
+
+AudioReach topology inputs are recorded in packaging/audio/source.json.
+The upstream BSD license accompanies the generated audio package. A compiled
+topology is not proprietary DSP firmware.
+Project source: https://github.com/linux-msm/audioreach-topology
+
+The sensor stack uses hexagonrpc, libssc and iio-sensor-proxy. Original sources,
+patch notices and the source records under packaging/sensors retain their
+respective licenses. A project package name does not relicense its contents.
+
+* hexagonrpc: https://github.com/linux-msm/hexagonrpc
+* libssc: https://codeberg.org/DylanVanAssche/libssc
+* iio-sensor-proxy: https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
+
+Build tools and distribution packages
+-------------------------------------
+AOSP mkbootimg and AVB tools retain their upstream licenses. BusyBox and Ubuntu
+packages retain their own copyright and licensing notices. Binary deliveries
+must include the corresponding source information and materials required by
+their licenses. Upstream Ubuntu images and full stock ROMs are not mirrored here.
+
+Firmware and device data
+-----------------------
+Qualcomm, OnePlus and Awinic binaries are separate from the project's code
+license. packaging/firmware-manifest.json records per-file provenance and hashes;
+packaging/firmware/README.md records the available terms and unresolved
+redistribution conditions. Provenance alone is not a redistribution license.
+
+Factory calibration, device addresses, credentials and private keys are not
+shared firmware. They must come from the user's own device or be generated for
+that installation, and must not appear in public images or source history.
