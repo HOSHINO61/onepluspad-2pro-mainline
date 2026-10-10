@@ -70,3 +70,10 @@ stock-firmware redistribution conditions also apply to these reference images.
 Factory calibration, device addresses, credentials and private keys are not
 shared firmware. They must come from the user's own device or be generated for
 that installation, and must not appear in public images or source history.
+
+Installation conversion tool
+----------------------------
+packaging/install-tools/ext2simg.c is the unchanged AOSP e2fsprogs converter,
+Copyright (C) 2016 The Android Open Source Project, under Apache-2.0. Its exact
+source revision and Ubuntu library inputs are recorded in the adjacent
+source.json. The downloaded libraries retain their own copyright and licenses.

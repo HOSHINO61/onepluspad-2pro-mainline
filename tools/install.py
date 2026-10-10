@@ -8,6 +8,7 @@ linux_data. The existing KernelSU switcher activates the Ubuntu boot set.
 No GPT, Android userdata, inactive-slot or firmware partition is written.
 """
 import argparse
+from contextlib import ExitStack
 import datetime
 import fcntl
 import json
@@ -18,15 +19,23 @@ import shlex
 import shutil
 import struct
 import subprocess
+import tempfile
 import time
 import uuid
 
 from lib.build_root import REPO, fetch, sha256
+from lib.install_tools import ext2simg
 
 PARTS = ('boot', 'init_boot', 'vendor_boot')
 KSU_SWITCH = '/data/adb/modules/erhai_switch/system/bin/erhai-switch'
 SOCINFO = ('hw_platform', 'platform_subtype', 'platform_subtype_id',
            'platform_version', 'soc_id', 'revision')
+
+
+def check_firmware(plan):
+    supported = json.loads((REPO / 'packaging/installation.json').read_text())
+    if plan['firmware'] not in supported['tested_firmware_fingerprints']:
+        raise RuntimeError('Firmware is outside the tested installation combination')
 
 
 def sparse_size(path):
@@ -161,52 +170,77 @@ dumpsys battery
 
     def prepare(self):
         plan = self.load_backup()
-        if not shutil.which('img2simg'):
-            raise RuntimeError('img2simg is required (Ubuntu: android-sdk-libsparse-utils)')
+        check_firmware(plan)
+        converter, converter_record = ext2simg()
         if not self.args.rootfs:
             raise RuntimeError('--rootfs is required for prepare')
         rootfs = self.args.rootfs.resolve()
         manifest = json.loads(rootfs.with_name('manifest.json').read_text())
         if sha256(rootfs) != manifest['rootfs_sha256']:
             raise RuntimeError('Root filesystem does not match its build manifest')
-        (self.work / 'installation.json').write_text(json.dumps({
+        identity = {
             'project_version': '0.1.0', 'serial': self.args.serial,
             'rootfs_sha256': manifest['rootfs_sha256'],
             'prepared_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'partition_layout': 'existing linux_rootfs and linux_data; GPT unchanged'}, indent=2) + '\n')
+            'partition_layout': 'existing linux_rootfs and linux_data; GPT unchanged'}
+        marker = self.work / 'installation.json'
+        if self.args.resume_prepare:
+            staged = json.loads(marker.read_text())
+            if any(staged[k] != identity[k] for k in ('serial', 'rootfs_sha256', 'project_version')):
+                raise RuntimeError('Staged root belongs to different installation inputs')
+        else:
+            marker.write_text(json.dumps(identity, indent=2) + '\n')
         lock = json.loads((REPO / 'packaging/desktop/source.json').read_text())
         native = self.work / 'native'
         for entry in lock['build_host']['packages']:
             fetch(entry['url'], native / entry['file'], entry['sha256'])
         image = lock['build_host']['image']
-        container = 'erhai-install-' + uuid.uuid4().hex[:12]
-        try:
-            self.run(['docker', 'run', '--rm', '--name', container, '--network', 'none', '--cap-add', 'SYS_ADMIN',
-                      '-v', f'{self.work}:/work', '-v', f'{rootfs}:/input/rootfs.squashfs:ro',
-                      '-v', f'{REPO / "tools/lib/install-images.sh"}:/prepare:ro', image,
-                      'bash', '/prepare', str(plan['partitions']['linux_rootfs']['bytes']),
-                      str(plan['partitions']['linux_data']['bytes']),
-                      f'{os.getuid()}:{os.getgid()}', str(self.args.test_recovery)], 1800)
-        except BaseException:
-            subprocess.run(['docker', 'rm', '-f', container], capture_output=True)
-            raise
+        completed = self.work / 'filesystems-ready.json'
+        if self.args.resume_prepare and completed.exists():
+            if json.loads(completed.read_text()) != json.loads(marker.read_text()):
+                raise RuntimeError('Prepared filesystems belong to different installation inputs')
+        else:
+            container = 'erhai-install-' + uuid.uuid4().hex[:12]
+            try:
+                self.run(['docker', 'run', '--rm', '--name', container, '--network', 'none', '--cap-add', 'SYS_ADMIN',
+                          '-v', f'{self.work}:/work', '-v', f'{rootfs}:/input/rootfs.squashfs:ro',
+                          '-v', f'{REPO / "tools/lib/install-images.sh"}:/prepare:ro', image,
+                          'bash', '/prepare', str(plan['partitions']['linux_rootfs']['bytes']),
+                          str(plan['partitions']['linux_data']['bytes']),
+                          f'{os.getuid()}:{os.getgid()}', str(self.args.test_recovery),
+                          str(int(self.args.resume_prepare))], 1800)
+            except BaseException:
+                subprocess.run(['docker', 'rm', '-f', container], capture_output=True)
+                raise
         result = {'serial': self.args.serial, 'rootfs_sha256': manifest['rootfs_sha256'],
                   'container': image, 'images': {},
-                  'img2simg_sha256': sha256(Path(shutil.which('img2simg'))),
+                  'sparse_converter': converter_record,
                   'test_recovery_seconds': self.args.test_recovery}
         for name in ('linux_rootfs', 'linux_data'):
             path = self.work / 'images' / (name + '.img')
             raw = path.with_suffix('.raw')
-            self.run(['img2simg', '-s', raw, path, '4096'], 600)
+            digest = self.convert_sparse(converter, raw, path)
             if sparse_size(path) != plan['partitions'][name]['bytes']:
                 raise RuntimeError('Sparse image geometry differs from the target')
-            result['images'][name] = {'bytes': path.stat().st_size, 'sha256': sha256(path),
+            result['images'][name] = {'bytes': path.stat().st_size, 'sha256': digest,
                                      'partition_bytes': sparse_size(path)}
-            raw.unlink()
         result['ubuntu_sha256'] = dict((line.split()[1].removesuffix('.img'), line.split()[0])
                                       for line in (self.work / 'ubuntu-SHA256SUMS').read_text().splitlines())
         (self.work / 'prepared.json').write_text(json.dumps(result, indent=2) + '\n')
+        for name in ('linux_rootfs', 'linux_data'):
+            (self.work / 'images' / (name + '.raw')).unlink()
         print('Private installation images prepared; no tablet partition written', flush=True)
+
+    def convert_sparse(self, converter, raw, output):
+        # Hash the generated stream while writing it, avoiding another full
+        # read of the installation image. timeout bounds the entire pipeline.
+        command = (shlex.quote(str(converter)) + ' ' + shlex.quote(str(raw))
+                   + ' /dev/stdout | tee ' + shlex.quote(str(output)) + ' | sha256sum')
+        text = self.run(['timeout', '-k', '5', '1200', 'bash', '-o', 'pipefail', '-c', command], 1210)
+        digest = text.split()[0]
+        if not re.fullmatch('[0-9a-f]{64}', digest):
+            raise RuntimeError('Sparse conversion did not produce a checksum')
+        return digest
 
     def fastboot(self, *args, timeout=60):
         return self.run(['fastboot', '-s', self.args.serial, *args], timeout)
@@ -236,6 +270,7 @@ dumpsys battery
         current = self.inspect()
         if any(saved[key] != current[key] for key in ('serial', 'slot', 'partitions', 'firmware')):
             raise RuntimeError('Device layout or firmware changed since backup')
+        check_firmware(current)
         prepared = json.loads((self.work / 'prepared.json').read_text())
         if prepared['serial'] != self.args.serial:
             raise RuntimeError('Prepared images belong to another tablet')
@@ -314,6 +349,8 @@ def main():
     parser.add_argument('--rootfs', type=Path, help='Verified generic rootfs.squashfs with manifest.json')
     parser.add_argument('--phase', choices=('backup', 'prepare', 'install', 'restore-android'), required=True)
     parser.add_argument('--erase-linux', action='store_true', help='Permit replacing Linux root and user data')
+    parser.add_argument('--resume-prepare', action='store_true',
+                        help='Continue the same extracted private root after a pre-image preparation failure')
     parser.add_argument('--test-recovery', type=int, default=0,
                         help='Developer validation: first-boot timeout in seconds (300–1800); '
                              'requires diagnostic access to disarm after verification')
@@ -324,8 +361,16 @@ def main():
         parser.error('--test-recovery must be 300–1800 seconds')
     os.umask(0o077)
     installer = Installer(args)
-    with (installer.work / '.lock').open('w') as lock:
+    with ExitStack() as locks:
+        locks.enter_context(installer.log)
+        lock = locks.enter_context((installer.work / '.lock').open('w'))
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if args.phase != 'prepare':
+            runtime = Path(os.environ.get('XDG_RUNTIME_DIR', tempfile.gettempdir()))
+            directory = runtime / f'erhai-device-locks-{os.getuid()}'
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            device_lock = locks.enter_context((directory / (args.serial + '.lock')).open('w'))
+            fcntl.flock(device_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
             getattr(installer, args.phase.replace('-', '_'))()
         except Exception as error:

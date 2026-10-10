@@ -33,6 +33,12 @@ exec 9>"$out/.build.lock"
 flock -n 9 || { echo "Build output is already in use: $out" >&2; exit 1; }
 
 head=$(git -C "$src" rev-parse HEAD)
+pinned_head=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["kernel"]["commit"])' "$repo/kernel/source.json")
+if [[ $head != "$pinned_head" && ${ALLOW_UNPINNED_KERNEL:-0} != 1 ]]; then
+	echo 'Kernel HEAD differs from kernel/source.json; use the pinned checkout.' >&2
+	echo 'For an explicit development experiment only, set ALLOW_UNPINNED_KERNEL=1.' >&2
+	exit 1
+fi
 base=$(git -C "$src" describe --tags --abbrev=0 --match 'v[0-9]*' HEAD)
 [[ -z $(git -C "$src" status --porcelain --untracked-files=no) ]] || {
 	echo 'Commit or snapshot tracked kernel changes before building.' >&2

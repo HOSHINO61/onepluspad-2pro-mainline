@@ -6,11 +6,17 @@ root_bytes=$1
 home_bytes=$2
 owner=$3
 test_recovery=$4
+resume=$5
 root=/work/install-root
-test ! -e "$root"
-test ! -e /work/images
 dpkg -i /work/native/*.deb
-unsquashfs -no-progress -processors 4 -d "$root" /input/rootfs.squashfs
+if [ "$resume" = 1 ]; then
+    cmp /work/installation.json "$root/var/lib/erhai/install/installation.json"
+    test -z "$(find /work/images -mindepth 1 -print -quit)"
+else
+    test ! -e "$root"
+    test ! -e /work/images
+    unsquashfs -no-progress -processors 4 -d "$root" /input/rootfs.squashfs
+fi
 mkdir -p /work/images
 
 cat >"$root/etc/fstab" <<'EOF'
@@ -26,7 +32,6 @@ cp /work/installation.json "$root/var/lib/erhai/install/installation.json"
 # Ubuntu's boot set was populated by the kernel package during root assembly.
 store=$root/var/lib/erhai/switch
 test -f "$store/ubuntu/SHA256SUMS"
-test ! -e "$store/android"
 mkdir -p "$store/android"
 cp /work/android/*.img /work/android/SHA256SUMS "$store/android/"
 (cd "$store/android" && sha256sum -c SHA256SUMS)
@@ -36,7 +41,10 @@ cp "$store/ubuntu/SHA256SUMS" /work/ubuntu-SHA256SUMS
 mkdir -p "$root/run/erhai-install-inputs"
 tar --no-same-owner -xf /work/sensors.tar -C "$root/run/erhai-install-inputs"
 cp -a /work/soc0 "$root/run/erhai-install-inputs/"
-chroot "$root" /usr/sbin/erhai-sensors-import-registry \
+# systemctl may return success for ignored commands in a chroot. This root
+# has no running systemd or sensor domain; import for its first real boot.
+test ! -d "$root/run/systemd/system"
+chroot "$root" /usr/sbin/erhai-sensors-import-registry --force \
     /run/erhai-install-inputs/sensors --socinfo /run/erhai-install-inputs/soc0
 rm -rf "$root/run/erhai-install-inputs"
 
@@ -71,4 +79,5 @@ e2fsck -fn /work/images/linux_data.raw
 mke2fs -V 2>/work/mke2fs-version.txt
 sha256sum /usr/sbin/mke2fs /usr/sbin/e2fsck > /work/filesystem-tools.sha256
 chown -R "$owner" /work/images /work/ubuntu-SHA256SUMS
+cp /work/installation.json /work/filesystems-ready.json
 rm -rf "$root"

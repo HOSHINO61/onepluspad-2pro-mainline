@@ -7,7 +7,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
@@ -23,7 +23,8 @@ class InstallBoundaries(unittest.TestCase):
         self.args = SimpleNamespace(work=self.work, serial='TEST_DEVICE', erase_linux=True)
         self.installer = install.Installer(self.args)
         self.installer.run = Mock(side_effect=AssertionError('device command reached'))
-        self.plan = {'serial': self.args.serial, 'slot': '_a', 'firmware': 'fixture',
+        firmware = json.loads((install.REPO / 'packaging/installation.json').read_text())['tested_firmware_fingerprints'][0]
+        self.plan = {'serial': self.args.serial, 'slot': '_a', 'firmware': firmware,
                      'partitions': {'linux_rootfs': {'bytes': 4096}, 'linux_data': {'bytes': 4096}}}
         self.installer.load_backup = Mock(return_value=self.plan)
         self.installer.inspect = Mock(return_value=self.plan)
@@ -44,6 +45,24 @@ class InstallBoundaries(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'layout or firmware changed'):
             self.installer.install()
         self.installer.run.assert_not_called()
+
+    def test_unchanged_but_unsupported_firmware_is_rejected(self):
+        self.plan['firmware'] = 'untested OTA'
+        with self.assertRaisesRegex(RuntimeError, 'outside the tested'):
+            self.installer.install()
+        self.installer.run.assert_not_called()
+
+    def test_same_device_in_two_work_directories_is_locked(self):
+        first = ['install.py', '--serial', 'LOCK_TEST', '--work', str(self.work / 'one'), '--phase', 'install']
+        second = ['install.py', '--serial', 'LOCK_TEST', '--work', str(self.work / 'two'), '--phase', 'install']
+        def attempt_second():
+            with patch.object(sys, 'argv', second), self.assertRaises(BlockingIOError):
+                install.main()
+        with patch.dict('os.environ', {'XDG_RUNTIME_DIR': str(self.work / 'runtime')}), \
+                patch.object(install.Installer, 'install', side_effect=attempt_second) as action, \
+                patch.object(sys, 'argv', first):
+            install.main()
+            self.assertEqual(action.call_count, 1)
 
     def test_prepared_image_for_another_device_is_rejected(self):
         (self.work / 'prepared.json').write_text(json.dumps({'serial': 'OTHER_DEVICE'}))

@@ -1,0 +1,42 @@
+{
+  "source": {
+    "file": "ext2simg.c",
+    "url": "https://android.googlesource.com/platform/external/e2fsprogs/+/1e498908c6ac13b4d5ec0117f4ddcd577aac607e/contrib/android/ext2simg.c",
+    "commit": "1e498908c6ac13b4d5ec0117f4ddcd577aac607e",
+    "sha256": "92789785f04be823ec70ec5e4f6b7c4b2e32ea2060b04009d53f27da7cf938f3",
+    "license": "Apache-2.0"
+  },
+  "host_architecture": "x86_64",
+  "packages": [
+    {
+      "file": "comerr-dev_2.1-1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/e/e2fsprogs/comerr-dev_2.1-1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+      "sha256": "e457b55be696c176d88e82baff0369b1c5d57f69e5b54f8898fae44892d16adc"
+    },
+    {
+      "file": "libext2fs-dev_1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/e/e2fsprogs/libext2fs-dev_1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+      "sha256": "2aa2f4694b72e11a6501964266b6d54acc2c49e6af7c0c97d2433032edfdefa8"
+    },
+    {
+      "file": "android-libsparse-dev_34.0.4-1build3_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/a/android-platform-tools/android-libsparse-dev_34.0.4-1build3_amd64.deb",
+      "sha256": "7a3859eb332d71d40f310d94c1edb41a4efd3cec91a7863634258224de5c9e4b"
+    },
+    {
+      "file": "android-libsparse_34.0.4-1build3_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/a/android-platform-tools/android-libsparse_34.0.4-1build3_amd64.deb",
+      "sha256": "13cb7e0de09de756af8f9487226042239dc6405e318e08e995e3420df3f98a31"
+    },
+    {
+      "file": "android-libbase_34.0.4-1build3_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/a/android-platform-tools/android-libbase_34.0.4-1build3_amd64.deb",
+      "sha256": "528842562fdf34b62fedbd6c49733cd583ec249820575ce913062232431155d8"
+    },
+    {
+      "file": "android-liblog_34.0.4-1build3_amd64.deb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/a/android-platform-tools/android-liblog_34.0.4-1build3_amd64.deb",
+      "sha256": "2b91d308ce13d133b69076a3f1fb254dccb51b72dfc216b1865d40a5cf1b53b2"
+    }
+  ]
+}
