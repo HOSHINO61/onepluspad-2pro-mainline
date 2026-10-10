@@ -4,12 +4,11 @@ Architecture: arm64
 Maintainer: Erwin <yzddmr7@gmail.com>
 Section: libs
 Priority: optional
-Depends: @DEPENDS@, libvulkan1
-Description: Freedreno desktop and Turnip Vulkan drivers for the OnePlus Pad 2 Pro
+Depends: @DEPENDS@
+Description: Freedreno OpenGL desktop driver for the OnePlus Pad 2 Pro
  Private Mesa libraries with the upstream Adreno 830v1 device entry.
  GNOME and systemd user sessions select this driver at their next start
  while the GPU is bound to its kernel driver, and Ubuntu's software renderer
  otherwise; distribution libraries remain owned and updated by Ubuntu.
- Includes desktop OpenGL and GLES and the Turnip Vulkan driver, whose loader
- manifest replaces Ubuntu's Turnip manifest by diversion. Removing this
+ Includes desktop OpenGL and GLES. Vulkan is not enabled. Removing this
  package restores distribution driver selection at the next session start.

@@ -22,12 +22,16 @@ the package, its manifest, the build identity and a record of the build root.
 import argparse
 import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
+import platform
 import shlex
 import shutil
 import subprocess
+import sys
+import tarfile
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
@@ -63,26 +67,67 @@ def native_nir(build, ninja, log):
 
     Use a one-target Ninja file so host-side manifest regeneration cannot
     mistake the SDK's pkg-config paths for missing host build dependencies.
-    The command and output name are unchanged; Ninja records real completion
-    in the shared build log for the subsequent ARM64 compile.
+    Only the interpreter is replaced with this host's Python (Mesa requires
+    Python >= 3.10). Generator arguments and output remain the SDK's rule.
     """
     directory = build / 'out/build'
     target = 'src/compiler/nir/nir_opt_algebraic.c'
+    sdk_ninja = json.loads((build / 'out/input.json').read_text())['tools']['ninja']
+    native_input = None
+    if ninja == 'ninja' and platform.machine() == 'x86_64':
+        spec = json.loads((INPUTS / 'native-tools.json').read_text())['ninja']
+        if spec['version'] == sdk_ninja:
+            cache = WS / 'cache/mesa-native-tools'
+            archive = root_tools.fetch(spec['url'], cache / spec['file'], spec['sha256'])
+            binary = cache / ('ninja-' + spec['version'])
+            if not binary.is_file() or root_tools.sha256(binary) != spec['binary_sha256']:
+                contents = subprocess.check_output(['dpkg-deb', '--fsys-tarfile', str(archive)])
+                with tarfile.open(fileobj=io.BytesIO(contents)) as package:
+                    binary.write_bytes(package.extractfile('./' + spec['member']).read())
+                binary.chmod(0o755)
+            if root_tools.sha256(binary) != spec['binary_sha256']:
+                die('native Ninja does not match its input manifest')
+            ninja, native_input = str(binary), spec
+    ninja_version = subprocess.check_output([ninja, '--version'], text=True).strip()
+    if ninja_version != sdk_ninja:
+        die(f'native Ninja {ninja_version} differs from SDK {sdk_ninja}; '
+            'use the same version to preserve command hashes in the build log')
     command = subprocess.check_output([ninja, '-C', str(directory), '-t', 'commands', target],
                                       text=True).strip()
     argv = shlex.split(command)
     if '\n' in command or len(argv) != 4 or not argv[1].endswith('/nir_opt_algebraic.py') \
             or argv[2:] != ['--out', target]:
         die('unexpected NIR generation rule; do not execute it as a native helper')
-    python = Path(argv[0])
+    if sys.version_info < (3, 10):
+        die('the pinned Mesa generator requires host Python >= 3.10')
+    sdk_command = command
+    python = Path('/usr/bin/python3')
+    sdk_python = build.parent / 'usr/bin/python3'
+    configured_python = build.parent / argv[0].lstrip('/')
+    if sdk_python.resolve() != configured_python.resolve():
+        die('the SDK default Python differs from the configured generator interpreter')
+    command = shlex.join([str(python), *argv[1:]])
+    if command != sdk_command:
+        # Both names resolve to the same SDK interpreter. Keep the command
+        # identical in both Ninja invocations, otherwise the ARM64 build
+        # regenerates this expensive target because its command hash changed.
+        rules = directory / 'build.ninja'
+        text = rules.read_text()
+        old = ' COMMAND = ' + sdk_command + '\n'
+        if text.count(old) != 1:
+            die('cannot identify the single NIR generator rule')
+        rules.write_text(text.replace(old, ' COMMAND = ' + command + '\n'))
     info = json.loads(subprocess.check_output([str(python), '-c',
-        'import json,sys,mako,markupsafe; print(json.dumps(dict('
+        'import json,sys,mako,markupsafe; assert sys.version_info >= (3,10); print(json.dumps(dict('
         'python=sys.version,mako=mako.__version__,markupsafe=markupsafe.__version__)))'], text=True))
     info.update(python_sha256=root_tools.sha256(python),
                 ninja_sha256=root_tools.sha256(Path(shutil.which(ninja))),
-                ninja_version=subprocess.check_output([ninja, '--version'], text=True).strip(),
+                ninja_version=ninja_version,
                 generator_sha256=root_tools.sha256(directory / argv[1]),
-                command=command, scope='native build-only Python generator; target compilation stays in ARM64 SDK')
+                command=command, sdk_command=sdk_command,
+                sdk_python_sha256=root_tools.sha256(sdk_python.resolve()),
+                native_tool_input=native_input,
+                scope='native build-only Python generator; target compilation stays in ARM64 SDK')
     with tempfile.NamedTemporaryFile(mode='w', suffix='.ninja', dir=directory) as recipe:
         recipe.write('rule native_nir\n  command = ' + command + '\n'
                      'build ' + target + ': native_nir\n')
@@ -110,7 +155,7 @@ def main():
                         help='continue this work directory after a failed build; source/flags must match')
     parser.add_argument('--native-nir', action='store_true',
                         help='run the NIR Python generator on the host using its original Ninja command; '
-                             'requires the SDK Python minor version and Mako on the host')
+                             'requires Python >= 3.10 and Mako on the host')
     parser.add_argument('--ninja', default='ninja', help='native Ninja executable for --native-nir')
     parser.add_argument('--clean', action='store_true',
                         help='remove the work directory, build root included, after success')
@@ -224,7 +269,7 @@ def main():
         if native:
             record['native_generator'] = native
         (output / 'build-root.json').write_text(json.dumps(record, indent=2) + '\n')
-        shutil.rmtree(build)
+        # Keep identified objects for validation; --clean removes the SDK.
     if args.clean:
         shutil.rmtree(work)
     print(json.dumps(manifest['package']))

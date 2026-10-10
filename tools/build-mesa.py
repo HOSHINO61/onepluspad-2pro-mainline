@@ -63,13 +63,11 @@ def main():
                  '-Dllvm=disabled', '-Dgallium-va=disabled', '-Dvideo-codecs=[]',
                  '-Dvalgrind=disabled', '-Dbuild-tests=false']
         if args.profile in ('desktop', 'gpu-2404'):
-            # Turnip's loader manifest is staged under the private prefix and
-            # names the private library by absolute path; where the loader
-            # finds it is the package's decision. SPIRV-Tools is optional in
-            # Mesa and pinned off, so an installed spirv-tools cannot add a
-            # runtime dependency.
+            # Keep the desktop on the verified OpenGL path. Turnip remains
+            # isolated in the experimental core24 build after a device hang.
             flags += ['-Dplatforms=wayland,x11', '-Dglx=dri', '-Dglvnd=enabled',
-                      '-Dvulkan-drivers=freedreno', '-Dspirv-tools=disabled']
+                      '-Dvulkan-drivers=' + ('freedreno' if content else '[]'),
+                      '-Dspirv-tools=disabled']
             if not content:
                 flags += [f'-Dc_link_args=-Wl,-rpath,{prefix}/lib',
                           f'-Dcpp_link_args=-Wl,-rpath,{prefix}/lib']

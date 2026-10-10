@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Package a verified native desktop Mesa build; of Ubuntu's files it takes over only
-the Turnip loader manifest, by diversion."""
+"""Package the verified Freedreno OpenGL desktop driver."""
 import argparse
 import hashlib
 import json
@@ -15,14 +14,7 @@ import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
 PREFIX = 'usr/lib/erhai/mesa'
-# Turnip and the loader manifest Mesa installs for it under the private prefix.
-# The package ships that manifest in place of Ubuntu's Turnip manifest, which
-# preinst diverts: Ubuntu's Turnip declines this chip, and Vulkan clients see
-# one driver for the GPU whatever their environment.
-VULKAN_DRIVER = PREFIX + '/lib/libvulkan_freedreno.so'
-VULKAN_ICD = PREFIX + '/share/vulkan/icd.d/freedreno_icd.aarch64.json'
-SYSTEM_ICD = 'usr/share/vulkan/icd.d/freedreno_icd.aarch64.json'
-SCRIPTS = ('preinst', 'postrm')
+SCRIPTS = ('postinst', 'postrm')
 
 
 def sha(path):
@@ -51,12 +43,7 @@ def main():
     for built, pinned in zip(identity['source']['patches'], source['patches']):
         if built['sha256'] not in [pinned['sha256'], *pinned.get('equivalent_sha256', [])]:
             parser.error('Mesa patch identity does not match the source lock')
-    if VULKAN_DRIVER not in result['files_sha256'] or VULKAN_ICD not in result['files_sha256']:
-        parser.error('the desktop build has no Turnip Vulkan driver')
     stage = build / 'stage'
-    icd = json.loads((stage / VULKAN_ICD).read_text())
-    if icd['ICD']['library_path'] != '/' + VULKAN_DRIVER:
-        parser.error('the Vulkan manifest does not name the private Turnip library')
     for name, digest in result['files_sha256'].items():
         if sha(stage / name) != digest:
             parser.error('build file changed: ' + name)
@@ -85,14 +72,14 @@ def main():
                     or name.startswith(PREFIX + '/share/glvnd/')
                     or name.startswith(PREFIX + '/share/drirc.d/')):
                 continue
+            if 'libvulkan' in Path(name).name:
+                continue
             dst = root / name
             dst.parent.mkdir(parents=True, exist_ok=True)
             if name in result['symlinks']:
                 dst.symlink_to(result['symlinks'][name])
             else:
                 shutil.copy2(stage / name, dst)
-        (root / SYSTEM_ICD).parent.mkdir(parents=True)
-        shutil.copy2(stage / VULKAN_ICD, root / SYSTEM_ICD)
         # Every private path the selection entries name must be in this package.
         for config in sorted((metadata / 'tree').rglob('*')):
             if config.is_file():
