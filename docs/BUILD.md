@@ -300,8 +300,7 @@ trusted attributes and the overlay mount; target package processes drop that
 added capability. Package installation uses a temporary local APT source and
 service-start policy. The target's normal Ubuntu APT sources remain intact.
 
-The output includes `rootfs.squashfs`, package and file manifests, extended
-attributes and input hashes. Machine identifiers, radio addresses, sensor
+The output includes `rootfs.squashfs`, the selected package list and build inputs. Machine identifiers, radio addresses, sensor
 calibration and the Android rollback set must be supplied on installation.
 Use the [installation guide](FLASHING.md) for the supported layout and device
 checks. Building alone does not verify hardware support. Local commands and build logs stay

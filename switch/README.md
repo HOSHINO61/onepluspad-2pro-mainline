@@ -67,13 +67,22 @@ mounts it for the duration of a switch and unmounts it afterwards.
   switch.log
 ```
 
-`android/` is never shipped and never hand-maintained: it is re-read from the
-slot each time, so an Android OTA or a KernelSU change needs no manual sync.
+`android/` is never shipped. A recognized unchanged Android set reuses its
+backup; after an Android OTA or KernelSU change, the running Android system
+can refresh it. Interrupted switches cannot replace that backup.
 
 `kernel.json` preserves the package's kernel release and input identity across
 store rotation; `meta.json` records the deployment. Kernel retention reads the
 former. Restoring an archived set through the image installer preserves that
 identity before moving the source directory.
+
+## Build the Android module
+
+From the project root, run `python3 tools/package-switch.py`. Install the resulting
+`out/erhai-switch-v0.1.0.zip` through KernelSU and reboot Android. Transfer it first
+with `adb -s DEVICE_SERIAL push out/erhai-switch-v0.1.0.zip /sdcard/Download/`,
+then select the ZIP from Downloads in KernelSU. The module uses
+Android `flock` or KernelSU's bundled BusyBox to serialize writes.
 
 ## Use
 
@@ -106,12 +115,12 @@ the WebUI resolves the script at run time and a root shell can always use:
 su -c '/data/adb/modules/erhai_switch/system/bin/erhai-switch to-ubuntu'
 ```
 
-Safety rules the script enforces, in this order: a set with a missing or
-non-matching `SHA256SUMS` is refused before any write; every partition is
-written whole, synced, read back and compared; a read-back that does not match
-rewrites the slot from the other set and exits non-zero **without rebooting**;
-and a slot whose boot image already announces itself as ours is never archived
-as the Android set.
+Before writing, the switcher checks the complete target set and requires each
+image to match its partition's full size. A shared lock excludes another switch
+or kernel update. Each write is synced and read back once. On failure it stops,
+leaves the interruption marker and preserves the backups; it does not attempt
+an automatic rollback or reboot. Restore the verified Android set before
+retrying. Backup rotation retains `android.prev` until a subsequent refresh.
 
 Nothing else is touched: not `recovery`, not `misc`, not `vbmeta`, not the
 slot attributes, not the B slot, not xbl/tz. The slot suffix is read, never

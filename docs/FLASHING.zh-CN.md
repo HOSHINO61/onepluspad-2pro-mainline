@@ -2,8 +2,8 @@
 
 [English](FLASHING.md) · [项目首页](../README.zh-CN.md)
 
-本指南涵盖既有双系统布局的 Linux 重装、系统切换和 Android 恢复。
-尚未划分 Linux 分区的原厂设备不适用；本项目不提供通用重分区工具。
+本指南包含首次分区准备、Linux 安装、双系统切换和 Android 启动恢复。
+支持范围限定为下述机型与布局；首次准备和既有布局重装的验证状态分别注明。
 
 ## 适用范围
 
@@ -34,8 +34,102 @@ RAM 临时启动不替换启动分区，但使用已安装根系统的临时内�
 两个方向的切换在既有测试布局上已有验证。切换会改写三个启动分区，不能用于尚未
 安装、缺失回退镜像或布局不一致的设备。
 
-写入中断后的自动恢复尚不完整，不能依赖再次点击切换来修复混合启动镜像。
+写入失败时切换器停止，不自动重启或自动回滚；中断标记会阻止错误更新 Android 备份。
 请保留电脑上的完整 Android 三件套备份；中断后使用下文的 Fastboot 恢复入口。
+
+## 首次准备 Linux 分区
+
+本节只适用于 **512 GB OPD2413 的原厂分区布局**，Bootloader 已解锁，Android 中已有
+KernelSU root 和 USB 调试权限。活动槽必须为 **A**，原厂固件须在
+[已验证组合](../packaging/installation.json)中；下方 `check-device` 会在进入 RAM 桌面前检查。**首次分区会清除 Android 的应用、账户和文件，请先将个人数据备份到电脑。**
+已有 `linux_rootfs` / `linux_data` 的设备跳过本节，直接使用后面的重装步骤。
+
+该分区工具已用真实 `sgdisk` 在模拟磁盘上验证；新版首次准备流程尚待真机验收。
+分区方案沿用已装机的布局：Android 200 GiB、Linux 根分区 60 GiB，其余为 Linux 数据。
+它不改变活动槽、原厂启动镜像或其他 UFS 分区。
+
+按[构建指南](BUILD.zh-CN.md)构建设备包时，先在 `build-debs.py` 命令加入 `--debug`，
+再装配 `out/desktop-root/rootfs.squashfs`，以便首次准备时使用 RAM 桌面的调试通道。沿用构建指南中的
+`kernel_out`、DTB 与 initramfs，生成限时 RAM 启动镜像和切换模块：
+
+```sh
+python3 tools/build-mainline-boot.py --output out/ram-desktop \
+  --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
+  --initramfs out/initramfs/initramfs-ncm.cpio.gz --profile desktop \
+  --rootfs out/desktop-root/rootfs.squashfs \
+  --rootfs-url http://192.168.77.10:8088/rootfs.squashfs \
+  --cmdline-extra 'erhai.session=1800 erhai.debug=1'
+python3 tools/package-switch.py
+ln -sf "$PWD/tools/prepare-dualboot.py" out/desktop-root/prepare-dualboot.py
+python3 -m http.server 8088 --bind 0.0.0.0 --directory out/desktop-root
+```
+
+保持文件服务器运行。在另一个终端设置目标序列号，备份本机启动镜像，再临时启动：
+
+```sh
+set -e
+device_serial=DEVICE_SERIAL
+python3 tools/install.py --serial "$device_serial" --work out/device-check --phase check-device
+device_backup="$PWD/out/device-backup-$device_serial"
+mkdir -p "$device_backup"
+for part in boot init_boot vendor_boot; do
+  adb -s "$device_serial" exec-out su -c "cat /dev/block/by-name/${part}_a" > "$device_backup/$part.img"
+done
+adb -s "$device_serial" reboot bootloader
+fastboot -s "$device_serial" boot out/ram-desktop/boot-mainline.img
+```
+
+电脑识别出 USB 网络后，用 `ip -br link` 查到新增接口名。将下方 `USB_INTERFACE` 换成
+该接口名；文件服务器终端继续保持运行。若电脑已通过 USB DHCP 获得 `192.168.77.10`，
+可跳过地址设置。调试网络只连接自己的电脑；主机需要 `curl` 和 Telnet 客户端。
+
+```sh
+sudo ip link set USB_INTERFACE up
+sudo ip address replace 192.168.77.10/24 dev USB_INTERFACE
+```
+
+等待 RAM 桌面出现，再从电脑连接 `telnet 192.168.77.2 2323`。以下命令在平板的
+root shell 中执行，只查看方案并保存分区表（下载成功后才执行）：
+
+```sh
+/usr/bin/busybox wget -O /run/prepare-dualboot.py http://192.168.77.10:8088/prepare-dualboot.py &&
+python3 /run/prepare-dualboot.py
+```
+
+回到电脑终端，把分区表备份保存下来：
+
+```sh
+set -e
+curl --fail http://192.168.77.2:8081/run/erhai-gpt-backup.bin -o "$device_backup/gpt.bin"
+curl --fail http://192.168.77.2:8081/run/erhai-gpt-backup.json -o "$device_backup/gpt.json"
+```
+
+确认备份已在电脑上、接受 Android 数据全部丢失后，在同一个平板 root shell 中应用：
+
+```sh
+python3 /run/prepare-dualboot.py --erase-android && reboot bootloader
+```
+
+工具报告失败时停止，不执行下面的擦除。在工具成功、平板回到 Fastboot 后，从电脑执行：
+
+```sh
+set -e
+fastboot -s "$device_serial" erase userdata
+fastboot -s "$device_serial" erase metadata
+fastboot -s "$device_serial" reboot
+```
+
+完成 Android 的初始化；若原厂恢复界面要求格式化数据，完成该步骤。重新安装 KernelSU
+管理应用，恢复 USB 调试和 root 授权。从电脑把模块传到平板：
+
+```sh
+adb -s "$device_serial" push out/erhai-switch-v0.1.0.zip /sdcard/Download/
+```
+
+在 KernelSU 中选择“下载”目录里的 ZIP 安装，重启 Android，随后执行下面的 Linux 安装步骤。
+
+若分区写入中断，保留电脑上的备份，重新进入 RAM 桌面，用 `sgdisk --load-backup=备份路径 /dev/sda`
+恢复原分区表，再运行 `sgdisk --verify /dev/sda` 检查。恢复分区表不能恢复已擦除的数据。
 
 ## 既有 Linux 分区的全新安装
 
@@ -49,7 +143,7 @@ root 可用，且已安装本项目的切换模块。固件须在[已验证组�
 `manifest.json`，备份目录应有足够空间存放系统安装镜像。安装器自动从固定输入构建
 AOSP `ext2simg`，按 ext4 已分配块转换，保留必要的零元数据。
 
-`backup` 只保存 Android 启动镜像、分区表和设备数据，不备份 Linux 用户文件。
+`backup` 只保存 Android 启动镜像和设备数据，不备份 Linux 用户文件。
 需要保留的 Linux 文件请事先另行导出；下面的备份无法恢复它们。
 
 从项目目录依次执行；序列号使用 `adb devices` 列出的本机值：

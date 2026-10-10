@@ -2,9 +2,9 @@
 
 [中文](FLASHING.zh-CN.md) · [Project overview](../README.md)
 
-This guide covers Linux reinstallation, system switching and Android recovery
-on an existing dual-boot layout. Stock devices without Linux partitions are
-outside its scope; the project does not provide a general repartitioning tool.
+This guide covers first-time partition preparation, Linux installation, system
+switching and Android boot recovery. The device scope and validation status of
+first-time preparation and reinstallation are stated separately below.
 
 ## Device scope
 
@@ -43,9 +43,117 @@ Both switching directions have been tested on the existing layout. Switching
 writes three boot partitions; it does not apply to a fresh tablet, missing
 rollback images or a different layout.
 
-Automatic recovery from an interrupted write is incomplete. Do not rely on
-repeating a switch to repair a mixed boot set. Keep the complete Android triplet
+The switcher stops on a failed write, without automatically rebooting or
+rolling back. An interruption marker prevents replacing the Android backup. Keep the complete Android triplet
 backup on the host and use the Fastboot recovery procedure below after an interruption.
+
+## Preparing Linux partitions for the first time
+
+This step is for a **512 GB OPD2413 with its stock partition layout**, an unlocked
+bootloader, working KernelSU root and USB debugging. **Slot A must be active**,
+and firmware must match [the tested combination](../packaging/installation.json).
+The `check-device` command below checks these before entering the RAM desktop. **First-time partition preparation erases Android apps,
+accounts and files. Back up personal data to the host first.** Skip this section
+if `linux_rootfs` and `linux_data` already exist.
+
+The new preparation tool has passed real `sgdisk` checks on a simulated disk;
+this first-install preparation workflow still needs hardware acceptance. It
+uses the established allocation: 200 GiB Android, 60 GiB Linux root and the
+remaining space for Linux home. It leaves the active slot, stock boot images
+and other UFS partitions unchanged.
+
+Follow the [build guide](BUILD.md), adding `--debug` to the device-package build
+before assembling `out/desktop-root/rootfs.squashfs`. Preparation uses a temporary
+RAM desktop. With the build guide's `kernel_out`, DTB and initramfs, create the
+bounded RAM image and Android switch module:
+
+```sh
+python3 tools/build-mainline-boot.py --output out/ram-desktop \
+  --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
+  --initramfs out/initramfs/initramfs-ncm.cpio.gz --profile desktop \
+  --rootfs out/desktop-root/rootfs.squashfs \
+  --rootfs-url http://192.168.77.10:8088/rootfs.squashfs \
+  --cmdline-extra 'erhai.session=1800 erhai.debug=1'
+python3 tools/package-switch.py
+ln -sf "$PWD/tools/prepare-dualboot.py" out/desktop-root/prepare-dualboot.py
+python3 -m http.server 8088 --bind 0.0.0.0 --directory out/desktop-root
+```
+
+Keep the server running. In another host terminal, select the tablet, save its
+boot images and start the temporary image:
+
+```sh
+set -e
+device_serial=DEVICE_SERIAL
+python3 tools/install.py --serial "$device_serial" --work out/device-check --phase check-device
+device_backup="$PWD/out/device-backup-$device_serial"
+mkdir -p "$device_backup"
+for part in boot init_boot vendor_boot; do
+  adb -s "$device_serial" exec-out su -c "cat /dev/block/by-name/${part}_a" > "$device_backup/$part.img"
+done
+adb -s "$device_serial" reboot bootloader
+fastboot -s "$device_serial" boot out/ram-desktop/boot-mainline.img
+```
+
+Use `ip -br link` to find the new USB network interface and substitute its name
+for `USB_INTERFACE` below. Skip address configuration if USB DHCP has already
+assigned `192.168.77.10` to the host. Keep this diagnostic network connected only
+to your own computer. The host needs `curl` and a Telnet client.
+
+```sh
+sudo ip link set USB_INTERFACE up
+sudo ip address replace 192.168.77.10/24 dev USB_INTERFACE
+```
+
+Wait for the RAM desktop, then connect from the host with
+`telnet 192.168.77.2 2323`. In the tablet's root shell, save the partition-table
+backup and display the plan:
+
+```sh
+/usr/bin/busybox wget -O /run/prepare-dualboot.py http://192.168.77.10:8088/prepare-dualboot.py &&
+python3 /run/prepare-dualboot.py
+```
+
+In the host terminal, retrieve both backup files:
+
+```sh
+set -e
+curl --fail http://192.168.77.2:8081/run/erhai-gpt-backup.bin -o "$device_backup/gpt.bin"
+curl --fail http://192.168.77.2:8081/run/erhai-gpt-backup.json -o "$device_backup/gpt.json"
+```
+
+Once the backups are on the host and you accept losing all Android data, apply
+the plan in the same tablet root shell:
+
+```sh
+python3 /run/prepare-dualboot.py --erase-android && reboot bootloader
+```
+
+Stop if the tool reports a failure. Only after it succeeds and the tablet reaches
+Fastboot, run these commands on the host:
+
+```sh
+set -e
+fastboot -s "$device_serial" erase userdata
+fastboot -s "$device_serial" erase metadata
+fastboot -s "$device_serial" reboot
+```
+
+Complete Android setup. If stock recovery requests a data format, complete that
+step. Reinstall the KernelSU manager and restore USB debugging and root access.
+Transfer the module from the host:
+
+```sh
+adb -s "$device_serial" push out/erhai-switch-v0.1.0.zip /sdcard/Download/
+```
+
+Select the ZIP from Downloads in KernelSU, install it and reboot Android.
+Continue with the Linux installation below.
+
+If partition editing is interrupted, retain the host backup, return to the RAM
+desktop and use `sgdisk --load-backup=BACKUP_PATH /dev/sda` to restore the table,
+then check it with `sgdisk --verify /dev/sda`. Restoring the table cannot recover
+erased files.
 
 ## Clean installation on an existing Linux layout
 
@@ -64,7 +172,7 @@ its adjacent `manifest.json`. Allow space for the private installation images.
 The installer builds the pinned AOSP `ext2simg` tool, which uses the ext4 allocation
 bitmap and preserves zero metadata needed when replacing an older filesystem.
 
-`backup` saves Android boot images, partition tables and device data; it does
+`backup` saves Android boot images and device data; it does
 not back up Linux user files. Export any Linux files you want to keep before
 proceeding: this backup cannot restore them.
 

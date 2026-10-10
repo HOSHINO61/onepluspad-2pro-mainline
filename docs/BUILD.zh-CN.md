@@ -154,7 +154,7 @@ python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/u
   --output out/desktop-root "${args[@]}"
 ```
 
-上述命令使用 Bash。输出包括 `rootfs.squashfs`、输入/文件/软件包清单和扩展属性记录。
+上述命令使用 Bash。输出包括 `rootfs.squashfs`、软件包列表、构建输入与日志。
 装配通过官方 APT 包加入运行依赖和设备组件，保留 Ubuntu 正常的软件源。
 账户、校准、无线地址与 Android 回退镜像需要在后续安装阶段处理，不进入通用根树。
 
