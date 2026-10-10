@@ -93,10 +93,4 @@ fi
 umount -R "$root/proc"
 proc_mounted=0
 
-# Native tools record all file data, ownership, links and extended attributes.
-(cd "$root" && find . -xdev -type f -print0 | LC_ALL=C sort -z |
-    xargs -0 -r sha256sum --zero) > /work/file-hashes.raw
-find "$root" -xdev -printf '%P\0%y\0%m\0%U\0%G\0%s\0%T@\0%l\0%D\0%i\0%n\0' \
-    > /work/file-metadata.raw
-(cd "$root" && getfattr -R -h -d -m- .) > /work/rootfs-xattrs.dump
 mksquashfs "$root" /work/rootfs.squashfs -noappend -comp zstd -processors "$jobs" -no-progress

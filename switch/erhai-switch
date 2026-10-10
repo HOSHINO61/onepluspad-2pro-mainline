@@ -284,9 +284,23 @@ has_ubuntu_marker() {
 # --------------------------------------------------------------------------
 # Writing
 
+validate_target() {
+	vt_dir=$1 vt_label=$2
+	check_set "$vt_dir" "$vt_label" || die "$vt_label is incomplete or corrupt"
+	for vt_name in $PARTS; do
+		vt_dev=$(resolve_part "$vt_name$SLOT") || die "no $vt_name$SLOT partition"
+		vt_bytes=$(blockdev --getsize64 "$vt_dev" 2>/dev/null) || vt_bytes=$(stat -c %s "$vt_dev")
+		[ "$(stat -c %s "$vt_dir/$vt_name.img")" = "$vt_bytes" ] ||
+			die "$vt_name.img must cover the entire $vt_name$SLOT partition ($vt_bytes bytes)"
+	done
+}
+
 install_set() {
 	is_dir=$1 is_label=$2
-	check_set "$is_dir" "$is_label" || die "$is_label is incomplete or does not match its SHA256SUMS"
+	if [ "$DRY_RUN" = 0 ]; then
+		printf '%s\n' "$is_label" > "$STORE/.switch-incomplete" || die 'cannot record the pending switch'
+		sync
+	fi
 	for is_name in $PARTS; do
 		is_dev=$(resolve_part "$is_name$SLOT") ||
 			die "no $is_name$SLOT partition on this device"
@@ -299,40 +313,19 @@ install_set() {
 		fi
 		say "writing $is_name$SLOT <- $is_label/$is_name.img ($is_bytes bytes)"
 		dd if="$is_src" of="$is_dev" bs=1048576 conv=fsync 2>/dev/null ||
-			die "write to $is_dev failed"
+			die "write to $is_dev failed; keep the backup and restore Android before rebooting"
 		sync
 		is_got=$(sha_of_part "$is_dev" "$is_bytes")
 		if [ "$is_got" != "$is_want" ]; then
 			warn "$is_name$SLOT reads back as $is_got, expected $is_want"
-			rollback "$is_label" "$is_dir"
 			die "read-back mismatch on $is_name$SLOT; the tablet was NOT rebooted"
 		fi
 		say "verified $is_name$SLOT = $is_got"
 	done
-}
-
-# A failed install leaves the slot in an unknown state, so put the other set
-# back rather than leave it there -- and never reboot afterwards, whether the
-# rollback worked or not. The operator decides what happens next.
-rollback() {
-	rb_failed=$1 rb_faileddir=$2
-	rb_other=android
-	[ "$rb_failed" = android ] && rb_other=ubuntu
-	warn "rolling the slot back to the $rb_other set"
-	log "ROLLBACK from $rb_failed ($rb_faileddir) to $rb_other"
-	if ! check_set "$STORE/$rb_other" "$rb_other"; then
-		warn "the $rb_other set is unusable too; the slot is left as it is."
-		warn "re-flash $PARTS from a host with fastboot before rebooting."
-		return 1
+	if [ "$DRY_RUN" = 0 ]; then
+		rm -f "$STORE/.switch-incomplete"
+		sync
 	fi
-	for rb_name in $PARTS; do
-		rb_dev=$(resolve_part "$rb_name$SLOT") || continue
-		dd if="$STORE/$rb_other/$rb_name.img" of="$rb_dev" bs=1048576 conv=fsync 2>/dev/null ||
-			warn "rollback write to $rb_dev failed"
-	done
-	sync
-	warn "slot rolled back to $rb_other; not rebooting"
-	return 0
 }
 
 stash_set() {
@@ -358,8 +351,11 @@ stash_set() {
 	done
 	write_meta "$ss_tmp" android "live slot$SLOT"
 	sync
-	rm -rf "$ss_dir"
-	mv "$ss_tmp" "$ss_dir" || die "cannot move $ss_tmp to $ss_dir"
+	rm -rf "$STORE/android.prev"
+	if [ -d "$ss_dir" ]; then
+		mv "$ss_dir" "$STORE/android.prev" || die "cannot preserve the previous Android backup"
+	fi
+	mv "$ss_tmp" "$ss_dir" || die "cannot install the backup; previous set remains in android.prev"
 	sync
 	say "archived the live slot to $ss_dir"
 }
@@ -448,29 +444,34 @@ cmd_verify() {
 }
 
 cmd_stash() {
+	[ ! -f "$STORE/.switch-incomplete" ] || die 'a switch was interrupted; restore Android before creating a new backup'
 	sh_who=$(occupant)
 	if [ "$sh_who" = ubuntu ] || has_ubuntu_marker; then
-		die "the active slot currently holds the Ubuntu triplet; refusing to archive it as Android"
+		die "the active slot holds Ubuntu; refusing to archive it as Android"
+	fi
+	[ "$sh_who" != android ] || return 0
+	if ! is_android && [ -d "$STORE/android" ]; then
+		die 'unknown boot set; refusing to replace the Android backup'
 	fi
 	stash_set
 }
 
 cmd_to_ubuntu() {
-	check_set "$STORE/ubuntu" ubuntu ||
-		die "no usable Ubuntu triplet in $STORE/ubuntu; install one first"
+	[ ! -f "$STORE/.switch-incomplete" ] || die 'a switch was interrupted; restore Android first'
+	validate_target "$STORE/ubuntu" ubuntu
 	tu_who=$(occupant)
 	if [ "$tu_who" = ubuntu ]; then
 		say "the Ubuntu triplet is already installed; nothing to write"
 		write_state ubuntu
 		return 0
 	fi
-	# A slot that already announces itself as ours holds some *other* build of
-	# Ubuntu (a kernel update, say). Refreshing it is fine; archiving it as
-	# the Android set would destroy the only way back.
 	if has_ubuntu_marker; then
-		say 'the slot holds another Ubuntu build; refreshing it without re-archiving'
-	else
-		cmd_stash
+		say 'refreshing Ubuntu without replacing the Android backup'
+	elif [ "$tu_who" != android ]; then
+		if ! is_android && [ -d "$STORE/android" ]; then
+			die 'unknown boot set; restore Android before switching'
+		fi
+		stash_set
 	fi
 	install_set "$STORE/ubuntu" ubuntu
 	write_state ubuntu
@@ -478,10 +479,10 @@ cmd_to_ubuntu() {
 }
 
 cmd_to_android() {
-	check_set "$STORE/android" android ||
-		die "no usable Android archive in $STORE/android; run stash-android from Android first"
+	validate_target "$STORE/android" android
 	ta_who=$(occupant)
 	if [ "$ta_who" = android ]; then
+		[ "$DRY_RUN" = 1 ] || rm -f "$STORE/.switch-incomplete"
 		say "the Android triplet is already installed; nothing to write"
 		write_state android
 		return 0
@@ -558,6 +559,20 @@ if [ -n "$STORE" ]; then
 else
 	mount_store
 fi
+# The image installer inherits fd 9 when it calls this script.
+lock=$STORE/.lock
+if [ "$(readlink /proc/$$/fd/9 2>/dev/null)" != "$lock" ]; then
+	exec 9>"$lock"
+fi
+if command -v flock >/dev/null 2>&1; then
+	flock -n 9 || die 'another switch or kernel update is running'
+elif [ -x /data/adb/ksu/bin/busybox ]; then
+	/data/adb/ksu/bin/busybox flock -n 9 || die 'another switch or kernel update is running'
+else
+	die 'flock is required; install KernelSU with its BusyBox tools'
+fi
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 log "=== $command slot=$SLOT dry_run=$DRY_RUN store=$STORE"
 
 rc=0

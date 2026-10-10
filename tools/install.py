@@ -157,21 +157,8 @@ dumpsys battery
                                 + '; then cat /sys/devices/soc0/' + name + '; fi')
             if text:
                 (soc / name).write_text(text)
-        # Both GPT copies are recovery evidence; the installer never edits them.
-        disks = self.android('for d in /dev/block/sd?; do test -b "$d" || continue; '
-                             'echo "$d $(blockdev --getsize64 "$d") $(blockdev --getss "$d")"; done')
-        gpt = self.work / 'gpt'
-        gpt.mkdir()
-        for line in disks.splitlines():
-            device, size, sector = line.split()
-            if not re.fullmatch(r'/dev/block/sd[a-z]', device):
-                raise RuntimeError('Unexpected UFS disk name')
-            count = int(size) // int(sector)
-            for label, skip in (('primary', 0), ('backup', count - 8)):
-                self.android(f'dd if={device} bs={int(sector)} skip={skip} count=8 2>/dev/null',
-                             output=gpt / f'{Path(device).name}-{label}.bin')
         (self.work / 'backup.json').write_text(json.dumps(plan, indent=2) + '\n')
-        print('Android boot set, GPT copies and per-device sensor data backed up', flush=True)
+        print('Android boot set and per-device sensor data backed up', flush=True)
 
     def load_backup(self):
         plan = json.loads((self.work / 'backup.json').read_text())
@@ -332,10 +319,6 @@ dumpsys battery
         self.wait_adb()
         # The existing switcher owns activation and readback of all boot images.
         self.android(shlex.quote(KSU_SWITCH) + ' to-ubuntu --no-reboot', timeout=180)
-        for name in PARTS:
-            live = self.android('sha256sum ' + shlex.quote(current['partitions'][name + '_a']['device'])).split()[0]
-            if live != prepared['ubuntu_sha256'][name]:
-                raise RuntimeError(f'{name}: activated boot partition differs from the prepared set')
         (self.work / 'installed.json').write_text(json.dumps({
             'status': 'WRITTEN_AND_BOOT_TRIPLET_VERIFIED; first boot acceptance pending',
             'serial': self.args.serial, 'images': prepared['images'],

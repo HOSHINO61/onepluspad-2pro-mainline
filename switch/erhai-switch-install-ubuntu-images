@@ -45,16 +45,11 @@ done
 [ -d "$SOURCE" ] || die "no such directory: $SOURCE"
 [ -f "$SOURCE/SHA256SUMS" ] || die "$SOURCE has no SHA256SUMS; sign the triplet first"
 
-# Refuse before touching the store, not halfway through it.
-for name in $PARTS; do
-	[ -f "$SOURCE/$name.img" ] || die "$SOURCE is missing $name.img"
-	want=$(sed -n "s/^\([0-9a-f]\{64\}\)  *$name\.img\$/\1/p" "$SOURCE/SHA256SUMS" | head -n 1)
-	[ -n "$want" ] || die "SHA256SUMS has no entry for $name.img"
-	got=$(sha256sum "$SOURCE/$name.img" | cut -d' ' -f1)
-	[ "$got" = "$want" ] || die "$name.img is $got, SHA256SUMS says $want"
-done
-
+# Serialize store rotation with system switching; children inherit this lock.
 mkdir -p "$STORE" || die "cannot create $STORE"
+exec 9>"$STORE/.lock"
+flock -n 9 || die 'another switch or kernel update is running'
+
 staging=$STORE/.ubuntu.new
 rm -rf "$staging"
 mkdir -p "$staging" || die "cannot create $staging"
@@ -62,6 +57,11 @@ for name in $PARTS; do
 	cp "$SOURCE/$name.img" "$staging/$name.img" || die "cannot copy $name.img"
 done
 cp "$SOURCE/SHA256SUMS" "$staging/SHA256SUMS" || die 'cannot copy SHA256SUMS'
+for name in $PARTS; do
+	want=$(sed -n "s/^\([0-9a-f]\{64\}\)  *$name\.img\$/\1/p" "$staging/SHA256SUMS" | head -n 1)
+	[ -n "$want" ] && [ "$(sha256sum "$staging/$name.img" | cut -d' ' -f1)" = "$want" ] ||
+		die "$name.img is missing or corrupt"
+done
 [ -f "$SOURCE/manifest.json" ] && cp "$SOURCE/manifest.json" "$staging/manifest.json"
 # Keep immutable kernel/package identity separate from installation metadata.
 # A rollback source may itself be a previously archived store directory.

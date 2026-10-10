@@ -3,7 +3,6 @@
 """Assemble pinned Ubuntu Desktop layers and explicit device debs in a container."""
 import argparse
 import errno
-import gzip
 import json
 import os
 from pathlib import Path
@@ -23,34 +22,6 @@ def metadata(path):
     fields = subprocess.check_output(
         ['dpkg-deb', '-f', str(path), 'Package', 'Version', 'Architecture'], text=True)
     return dict(line.split(': ', 1) for line in fields.splitlines())
-
-
-def make_file_manifest(out):
-    hashes = {}
-    for record in (out / 'file-hashes.raw').read_bytes().split(b'\0'):
-        if record:
-            hashes[os.fsdecode(record[66:]).removeprefix('./')] = record[:64].decode()
-    fields = (out / 'file-metadata.raw').read_bytes().split(b'\0')
-    assert not fields[-1] and (len(fields) - 1) % 11 == 0
-    rows = [fields[i:i + 11] for i in range(0, len(fields) - 1, 11)]
-    links = {}
-    with gzip.open(out / 'rootfs-files.jsonl.gz', 'wt', encoding='utf-8') as output:
-        for row in sorted(rows, key=lambda x: x[0]):
-            path, kind, mode, uid, gid, size, mtime, target, device, inode, nlink = map(os.fsdecode, row)
-            item = {'path': path, 'type': kind, 'mode': mode, 'uid': int(uid),
-                    'gid': int(gid), 'size': int(size), 'mtime': mtime}
-            if kind == 'f':
-                item['sha256'] = hashes[path]
-                if int(nlink) > 1:
-                    key = (device, inode)
-                    if key in links:
-                        item['hardlink_to'] = links[key]
-                    else:
-                        links[key] = path
-            elif kind == 'l':
-                item['target'] = target
-            output.write(json.dumps(item, ensure_ascii=True) + '\n')
-    return len(rows)
 
 
 def main():
@@ -119,19 +90,14 @@ def main():
     image_info = json.loads(subprocess.check_output(['docker', 'image', 'inspect', host_image]))[0]
     if image_info['Architecture'] != lock['build_host']['architecture']:
         parser.error('the assembly container architecture does not match the tool lock')
-    inputs = {'source_lock_sha256': sha256(lock_path),
-              'integration_commit': subprocess.check_output(
+    inputs = {'integration_commit': subprocess.check_output(
                   ['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip(),
               'integration_dirty': bool(subprocess.check_output(
                   ['git', '-C', str(REPO), 'status', '--porcelain'], text=True)),
-              'source_files_sha256': {str(p.relative_to(REPO)): sha256(p) for p in (
-                  Path(__file__).resolve(), REPO / 'tools/lib/desktop-rootfs.sh',
-                  REPO / 'tools/lib/build_root.py', lock_path)},
               'ubuntu': {'iso': lock['iso'], 'layers': lock['layers']},
               'build_host': lock['build_host'], 'build_host_id': image_info['Id'],
               'device_packages': selected, 'runtime_packages': lock['runtime_packages'],
-              'requested_packages': seeds,
-              'dpkg_scanpackages_sha256': sha256(shutil.which('dpkg-scanpackages'))}
+              'requested_packages': seeds}
     (out / 'inputs.json').write_text(json.dumps(inputs, indent=2) + '\n')
     name = 'erhai-desktop-build-' + uuid.uuid4().hex[:12]
     command = ['docker', 'run', '--rm', '--name', name, '--network', 'none',
@@ -148,14 +114,9 @@ def main():
     except BaseException:
         subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
         raise
-    count = make_file_manifest(out)
     result = {'status': 'OFFLINE_ASSEMBLED_NOT_DEVICE_TESTED',
-              'elapsed_seconds': time.monotonic() - started, 'files': count,
+              'elapsed_seconds': time.monotonic() - started,
               'rootfs_sha256': sha256(out / 'rootfs.squashfs'),
-              'artifacts_sha256': {p.name: sha256(p) for p in (
-                  out / 'inputs.json', out / 'rootfs-files.jsonl.gz',
-                  out / 'rootfs-xattrs.dump', out / 'rootfs-packages.txt',
-                  out / 'audit.txt', out / 'diversions.txt')},
               'scope': 'Official Desktop originals plus APT-installed device/runtime packages; '
                        'no machine data injection, partition activation or hardware validation.'}
     (out / 'manifest.json').write_text(json.dumps(result, indent=2) + '\n')
