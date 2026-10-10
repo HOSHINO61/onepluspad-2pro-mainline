@@ -34,6 +34,12 @@
 # Options: --no-reboot, --dry-run, --slot <_a|_b>, --store <dir>,
 #          --dev-dir <dir> (resolve partitions as plain files, for tests).
 
+# Android mksh closes nonstandard descriptors when starting external commands.
+# KernelSU provides ash, whose inherited fd 9 supports the shared flock below.
+if [ -n "${KSH_VERSION:-}" ] && [ -x /data/adb/ksu/bin/busybox ]; then
+	exec /data/adb/ksu/bin/busybox sh "$0" "$@"
+fi
+
 set -u
 
 PROG=erhai-switch

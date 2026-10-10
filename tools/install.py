@@ -97,21 +97,23 @@ class Installer:
         return self.run(['adb', '-s', self.args.serial, 'exec-out', 'su', '-c',
                          identity + script], timeout, output)
 
-    def inspect(self, minimum_battery=50):
+    def inspect(self, minimum_battery=50, require_linux=True):
+        names = 'userdata boot_a init_boot_a vendor_boot_a'
+        if require_linux:
+            names += ' linux_rootfs linux_data'
         text = self.android('''
 echo SLOT=$(getprop ro.boot.slot_suffix)
 echo FIRMWARE=$(getprop ro.build.fingerprint)
-for name in linux_rootfs linux_data userdata boot_a init_boot_a vendor_boot_a; do
+for name in @PARTITIONS@; do
     dev=$(readlink -f /dev/block/by-name/$name)
     test -b "$dev"
     node=${dev##*/}
     grep -qx "PARTNAME=$name" /sys/class/block/$node/uevent
     echo PART=$name,$dev,$(blockdev --getsize64 "$dev"),$(cat /sys/class/block/$node/start)
 done
-test -x /data/adb/modules/erhai_switch/system/bin/erhai-switch
 test -d /mnt/vendor/persist/sensors/registry/registry
 dumpsys battery
-''')
+'''.replace('@PARTITIONS@', names))
         slot = re.search(r'^SLOT=(.*)$', text, re.M)
         if not slot or slot[1] != '_a':
             raise RuntimeError('Only the verified active-slot-A layout is supported')
@@ -121,19 +123,25 @@ dumpsys battery
         parts = {}
         for name, device, size, start in re.findall(r'^PART=([^,]+),([^,]+),(\d+),(\d+)$', text, re.M):
             parts[name] = {'device': device, 'bytes': int(size), 'start_512': int(start)}
-        if len(parts) != 6 or len({p['device'] for p in parts.values()}) != 6:
+        if len(parts) != len(names.split()) or len({p['device'] for p in parts.values()}) != len(parts):
             raise RuntimeError('Partition identity is incomplete or aliases another target')
-        for name, minimum in (('linux_rootfs', 16 << 30), ('linux_data', 8 << 30)):
+        for name, minimum in ((('linux_rootfs', 16 << 30), ('linux_data', 8 << 30)) if require_linux else ()):
             if parts[name]['bytes'] < minimum:
                 raise RuntimeError(f'{name} is too small')
         return {'serial': self.args.serial, 'slot': slot[1], 'partitions': parts,
                 'firmware': re.search(r'^FIRMWARE=(.*)$', text, re.M)[1],
                 'battery': int(battery[1])}
 
+    def check_device(self):
+        plan = self.inspect(require_linux=False)
+        check_firmware(plan)
+        print('OPD2413, tested Android firmware, active slot A and battery: OK')
+
     def backup(self):
         if (self.work / 'backup.json').exists():
             raise RuntimeError('Backup already exists; retain it and select the next phase')
         plan = self.inspect()
+        self.android('test -x ' + shlex.quote(KSU_SWITCH))
         directory = self.work / 'android'
         directory.mkdir()
         hashes = {}
@@ -348,7 +356,7 @@ def main():
     parser.add_argument('--serial', required=True)
     parser.add_argument('--work', type=Path, required=True, help='Private backup and installation directory')
     parser.add_argument('--rootfs', type=Path, help='Verified generic rootfs.squashfs with manifest.json')
-    parser.add_argument('--phase', choices=('backup', 'prepare', 'install', 'restore-android'), required=True)
+    parser.add_argument('--phase', choices=('check-device', 'backup', 'prepare', 'install', 'restore-android'), required=True)
     parser.add_argument('--erase-linux', action='store_true', help='Permit replacing Linux root and user data')
     parser.add_argument('--resume-prepare', action='store_true',
                         help='Continue the same extracted private root after a pre-image preparation failure')

@@ -19,7 +19,8 @@ DISK = '/dev/sda'
 
 
 def run(*args):
-    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT, timeout=30)
+    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT, timeout=30,
+                                   env={**os.environ, 'LC_ALL': 'C'})
 
 
 def layout_commands(disk, info, last):
@@ -53,6 +54,13 @@ def inspect():
     cmdline = Path('/proc/cmdline').read_text().split()
     if 'erhai.switchroot=1' not in cmdline or not any(x.startswith('erhai.rootfs=') for x in cmdline):
         raise RuntimeError('Boot the temporary RAM desktop first; do not partition a running installed system')
+    active = []
+    for slot in ('a', 'b'):
+        flags = int(run('lsblk', '-dno', 'PARTFLAGS', '/dev/disk/by-partlabel/boot_' + slot).strip(), 0)
+        if flags & 0x0004000000000000 and not flags & 0x0080000000000000:
+            active.append(slot)
+    if active != ['a']:
+        raise RuntimeError('Only active slot A is supported; do not change slots during preparation')
     if int(run('blockdev', '--getss', DISK)) != SECTOR:
         raise RuntimeError('Expected 4096-byte disk sectors')
     if not 450 * GIB <= int(run('blockdev', '--getsize64', DISK)) <= 512 * GIB:
@@ -81,6 +89,7 @@ def main():
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error('Run as root in the temporary RAM desktop')
+    os.umask(0o077)
     table, command = inspect()
     record = args.backup.with_suffix('.json')
     serial = next((x.split('=', 1)[1] for x in Path('/proc/cmdline').read_text().split()
