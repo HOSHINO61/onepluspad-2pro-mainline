@@ -56,11 +56,13 @@ if [ "$test_recovery" -gt 0 ]; then
 Description=Bound the first installed-candidate boot
 ConditionPathExists=/var/lib/erhai/install-check/armed
 DefaultDependencies=no
-After=local-fs.target
-Before=basic.target
+After=systemd-remount-fs.service
+Before=local-fs.target
+IgnoreOnIsolate=yes
 [Service]
 Type=simple
-ExecStart=/bin/sh -c 'rm /var/lib/erhai/install-check/armed; cat /proc/sys/kernel/random/boot_id > /var/lib/erhai/install-check/started; sleep $test_recovery; echo expired > /var/lib/erhai/install-check/expired; timeout -k 1 5 sync; /sbin/reboot -f -n bootloader'
+WorkingDirectory=/var/lib/erhai/install-check
+ExecStart=/bin/sh -c 'rm armed; cat /proc/sys/kernel/random/boot_id > started; sleep $test_recovery; echo expired > expired; timeout -k 1 5 sync; /sbin/reboot -f -n bootloader'
 TimeoutStopSec=5
 EOF
     ln -s ../erhai-install-check.service "$root/etc/systemd/system/sysinit.target.wants/erhai-install-check.service"
