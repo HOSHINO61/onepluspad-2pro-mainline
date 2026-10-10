@@ -80,7 +80,7 @@ development are not included in the supported feature set.
 | Boot and storage | SM8750P / UFS | ✅ | Ubuntu boot and storage access work. Dual-boot switching is limited to the tested layout described above. |
 | Internal display | Dual DSI / DSC | ✅ | 3392 × 2400 at 120 Hz. Other refresh rates await hardware testing. |
 | Touch | Novatek NT36536 | ✅ | Finger input, desktop interaction and login verified. Pen support is tracked separately. |
-| GPU and desktop | Adreno 830 / Freedreno / Mesa | 🟡 | GNOME uses GPU acceleration and OpenGL rendering has passed testing. Vulkan, sandboxed applications and sustained-load behavior need validation. |
+| GPU and desktop | Adreno 830 / Freedreno / Mesa | 🟡 | GNOME and OpenGL hardware rendering are verified. Vulkan testing triggered a GPU timeout and is unsupported. Sandboxed applications and sustained loads need testing. |
 | Brightness | Dual KTZ8868 / one backlight interface | 🟡 | Unified brightness control and blanking are integrated; the slider’s usable brightness range needs physical testing. |
 | Magnetic keyboard | Pogo keyboard / touchpad | 🟡 | Keyboard input works. Full key mapping, touchpad gestures and detach/reattach need testing. |
 | Active pen | NT36536 pen input | 🔧 | Pen input code is available; position, pressure and buttons await physical testing. |
@@ -92,11 +92,11 @@ development are not included in the supported feature set.
 |---|---|---|---|
 | Wi-Fi | WCN7860 / ath12k | ✅ | Networking, automatic reconnect at boot and short transfers work. Roaming, hotspot operation and sustained transfers need testing. |
 | Bluetooth | WCN7860 / BlueZ | 🟡 | Controller, firmware, discovery and per-device address verified; keyboard, mouse and headset use remain unverified. |
-| USB device mode | USB-C / NCM | ✅ | USB networking and diagnostics with a PC are verified. Reconnecting to a PC after peripheral use needs testing. |
+| USB device mode | USB-C / NCM | 🟡 | USB networking is verified. Diagnostic shell loss and failed automatic recovery during temporary boot remain unresolved. |
 | USB host peripherals | HID, storage, network and digital audio | 🔧 | Common peripheral drivers are configured. Emulated storage/audio tests passed; tablet power delivery and real accessories remain untested. |
 | USB storage formats | UAS, exFAT and NTFS3 | 🔧 | Emulated filesystem tests include independent verification of Chinese NTFS filenames. Real drives and desktop mounting remain untested. |
 | External display | USB-C DisplayPort Alt Mode | 🔧 | Display-output code is available; a physical monitor has not been tested. |
-| External display audio | DisplayPort / ALSA / PipeWire | 🔧 | 48 kHz, 24-bit stereo is configured. Detection, playback and hotplug need hardware testing. |
+| External display audio | DisplayPort / ALSA / PipeWire | ❌ | Disabled by default: playback configuration prevents microphone discovery with no monitor attached. Playback and hotplug recovery need further work and testing. |
 
 ### Audio, Video and Sensors
 
@@ -109,7 +109,7 @@ development are not included in the supported feature set.
 | Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
 | Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
 | Automatic rotation | SSC / iio-sensor-proxy | 🟡 | The orientation sensor is integrated with the desktop; portrait/landscape changes and touch alignment need physical testing. |
-| Automatic brightness | SSC ambient light / GNOME | 🔧 | Light-sensor and desktop integration code is available; light response and brightness changes need testing. |
+| Automatic brightness | SSC ambient light / GNOME | 🔧 | Raw ambient-light samples have been captured on hardware. Physical light response and automatic brightness changes need testing. |
 | Other sensors | Gyroscope, compass, proximity and Hall | ❌ | Complete application-facing support is not implemented. |
 
 ### Power, Time and Applications
