@@ -25,7 +25,10 @@ class InstallBoundaries(unittest.TestCase):
         self.installer.run = Mock(side_effect=AssertionError('device command reached'))
         firmware = json.loads((install.REPO / 'packaging/installation.json').read_text())['tested_firmware_fingerprints'][0]
         self.plan = {'serial': self.args.serial, 'slot': '_a', 'firmware': firmware,
-                     'partitions': {'linux_rootfs': {'bytes': 4096}, 'linux_data': {'bytes': 4096}}}
+                     'partitions': {
+                         'userdata': {'device': '/dev/block/sda15', 'bytes': 4096, 'start_512': 8},
+                         'linux_rootfs': {'device': '/dev/block/sda16', 'bytes': 4096, 'start_512': 16},
+                         'linux_data': {'device': '/dev/block/sda17', 'bytes': 4096, 'start_512': 24}}}
         self.installer.load_backup = Mock(return_value=self.plan)
         self.installer.inspect = Mock(return_value=self.plan)
 
@@ -49,6 +52,12 @@ class InstallBoundaries(unittest.TestCase):
     def test_unchanged_but_unsupported_firmware_is_rejected(self):
         self.plan['firmware'] = 'untested OTA'
         with self.assertRaisesRegex(RuntimeError, 'outside the tested'):
+            self.installer.install()
+        self.installer.run.assert_not_called()
+
+    def test_distinct_partition_nodes_cannot_overlap_android(self):
+        self.plan['partitions']['linux_rootfs']['start_512'] = 12
+        with self.assertRaisesRegex(RuntimeError, 'disjoint and follow Android'):
             self.installer.install()
         self.installer.run.assert_not_called()
 

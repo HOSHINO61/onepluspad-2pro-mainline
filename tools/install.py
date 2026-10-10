@@ -38,6 +38,21 @@ def check_firmware(plan):
         raise RuntimeError('Firmware is outside the tested installation combination')
 
 
+def check_linux_layout(plan):
+    ranges = {}
+    for name in ('userdata', 'linux_rootfs', 'linux_data'):
+        part = plan['partitions'][name]
+        disk = re.fullmatch(r'(/dev/block/sd[a-z]+)\d+', part['device'])
+        if not disk:
+            raise RuntimeError('Unsupported UFS partition path')
+        ranges[name] = (disk[1], part['start_512'], part['start_512'] + part['bytes'] // 512)
+    userdata, root, home = (ranges[n] for n in ('userdata', 'linux_rootfs', 'linux_data'))
+    if (root[0] != userdata[0] or home[0] != userdata[0]
+            or root[1] < userdata[2] or home[1] < userdata[2]
+            or max(root[1], home[1]) < min(root[2], home[2])):
+        raise RuntimeError('Linux partitions must be disjoint and follow Android userdata on the same UFS disk')
+
+
 def sparse_size(path):
     with path.open('rb') as stream:
         magic, major, minor, header, chunk, block_size, blocks, count, checksum = struct.unpack(
@@ -61,10 +76,11 @@ class Installer:
                   'command': command, 'timeout': timeout}
         self.log.write(json.dumps(record) + '\n')
         self.log.flush()
+        started = time.monotonic()
         with output.open('wb') if output else open(os.devnull, 'wb') as stream:
             result = subprocess.run(command, stdout=stream if output else subprocess.PIPE,
                                     stderr=subprocess.PIPE, timeout=timeout)
-        record = {'returncode': result.returncode,
+        record = {'returncode': result.returncode, 'elapsed_seconds': time.monotonic() - started,
                   'stderr': result.stderr.decode(errors='replace')}
         if not output:
             record['stdout'] = result.stdout.decode(errors='replace')
@@ -171,6 +187,7 @@ dumpsys battery
     def prepare(self):
         plan = self.load_backup()
         check_firmware(plan)
+        check_linux_layout(plan)
         converter, converter_record = ext2simg()
         if not self.args.rootfs:
             raise RuntimeError('--rootfs is required for prepare')
@@ -271,6 +288,7 @@ dumpsys battery
         if any(saved[key] != current[key] for key in ('serial', 'slot', 'partitions', 'firmware')):
             raise RuntimeError('Device layout or firmware changed since backup')
         check_firmware(current)
+        check_linux_layout(current)
         prepared = json.loads((self.work / 'prepared.json').read_text())
         if prepared['serial'] != self.args.serial:
             raise RuntimeError('Prepared images belong to another tablet')
