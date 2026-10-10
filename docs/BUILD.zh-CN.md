@@ -24,6 +24,27 @@ onepluspad-2pro-mainline/
 `ERHAI_WORKSPACE` 可指定另一个包含 `kernel/linux`、`cache` 和 `out` 的工作区。
 Python 入口可用 `--help` 查看参数；shell 入口采用下文的环境变量。
 
+## 准备输入
+
+固件、原厂启动构建输入及小型 AOSP/AudioReach 源码归档已随项目提供。普通构建
+不需要下载完整原厂 ROM，也不需要手动提取固件。先执行：
+
+```sh
+python3 tools/prepare-inputs.py
+```
+
+脚本校验并解开随附输入，自动下载固定版本的 Ubuntu ARM64 BusyBox，复用已校验缓存；
+不访问平板。准备需要 Python 3.11+ 与 dpkg-deb。各项来源与哈希见
+[kernel/source.json](../kernel/source.json)、[固件清单](../packaging/firmware-manifest.json)
+及[原厂输入清单](../packaging/boot-reference/source.json)。
+
+| 随项目提供 | 按需从固定来源获取 |
+|---|---|
+| 设备固件、原厂启动构建输入、AOSP 工具源码、AudioReach 源码及设备补丁 | Ubuntu Desktop、Ubuntu 软件包、独立内核、Mesa 和传感器上游源码 |
+
+原厂构建输入对应 OPD2413 ColorOS C.34；它们用于构建，不是通用恢复包。
+本机校准、设备地址和 Android 回退备份在安装时从用户自己的平板取得。
+
 ## 内核与 RAM 启动镜像
 
 ```sh
@@ -34,9 +55,8 @@ OUT_DIR="$kernel_out" tools/build-kernel.sh
 输出包括 Image、设备树、模块、最终配置及构建身份。重复构建复用兼容的 OUT 与 ccache，
 不需要每次全量重编。正式候选必须保持内核和模块匹配。
 
-构建 NCM initramfs 还需要 `cache/busybox-arm64` 和内核生成的 `gen_init_cpio`；
-BusyBox 必须匹配 source.json 中的 SHA-256。启动镜像封装需要同一清单对应的 AOSP
-`mkbootimg.py`，默认位于 `cache/tools/mkbootimg.py`。
+输入准备器已将 BusyBox 与完整 AOSP 工具放到构建缓存。NCM initramfs 使用本次
+内核生成的 `gen_init_cpio`，启动封装使用随附原厂输入：
 
 ```sh
 PROFILE=ncm OUT_DIR="$PWD/out/initramfs" \
@@ -44,7 +64,8 @@ PROFILE=ncm OUT_DIR="$PWD/out/initramfs" \
 python3 tools/build-erhai-abl-symbols.py --output out/abl-dtb \
   --mainline-dtb "$kernel_out/arch/arm64/boot/dts/qcom/sm8750-erhai.dtb" \
   --dtc "$kernel_out/scripts/dtc/dtc" \
-  --vendor-boot /path/to/stock/vendor_boot.img --dtbo-img /path/to/stock/dtbo.img
+  --vendor-boot "${ERHAI_WORKSPACE:-$PWD}/cache/stock-c34/images/vendor_boot.img" \
+  --dtbo-img "${ERHAI_WORKSPACE:-$PWD}/cache/stock-c34/images/dtbo.img"
 python3 tools/build-mainline-boot.py --output out/mainline-boot \
   --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
   --initramfs out/initramfs/initramfs-ncm.cpio.gz
@@ -59,10 +80,10 @@ python3 tools/build-mainline-boot.py --output out/mainline-boot \
 设备内容分为内核、固件、音频、显示电源、设备支持和可选调试包，分别更新。
 `erhai-kernel` 选择器精确依赖匹配的版本化镜像/模块包；音频和固件不要求所有包版本相同。
 
-`tools/build-debs.py --help` 列出构建参数。包含启动三件套的构建需要自己的 AVB 签名密钥
-与 AOSP avbtool；密钥不进入软件包。固件从仓库读取，来源与分发边界见
+`tools/build-debs.py --help` 列出构建参数。AOSP avbtool 已由输入准备器提供；
+包含启动三件套的构建使用自己的 AVB 签名密钥，密钥不进入软件包。固件从仓库读取，来源与分发边界见
 [固件说明](../packaging/firmware/README.md)。音频原始源码由
-[packaging/audio/source.json](../packaging/audio/source.json)锁定，使用 `--audio-source` 指定。
+[packaging/audio/source.json](../packaging/audio/source.json)锁定，默认使用准备器写入的缓存。
 
 Mesa 的构建、安装和回退见[图形专项](GRAPHICS.md)。传感器入口为
 `tools/build-sensors.py --help`。组件构建的输入、依赖与包行为详见
@@ -71,22 +92,32 @@ Mesa 的构建、安装和回退见[图形专项](GRAPHICS.md)。传感器入口
 沿用上面的内核、DTB 和 initramfs 输出，完整设备包的构建示例为：
 
 ```sh
+mkdir -p keys
+# 首次构建生成一次；后续保留此密钥。
+test -f keys/boot.pem || openssl genpkey -algorithm RSA \
+  -pkeyopt rsa_keygen_bits:4096 -out keys/boot.pem
 python3 tools/build-debs.py --output out/device-packages \
   --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
   --initramfs out/initramfs/initramfs-ncm.cpio.gz \
-  --stock /path/to/stock/images \
-  --avb-key /path/to/signing-key.pem --avbtool /path/to/avbtool.py \
-  --audio-source /path/to/audioreach-topology-993a17dc.tar.gz
+  --avb-key keys/boot.pem \
+  --avbtool "${ERHAI_WORKSPACE:-$PWD}/cache/tools/avbtool.py"
 ```
 
-所有 `/path/to/` 都需替换为自己的实际输入路径。密钥为 RSA-4096 PEM；原厂目录应包含
-构建器要求的匹配启动镜像，不能使用另一个设备或固件版本的备份。
+签名密钥为 RSA-4096 PEM，`keys/` 不进入 Git。使用其他已核验固件时，可用 `--stock`
+指定对应原始启动镜像，不能混用不同设备或固件的输入。
 
 
 ## Ubuntu Desktop 根系统
 
 使用官方 Ubuntu Desktop 26.04 ARM64 ISO 中原始的 `minimal.squashfs` 与
-`minimal.standard.squashfs`。装配器按
+`minimal.standard.squashfs`。安装 7z 后，可自动下载 ISO 并提取这两层：
+
+```sh
+python3 tools/prepare-inputs.py --desktop
+```
+
+结果位于 `${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper/`。已有原始层也可直接
+传给装配器，按
 [packaging/desktop/source.json](../packaging/desktop/source.json)校验输入。
 
 当前装配需要 amd64 主机、rootful Docker、已配置的 ARM64 binfmt、Python 3.11+ 与
@@ -100,7 +131,7 @@ args=()
 for deb in /path/to/selected-device-packages/*.deb; do
   args+=(--device-deb "$deb")
 done
-python3 tools/build-desktop-rootfs.py --layers /path/to/iso/casper \
+python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper" \
   --output out/desktop-root "${args[@]}"
 ```
 

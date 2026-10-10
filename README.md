@@ -34,6 +34,9 @@ primarily in Chinese.
 
 ## 🚀 Getting Started
 
+Device firmware and stock boot build inputs are included; no manual ROM
+extraction is needed. Run `tools/prepare-inputs.py` as described in the build guide.
+
 | I want to | Read |
 |---|---|
 | Check whether the tablet meets my needs | [Hardware support](#hardware-support) |
@@ -42,6 +45,7 @@ primarily in Chinese.
 | Check installation requirements and recovery | [Installation and recovery](docs/FLASHING.md) |
 | Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
 | Contribute code or report a problem | [Contributing](CONTRIBUTING.md) |
+| Read release history | [Changelog](CHANGELOG.md) |
 
 ## Dual Boot
 
@@ -92,17 +96,17 @@ development are not included in the supported feature set.
 |---|---|---|---|
 | Wi-Fi | WCN7860 / ath12k | ✅ | Networking, automatic reconnect at boot and short transfers work. Roaming, hotspot operation and sustained transfers need testing. |
 | Bluetooth | WCN7860 / BlueZ | 🟡 | Controller, firmware, discovery and per-device address verified; keyboard, mouse and headset use remain unverified. |
-| USB device mode | USB-C / NCM | 🟡 | USB networking is verified. Diagnostic shell loss and failed automatic recovery during temporary boot remain unresolved. |
-| USB host peripherals | HID, storage, network and digital audio | 🔧 | Common peripheral drivers are configured. Emulated storage/audio tests passed; tablet power delivery and real accessories remain untested. |
+| USB device mode | USB-C / NCM | 🟡 | USB networking works. Some reconnects failed to restore the connection and required a reboot. |
+| USB host peripherals | HID, storage, network and digital audio | 🟡 | Mouse use through the tested dock works without external PD power. The same mouse and USB-A adapter work directly in Android but fail in Linux; other peripherals remain untested. |
 | USB storage formats | UAS, exFAT and NTFS3 | 🔧 | Emulated filesystem tests include independent verification of Chinese NTFS filenames. Real drives and desktop mounting remain untested. |
-| External display | USB-C DisplayPort Alt Mode | 🔧 | Display-output code is available; a physical monitor has not been tested. |
+| External display | USB-C DisplayPort Alt Mode | 🟡 | Output on a physical monitor is confirmed. Display-mode selection and hotplug stability still need testing. |
 | External display audio | DisplayPort / ALSA / PipeWire | ❌ | Disabled by default: playback configuration prevents microphone discovery with no monitor attached. Playback and hotplug recovery need further work and testing. |
 
 ### Audio, Video and Sensors
 
 | Feature | Component / Implementation | Status | Scope and limitations |
 |---|---|---|---|
-| Internal microphones | WCD939x / ALSA / PipeWire | 🟡 | Two-channel capture and repeated recording passed. Speech quality, gain and background noise need listening tests. |
+| Internal microphones | WCD939x / ALSA / PipeWire | 🟡 | Default input, two-channel capture and repeated recording passed. Speech quality, gain and background noise need listening tests. |
 | Speakers | Six AW88261 amplifiers / AudioReach | 🔧 | Playback is disabled by default. Low-level signal tests passed; listening, volume and noise need hardware testing. |
 | USB-C analog audio | WCD939x headset path | ❌ | Analog adapters and headset detection are not implemented. Digital USB audio is tracked above. |
 | H.264 software playback | Ubuntu GStreamer packages | 🔧 | Software decoding passed under emulation; player video and sound on the tablet need testing. |
@@ -121,7 +125,7 @@ development are not included in the supported feature set.
 | Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
 | Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
 | Suspend and resume | Linux power management | 🟡 | Timed wake cycles passed with USB attached. Power-button wake, unplugged standby life and peripheral recovery need testing. |
-| RTC | Qualcomm PMIC RTC | ✅ | Time read/write and retention across tested reboots verified. |
+| RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after an abnormal restart and requires time synchronization. |
 | Snap applications | AppArmor / snapd / graphics runtime | 🔧 | Compatibility work is in progress; full confinement and browser operation need validation. |
 | Android applications | Android runtime | ❌ | Waydroid is not integrated. |
 

@@ -45,6 +45,10 @@ rollback images or a different layout.
 
 ## Failure and full stock recovery
 
+If the tablet stops responding, hold **Power + Volume Up for about 15 seconds**.
+Release when the screen turns off or the OnePlus logo appears. If it stays off,
+press Power to start it. This combination has been used to recover the OPD2413.
+
 Preserve errors, image versions and backups after a failed boot. Establish the
 current system and completed writes before proceeding. Do not repeatedly rerun
 installation or mix versions of the boot triplet; check all three partitions together.

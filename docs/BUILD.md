@@ -42,25 +42,32 @@ Tools resolve their workspace automatically when this repo is checked out at
 candidate from pinned original sources and that build's outputs; previous
 release images and modified root trees are comparison data.
 
-## Inputs you must provide
+## Prepare inputs
 
-- A cross toolchain (`aarch64-linux-gnu-gcc`) and the kernel checkout
-  (`kernel/source.json`).
-- Static ARM64 busybox, pinned sha256 (see `kernel/source.json`), at
-  `cache/busybox-arm64`.
-- AOSP `mkbootimg.py` at `cache/tools/mkbootimg.py` (pinned sha256).
-- The stock `dtbo.img` and `vendor_boot.img` of *your* unit (payload.dumper from
-  the stock OTA package) at `cache/stock-c34/images/` — ABL requires the boot DTB to
-  carry the stock overlay symbols and root identity.
-- Nothing for firmware: `packaging/firmware/` already carries the closure this
-  unit needs, and `packaging/firmware/README.md` says where every file came
-  from. Only moving to a later stock ROM needs the ROM itself, through
-  `tools/build-debs.py --refresh-from-rom`.
-- Official Ubuntu Desktop 26.04 ARM64 inputs for a desktop root. Use the
-  original `casper/minimal.squashfs` and `minimal.standard.squashfs` layers,
-  with device integration supplied by the `erhai-*` packages. The early
-  Ubuntu Base and overlay-merging tools are historical experiments, not the
-  desktop delivery recipe.
+Device firmware, stock boot build inputs and the small AOSP/AudioReach source
+archives are included. Normal builds require neither a full stock ROM download
+nor manual firmware extraction. Run:
+
+```sh
+python3 tools/prepare-inputs.py
+```
+
+The script verifies and unpacks the included inputs, downloads pinned Ubuntu
+ARM64 BusyBox and reuses verified downloads. It requires Python 3.11+ and
+dpkg-deb, and never accesses a tablet. Sources and hashes are recorded in
+[kernel/source.json](../kernel/source.json), the
+[firmware manifest](../packaging/firmware-manifest.json) and the
+[stock input manifest](../packaging/boot-reference/source.json).
+
+| Included | Downloaded separately when needed |
+|---|---|
+| Device firmware, stock boot build inputs, AOSP tool sources, AudioReach sources and device patches | Ubuntu Desktop, Ubuntu packages, the separate device kernel, Mesa and sensor-stack sources |
+
+The included stock inputs match OPD2413 ColorOS C.34. They are build references,
+not a general recovery package. Per-device calibration, addresses and Android
+fallback backups must come from the user's own tablet during installation.
+Ubuntu Desktop uses the original ISO layers described below; Ubuntu Base and
+overlay-merging experiments are not the desktop delivery recipe.
 
 ## Build a RAM boot image
 
@@ -72,7 +79,8 @@ PROFILE=ncm OUT_DIR="$PWD/out/initramfs" \
 python3 tools/build-erhai-abl-symbols.py --output out/abl-dtb \
   --mainline-dtb "$kernel_out/arch/arm64/boot/dts/qcom/sm8750-erhai.dtb" \
   --dtc "$kernel_out/scripts/dtc/dtc" \
-  --vendor-boot /path/to/stock/vendor_boot.img --dtbo-img /path/to/stock/dtbo.img
+  --vendor-boot "${ERHAI_WORKSPACE:-$PWD}/cache/stock-c34/images/vendor_boot.img" \
+  --dtbo-img "${ERHAI_WORKSPACE:-$PWD}/cache/stock-c34/images/dtbo.img"
 python3 tools/build-mainline-boot.py --output out/mainline-boot \
   --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
   --initramfs out/initramfs/initramfs-ncm.cpio.gz
@@ -125,12 +133,15 @@ The installed system is Canonical's Ubuntu, unpacked as it ships. The
 functional device layer is packaged separately. The GNOME display-power adapter targets Settings Daemon 50; diagnostics are a separate optional package.
 
 ```sh
+mkdir -p keys
+# Generate once and retain for later builds.
+test -f keys/boot.pem || openssl genpkey -algorithm RSA \
+  -pkeyopt rsa_keygen_bits:4096 -out keys/boot.pem
 python3 tools/build-debs.py --output out/device-packages \
   --kernel-out "$kernel_out" --dtb out/abl-dtb/erhai-abl.dtb \
   --initramfs out/initramfs/initramfs-ncm.cpio.gz \
-  --stock /path/to/stock/images \
-  --avb-key /path/to/signing-key.pem --avbtool /path/to/avbtool.py \
-  --audio-source /path/to/audioreach-topology-993a17dc.tar.gz
+  --avb-key keys/boot.pem \
+  --avbtool "${ERHAI_WORKSPACE:-$PWD}/cache/tools/avbtool.py"
 ```
 
 | Package | Owns |
@@ -230,6 +241,17 @@ acceptance requirements; development candidates are not validated releases.
 
 ## Desktop root filesystem
 
+With 7z installed, download the pinned official Ubuntu Desktop ISO and extract
+its two original layers automatically:
+
+```sh
+python3 tools/prepare-inputs.py --desktop
+```
+
+The layers are placed in `${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper/`.
+Existing original layers can also be passed directly to the assembler; their
+hashes must match `packaging/desktop/source.json`.
+
 `tools/build-desktop-rootfs.py` assembles the two original Desktop layers and
 explicit device packages. It requires rootful Docker on amd64, an existing
 ARM64 binfmt interpreter, Python 3.11+ and `dpkg-dev`. Pull the assembly image
@@ -241,7 +263,7 @@ The following example uses Bash.
 ```sh
 args=()
 for deb in /path/to/selected-device-packages/*.deb; do args+=(--device-deb "$deb"); done
-python3 tools/build-desktop-rootfs.py --layers /path/to/iso/casper \
+python3 tools/build-desktop-rootfs.py --layers "${ERHAI_WORKSPACE:-$PWD}/cache/ubuntu-desktop/casper" \
   --output out/desktop-root "${args[@]}"
 ```
 

@@ -62,6 +62,11 @@ license. packaging/firmware-manifest.json records per-file provenance and hashes
 packaging/firmware/README.md records the available terms and unresolved
 redistribution conditions. Provenance alone is not a redistribution license.
 
+packaging/boot-reference/ contains four unmodified stock OTA images used only
+as build references. Its source.json records the official OTA and per-image
+hashes; the original vendor and third-party terms still apply. The unresolved
+stock-firmware redistribution conditions also apply to these reference images.
+
 Factory calibration, device addresses, credentials and private keys are not
 shared firmware. They must come from the user's own device or be generated for
 that installation, and must not appear in public images or source history.
