@@ -50,9 +50,12 @@ def layout_commands(disk, info, last):
 
 def inspect():
     model = Path('/sys/firmware/devicetree/base/model').read_text().rstrip('\0')
-    if model != 'OnePlus Pad 2 Pro':
-        raise RuntimeError('Only OnePlus Pad 2 Pro is supported')
     cmdline = Path('/proc/cmdline').read_text().split()
+    # ABL replaces the source DTS model with its stock erhai board label.
+    # Check the bootloader project ID as well; a generic Sun/SM8750 is not enough.
+    if ('oplusboot.prjname=24926' not in cmdline or
+            not (model == 'OnePlus Pad 2 Pro' or ',erhai-' in model)):
+        raise RuntimeError('Only the OPD2413 erhai project is supported')
     if 'erhai.switchroot=1' not in cmdline or not any(x.startswith('erhai.rootfs=') for x in cmdline):
         raise RuntimeError('Boot the temporary RAM desktop first; do not partition a running installed system')
     active = []
