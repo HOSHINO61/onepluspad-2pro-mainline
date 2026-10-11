@@ -11,8 +11,9 @@ Developer source preview for the OnePlus Pad 2 Pro (OPD2413).
 - Root filesystem assembly from official Ubuntu Desktop ARM64 inputs.
 - Clean Linux reinstallation on the tested existing slot-A layout, with host
   backups and full boot-partition readback.
-- First-layout preparation with the distribution partitioning tool; simulated-disk
-  validation completed, hardware first-install acceptance pending.
+- First-time partition preparation for the 512 GB model using the distribution
+  partitioning tool; partition creation, Android data reset, Linux first boot and
+  dual-boot switching tested on hardware.
 - KernelSU module packaging and shared switch/update locking; failed writes stop
   without automatic rollback and cannot replace the Android backup.
 - Dual-boot switching for the documented installation layout and optional USB diagnostics.

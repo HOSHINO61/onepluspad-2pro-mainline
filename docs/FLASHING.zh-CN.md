@@ -44,8 +44,8 @@ KernelSU root 和 USB 调试权限。活动槽必须为 **A**，原厂固件须�
 [已验证组合](../packaging/installation.json)中；下方 `check-device` 会在进入 RAM 桌面前检查。**首次分区会清除 Android 的应用、账户和文件，请先将个人数据备份到电脑。**
 已有 `linux_rootfs` / `linux_data` 的设备跳过本节，直接使用后面的重装步骤。
 
-该分区工具已用真实 `sgdisk` 在模拟磁盘上验证；新版首次准备流程尚待真机验收。
-分区方案沿用已装机的布局：Android 200 GiB、Linux 根分区 60 GiB，其余为 Linux 数据。
+该分区工具已在上述机型上完成分区创建和 Android 数据清除验证。
+分区方案为 Android 200 GiB、Linux 根分区 60 GiB，其余为 Linux 数据。
 它不改变活动槽、原厂启动镜像或其他 UFS 分区。
 
 按[构建指南](BUILD.zh-CN.md)构建设备包时，先在 `build-debs.py` 命令加入 `--debug`，
@@ -123,7 +123,8 @@ fastboot -s "$device_serial" reboot
 ```
 
 完成 Android 的初始化；若原厂恢复界面要求格式化数据，完成该步骤。重新安装 KernelSU
-管理应用，恢复 USB 调试和 root 授权。从电脑把模块传到平板：
+管理应用，恢复 USB 调试，并在 KernelSU 的“超级用户”中允许 **Shell（ADB）** 使用 root。
+清除 Android 数据会重置这项授权；仅开启 USB 调试还不够。从电脑把模块传到平板：
 
 ```sh
 adb -s "$device_serial" push out/erhai-switch-v0.1.0.zip /sdcard/Download/

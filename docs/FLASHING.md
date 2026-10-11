@@ -56,9 +56,8 @@ The `check-device` command below checks these before entering the RAM desktop. *
 accounts and files. Back up personal data to the host first.** Skip this section
 if `linux_rootfs` and `linux_data` already exist.
 
-The new preparation tool has passed real `sgdisk` checks on a simulated disk;
-this first-install preparation workflow still needs hardware acceptance. It
-uses the established allocation: 200 GiB Android, 60 GiB Linux root and the
+Partition creation and Android data erasure have been tested on the device
+specified above. The allocation is 200 GiB Android, 60 GiB Linux root and the
 remaining space for Linux home. It leaves the active slot, stock boot images
 and other UFS partitions unchanged.
 
@@ -143,8 +142,9 @@ fastboot -s "$device_serial" reboot
 ```
 
 Complete Android setup. If stock recovery requests a data format, complete that
-step. Reinstall the KernelSU manager and restore USB debugging and root access.
-Transfer the module from the host:
+step. Reinstall the KernelSU manager, enable USB debugging, and grant **Shell (ADB)**
+root access under KernelSU's Superuser page. Erasing Android data resets this
+grant; enabling USB debugging alone is not enough. Transfer the module from the host:
 
 ```sh
 adb -s "$device_serial" push out/erhai-switch-v0.1.0.zip /sdcard/Download/

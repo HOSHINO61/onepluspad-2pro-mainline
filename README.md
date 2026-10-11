@@ -18,10 +18,10 @@ primarily in Chinese.
 - **Device scope:** OnePlus Pad 2 Pro, **OPD2413 / erhai / SM8750P**. Testing has
   used a **16 GB RAM / 512 GB storage** unit. OnePlus Pad 3, other capacities and
   other firmware or partition layouts have not been validated.
-- **Installation scope:** clean reinstallation and dual-boot switching have been
-  tested on an existing Linux layout; general repartitioning is not provided. Read the
-  [installation and recovery notes](docs/FLASHING.md) before using the tools.
-  The switcher does not install Ubuntu on a fresh tablet.
+- **Installation scope:** first-time partition preparation, Linux installation
+  and reinstallation are provided for the 512 GB model. First-time partitioning
+  erases Android data. See the [installation and recovery guide](docs/FLASHING.md)
+  for firmware and layout requirements.
 - **Power:** reliable net charging under Linux is unresolved. Return to Android
   to charge; Fastboot is not a charging fallback. Backlight-only screen blanking
   also consumes more power than normal standby.
