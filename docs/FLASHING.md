@@ -76,10 +76,13 @@ python3 tools/build-mainline-boot.py --output out/ram-desktop \
   --cmdline-extra 'erhai.session=1800 erhai.debug=1'
 python3 tools/package-switch.py
 ln -sf "$PWD/tools/prepare-dualboot.py" out/desktop-root/prepare-dualboot.py
+mkdir -p out/desktop-root/rootfs.squashfs.parts
+split -b 64M -d out/desktop-root/rootfs.squashfs out/desktop-root/rootfs.squashfs.parts/part
 python3 -m http.server 8088 --bind 0.0.0.0 --directory out/desktop-root
 ```
 
-Keep the server running. In another host terminal, select the tablet, save its
+The chunks avoid the current USB stall during long transfers. They can be removed
+after the download. Keep the server running. In another host terminal, select the tablet, save its
 boot images and start the temporary image:
 
 ```sh

@@ -61,9 +61,12 @@ python3 tools/build-mainline-boot.py --output out/ram-desktop \
   --cmdline-extra 'erhai.session=1800 erhai.debug=1'
 python3 tools/package-switch.py
 ln -sf "$PWD/tools/prepare-dualboot.py" out/desktop-root/prepare-dualboot.py
+mkdir -p out/desktop-root/rootfs.squashfs.parts
+split -b 64M -d out/desktop-root/rootfs.squashfs out/desktop-root/rootfs.squashfs.parts/part
 python3 -m http.server 8088 --bind 0.0.0.0 --directory out/desktop-root
 ```
 
+分段文件用于避开当前 USB 长连接传输的停滞；下载完成后可删除 `.parts` 目录。
 保持文件服务器运行。在另一个终端设置目标序列号，备份本机启动镜像，再临时启动：
 
 ```sh
