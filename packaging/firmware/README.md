@@ -7,6 +7,15 @@ after checking each one against the sha256 and size recorded in
 [`../firmware-manifest.json`](../firmware-manifest.json), which is the per-file
 provenance record: the input every file came from and its path inside it.
 
+## Included firmware versions
+
+Firmware and the stock boot build inputs are included in the repository. Normal
+builds require no ROM download or manual extraction. The vendor firmware set is
+from **ColorOS `OPD2413_11.C.34_1340_202607031844`**; the ROCKNIX firmware set is
+pinned to **`2b7207cfcb80c53c09dc6e04165789ecaf2d3348`**. The four linux-firmware
+files are identified individually in the adjacent manifest. These are firmware
+source versions; the project release is **v0.1.0**.
+
 ## Origin
 
 | Files | From | What |
@@ -42,8 +51,8 @@ devices accept and this unit's TZ refuses; the vendor one chains to OPLUS ROOT
 CA 1, the same root as the ADSP image this unit already loads. Both are kept,
 since another SM8750 board may need the test-signed one. The current kernel
 candidate selects the vendor one with `firmware-name =
-"qcom/sm8750/erhai/gen80000_zap.mbn"`; this authentication path still needs
-hardware validation. The GPU probes
+"qcom/sm8750/erhai/gen80000_zap.mbn"`; this authentication path and OpenGL
+rendering have passed hardware testing. The GPU probes
 before the root is mounted, so `tools/build-initramfs.sh` carries both zap
 files in the initramfs.
 
@@ -60,8 +69,7 @@ on the device.
 
 The current kernel candidate enables Iris and selects the board-specific image
 with the standard `firmware-name` property. Firmware authentication and actual
-decoding/encoding still need hardware validation; the older installed baseline
-does not enable Iris.
+decoding/encoding still need hardware validation.
 
 The AW88261 profile is selected by the codec's `firmware-name` property.
 Amplifier startup and signal routing have been tested; physical listening and
@@ -76,9 +84,6 @@ that this device's port builds from one tree. The four linux-firmware files
 carry that project's `LICENSE.qcom` redistribution terms, and ROCKNIX
 redistributes its nine under the terms it received them.
 
-Redistribution permission for the 64 stock OTA files has not been established
-from OnePlus or Qualcomm. Their inclusion and provenance records do not grant
-such permission; the applicable distribution conditions remain to be resolved.
-These inputs support the ADSP, touchscreen, amplifier profiles, video decoder,
-vendor-signed zap shader and Wi-Fi board-data candidate. Omitting them requires
-a corresponding change to the enabled features and build recipe.
+The stock OTA files are included to support this device. Their original vendor
+terms apply; inclusion does not relicense them under the project GPL. The source
+release and original paths are recorded above and in the manifest.

@@ -176,6 +176,22 @@ python3 tools/install.py --serial "$device_serial" --work "$install_work" --phas
 
 该命令恢复 Android 启动三件套并读回核对；Linux 分区保持重装后的内容。
 
+## 日常使用与 USB 调试
+
+首次分区准备使用 `--debug` 构建，包含免认证的 USB root shell 和文件服务。
+需要继续开发时可以保留，并仅连接可信电脑。日常使用要关闭整个启动过程的调试，
+请按[构建指南](BUILD.zh-CN.md#设备包与图形组件)重新打包同版本设备包，省略 `--debug`，
+并使用新的空输出目录 `--output out/device-packages-normal`，避免混入旧调试包；
+无需重编内核或重建 Ubuntu 根系统。将生成的 `device-packages-normal` 目录传入平板，
+在平板终端执行：
+
+```sh
+sudo apt install ./device-packages-normal/*.deb && sudo reboot
+```
+
+普通包替换调试启动镜像，重启后不再启用 USB shell、HTTP 和调试 DHCP。
+只停止桌面上的调试服务不能关闭调试镜像在启动早期提供的通道。
+
 ## 异常与完整恢复
 
 若平板无响应，同时按住 **电源键＋音量上键约 15 秒**，屏幕熄灭或出现 OnePlus

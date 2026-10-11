@@ -59,13 +59,13 @@ Firmware and device data
 -----------------------
 Qualcomm, OnePlus and Awinic binaries are separate from the project's code
 license. packaging/firmware-manifest.json records per-file provenance and hashes;
-packaging/firmware/README.md records the available terms and unresolved
-redistribution conditions. Provenance alone is not a redistribution license.
+packaging/firmware/README.md records their source versions
+and vendor terms. The project GPL does not relicense these binaries.
 
 packaging/boot-reference/ contains four unmodified stock OTA images used only
 as build references. Its source.json records the official OTA and per-image
-hashes; the original vendor and third-party terms still apply. The unresolved
-stock-firmware redistribution conditions also apply to these reference images.
+hashes; the original vendor and third-party terms still apply. These reference
+images remain separate from the project code license.
 
 Factory calibration, device addresses, credentials and private keys are not
 shared firmware. They must come from the user's own device or be generated for

@@ -210,6 +210,25 @@ python3 tools/install.py --serial "$device_serial" --work "$install_work" --phas
 This restores and verifies the Android boot triplet. The Linux partitions retain
 the newly installed contents.
 
+## Daily use and USB diagnostics
+
+First-time partition preparation uses a `--debug` build with an unauthenticated
+USB root shell and file service. Keep it only for development with a trusted host.
+To disable diagnostics throughout boot, rebuild the same release's device packages
+following the [build guide](BUILD.md#device-packages), omitting `--debug` and using
+a new empty output directory, `--output out/device-packages-normal`, to keep old
+diagnostic packages out of the installation.
+The kernel and Ubuntu root filesystem do not need rebuilding. Transfer the resulting
+`device-packages-normal` directory to the tablet, then run in its terminal:
+
+```sh
+sudo apt install ./device-packages-normal/*.deb && sudo reboot
+```
+
+The regular package replaces the diagnostic boot images. After reboot, the USB
+shell, HTTP service and diagnostic DHCP stay disabled. Stopping only the desktop
+services does not disable the early-boot channels in a diagnostic image.
+
 ## Failure and full stock recovery
 
 If the tablet stops responding, hold **Power + Volume Up for about 15 seconds**.

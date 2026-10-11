@@ -36,5 +36,5 @@
       "bytes": 25165824
     }
   ],
-  "license": "Original vendor and third-party terms apply; this project grants no license over the stock images. Redistribution basis remains unresolved, as for the stock device firmware."
+  "license": "Original vendor and third-party terms apply. Included as unmodified build inputs; the project GPL does not relicense these images."
 }

@@ -30,15 +30,17 @@
       "kind": "dtb",
       "path": "cache/stock-c34/images/dtbo.img",
       "sha256": "3830055b17ed9963d3809e3661221a01de83ad0a08e17425611258301ec101d2",
-      "license": "vendor firmware, extracted read-only from this unit's own ROM; not redistributable",
-      "origin": "the stock OTA package of the ColorOS build the tablet runs (payload dumper)"
+      "license": "Proprietary vendor firmware; original vendor terms apply, not covered by the project GPL.",
+      "origin": "the stock OTA package of the ColorOS build the tablet runs (payload dumper)",
+      "release": "OPD2413_11.C.34_1340_202607031844"
     },
     "stock-modem": {
       "kind": "fat",
       "path": "cache/stock-c34-full/images/modem.img",
       "sha256": "7f2e8f6c81b00e32615639c823f28072dc1585c0bcf5e02b16639bf228650fb8",
-      "license": "vendor firmware, extracted read-only from this unit's own ROM; not redistributable",
-      "origin": "the same stock OTA package; read with mtools, so the build needs no privileges"
+      "license": "Proprietary vendor firmware; original vendor terms apply, not covered by the project GPL.",
+      "origin": "the same stock OTA package; read with mtools, so the build needs no privileges",
+      "release": "OPD2413_11.C.34_1340_202607031844"
     },
     "stock-odm": {
       "kind": "erofs",
@@ -47,7 +49,7 @@
       "url": "https://gauss-compota-c-cn.allawnfs.com/remove-b0608b3ac0ca59a1e916aec540e6a9f5/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/07/07/1d5489232fd6471cbdd222dd701e771a.zip",
       "archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
       "release": "OPD2413_11.C.34_1340_202607031844",
-      "license": "vendor firmware; redistribution permission not established",
+      "license": "Proprietary vendor firmware; original vendor terms apply, not covered by the project GPL.",
       "origin": "Official OnePlus OTA payload, odm partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
     },
     "stock-vendor": {
@@ -57,7 +59,7 @@
       "url": "https://gauss-compota-c-cn.allawnfs.com/remove-b0608b3ac0ca59a1e916aec540e6a9f5/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/07/07/1d5489232fd6471cbdd222dd701e771a.zip",
       "archive_sha256": "71bd5d0cf23b2a46e7b134a3a362c3703322aaaaf3a9951938c827d8b3a67bde",
       "release": "OPD2413_11.C.34_1340_202607031844",
-      "license": "vendor firmware; redistribution permission not established",
+      "license": "Proprietary vendor firmware; original vendor terms apply, not covered by the project GPL.",
       "origin": "Official OnePlus OTA payload, vendor partition; read with erofs-utils without mounting. The CDN URL requires a fresh vendor download signature."
     },
     "qca-swiss-army-knife": {

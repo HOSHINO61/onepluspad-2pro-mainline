@@ -35,7 +35,8 @@ primarily in Chinese.
 ## 🚀 Getting Started
 
 Device firmware and stock boot build inputs are included; no manual ROM
-extraction is needed. Run `tools/prepare-inputs.py` as described in the build guide.
+extraction is needed. Stock inputs use **ColorOS `OPD2413_11.C.34_1340_202607031844`**;
+other firmware sources are listed in the [firmware notes](packaging/firmware/README.md). Run `tools/prepare-inputs.py` as described in the build guide.
 
 | I want to | Read |
 |---|---|
