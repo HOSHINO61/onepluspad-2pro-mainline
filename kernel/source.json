@@ -3,7 +3,7 @@
     "repository_layout": "Separate Git checkout at kernel/linux under ERHAI_WORKSPACE (the integration checkout by default)",
     "upstream": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
     "baseline_tag": "v7.2",
-    "branch": "erhai/usb-serial",
+    "branch": "erhai/v0.1",
     "commit": "d1fc55f6bfabfcce655d7b28bddd97a3f22df7dd",
     "board_dts": "arch/arm64/boot/dts/qcom/sm8750-erhai.dts",
     "config_fragment": "arch/arm64/configs/erhai-firstboot.config",

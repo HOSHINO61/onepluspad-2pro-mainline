@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: metapackages
 Priority: optional
-Depends: @KERNEL_PACKAGE@ (= @VERSION@), erhai-device-support (>= 0.1.22~)
+Depends: @KERNEL_PACKAGE@ (= @VERSION@), erhai-device-support (>= 0.1.0~)
 Description: Current OnePlus Pad 2 Pro (erhai) kernel
  Depends on the selected versioned kernel payload. Each payload owns its
  matching signed boot images and module tree, so upgrades preserve the

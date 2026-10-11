@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: erhai-device-support (>= 0.1.21~), busybox-static (>= 1:1.36.1), iproute2, bash, systemd, udev, init-system-helpers
+Depends: erhai-device-support (>= 0.1.0~), busybox-static (>= 1:1.36.1), iproute2, bash, systemd, udev, init-system-helpers
 Description: Optional USB NCM diagnostics for the OnePlus Pad 2 Pro
  Provides separately supervised DHCP, HTTP and root-shell services on the
  development USB link. Every service requires erhai.debug=1 on the kernel

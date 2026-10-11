@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: systemd, python3, bluez, libglib2.0-bin, erhai-display-power (>= 0.1.57~)
+Depends: systemd, python3, bluez, libglib2.0-bin, erhai-display-power (>= 0.1.0~)
 Pre-Depends: dpkg (>= 1.17.14)
 Description: OnePlus Pad 2 Pro (erhai) device support
  Everything the mainline port needs in the running system that is neither a
@@ -43,13 +43,10 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  erhai-kernel and written by erhai-switch. Left enabled it fails and takes
  dracut's configure down with it.
  .
- The kernel's Gunyah hardware watchdog stays off by default: a drop-in in
- /usr/lib/systemd/system.conf.d keeps systemd from arming it, including at
- reboot, where systemd's 10 minute default is longer than the 32 second
- hardware limit. The opt-in variant in
- /usr/share/erhai-device-support/watchdog, installed under the same name in
- /etc/systemd/system.conf.d, has systemd pet it with a 30 second timeout so
- that a hard lockup resets the tablet instead of leaving it hung.
+ The Gunyah hardware watchdog stays disabled by default. It did not reset
+ this tablet during the controlled test, so it cannot be relied on for
+ recovery from a hard lockup. The optional configuration in
+ /usr/share/erhai-device-support/watchdog is for driver development only.
  .
  Nothing here is tied to a particular kernel build. The boot images belong to
  erhai-kernel, which drives this package's installer from its own postinst.
