@@ -45,6 +45,7 @@ other firmware sources are listed in the [firmware notes](packaging/firmware/REA
 | Build the kernel and device components | [Build guide](docs/BUILD.md) |
 | Check installation requirements and recovery | [Installation and recovery](docs/FLASHING.md) |
 | Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
+| Check suspend and the power button | [System suspend](docs/SUSPEND.md) |
 | Contribute code or report a problem | [Contributing](CONTRIBUTING.md) |
 | Read release history | [Changelog](CHANGELOG.md) |
 
@@ -121,11 +122,11 @@ development are not included in the supported feature set.
 
 | Feature | Component / Implementation | Status | Scope and limitations |
 |---|---|---|---|
-| Power button | Linux input / GNOME | 🟡 | Physical screen blank/wake verified. Only the backlight turns off; password re-entry after locking needs testing. |
+| Power button | Linux input / GNOME | 🟡 | Locks and blanks the display. With `/etc/erhai/power-key-action` set to `suspend`, a press also enters system suspend, and the same button wakes the tablet. Password re-entry after locking needs testing. |
 | CPU frequency and temperature | SCMI / IIO / thermal | 🟡 | Frequency scaling and temperature readings work. Sustained-load thermal control and enclosure-temperature management remain incomplete. |
 | Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
 | Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
-| Suspend and resume | Linux power management | 🟡 | Timed wake cycles passed with USB attached. Power-button wake, unplugged standby life and peripheral recovery need testing. |
+| Suspend and resume | Linux power management | 🟡 | s2idle enters and exits, and both the power button and the PMIC RTC wake it. Unplugged standby life, peripheral recovery and the deepest SoC power states need work; the firmware-advertised `deep` state is not used by default. |
 | RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after restarting and requires time synchronization. |
 | Snap applications | AppArmor / snapd / graphics runtime | ❌ | Full confinement and graphical Snap apps are unsupported in this release. The selected kernel does not enable AppArmor. |
 | Android applications | Android runtime | ❌ | Waydroid is not integrated. |

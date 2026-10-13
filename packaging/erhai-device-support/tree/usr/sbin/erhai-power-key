@@ -28,6 +28,26 @@ KEY_LEFTCTRL = 29
 EVIOCGRAB = 0x40044590
 
 
+# Written by the suspend cycle hook in its *pre* phase, i.e. before the tablet
+# suspends and therefore before any press that is delivered on resume. Reading
+# a post-phase marker instead was racy: userspace is thawed before that hook
+# runs, so the service could see the resuming press first and suspend again.
+#
+# CLOCK_MONOTONIC keeps running across s2idle on this board, so clocks cannot
+# detect the suspend either. Consumed once per handled press.
+RESUME_FLAG = Path('/run/erhai-suspend-cycle')
+
+
+def suspended_since_last_press():
+    if not RESUME_FLAG.exists():
+        return False
+    try:
+        RESUME_FLAG.unlink()
+    except OSError:
+        pass
+    return True
+
+
 def command(argv, **kwargs):
     result = subprocess.run(argv, text=True, capture_output=True, timeout=8, **kwargs)
     if result.returncode:
@@ -69,6 +89,33 @@ def screensaver(info, method, *args):
 # Written by erhai-display-power-mode; read at every press, so a switch needs
 # no restart of this service.
 MODE_MARKERS = (Path('/run/erhai/display-power-mode'), Path('/etc/erhai/display-power-mode'))
+
+# Opt-in system suspend. Written by whoever enables it (an image default or the
+# user); read at every press for the same reason as the display mode. When it is
+# absent the service only locks and blanks, which is the shipped behaviour.
+SUSPEND_MARKERS = (Path('/run/erhai/power-key-action'), Path('/etc/erhai/power-key-action'))
+
+
+def suspend_requested():
+    for marker in SUSPEND_MARKERS:
+        try:
+            if marker.read_text().strip() == 'suspend':
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def suspend():
+    """Enter system suspend when opted in, and do nothing otherwise.
+
+    The lock is already active at this point, so the resume path keeps the
+    authentication boundary: waking restores the display only.
+    """
+    if not suspend_requested():
+        return
+    command(['systemctl', '--no-block', 'suspend'])
+    print('power key: system suspend requested', flush=True)
 
 
 def standard_path():
@@ -140,12 +187,21 @@ class WakeInput:
         os.close(self.fd)
 
 
-def toggle(wake_input):
+def toggle(wake_input, resumed=False):
     info = active_session()
     # One backend for the whole press, even if the mode switches meanwhile.
     standard = standard_path()
     display_mode = mutter_mode if standard else power_mode
     via = 'Mutter' if standard else 'backlight service'
+    if resumed:
+        # The tablet just came back from suspend, and the resume path already
+        # restored the display. This press only clears the shell's black
+        # overlay; blanking or suspending here is what made a wake fall
+        # straight back asleep, which is indistinguishable from not waking.
+        display_mode(info, 0)
+        wake_input.wake()
+        print(f'power key: display on after resume via {via}; suspend suppressed', flush=True)
+        return
     mode = display_mode(info)
     if mode in (1, 2, 3):
         # Deactivating ScreenSaver slides GDM's login group offscreen too.
@@ -163,6 +219,7 @@ def toggle(wake_input):
         # needs no ScreenSaver activation and must not enter its idle policy.
         display_mode(info, 3)
         print(f'power key: display off via {via} (greeter)', flush=True)
+        suspend()
         return
     if info.get('LockedHint') != 'yes':
         screensaver(info, 'Lock')
@@ -174,6 +231,7 @@ def toggle(wake_input):
         time.sleep(0.05)
     display_mode(info, 3)
     print(f'power key: display off via {via} ({info["Class"]})', flush=True)
+    suspend()
 
 
 def main():
@@ -194,6 +252,7 @@ def main():
             data = os.read(fd, EVENT.size * 16)
             if not data:
                 return
+            handled = False
             for _seconds, _usec, kind, code, value in EVENT.iter_unpack(data):
                 if kind != 1 or code != KEY_POWER:
                     continue
@@ -201,8 +260,15 @@ def main():
                     pressed = True
                 elif value == 0 and pressed:
                     pressed = False
+                    if handled:
+                        # A press made while suspended can deliver its press and
+                        # release together with the wake; act once per read.
+                        continue
+                    handled = True
+                    # The suspend cycle flag is authoritative and is consumed
+                    # here, once per handled press.
                     try:
-                        toggle(wake_input)
+                        toggle(wake_input, suspended_since_last_press())
                     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
                         print(f'power key: {error}', flush=True)
     finally:

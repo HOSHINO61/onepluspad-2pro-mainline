@@ -38,6 +38,7 @@
 | 编译内核与设备组件 | [构建指南](docs/BUILD.zh-CN.md) |
 | 查看安装条件与恢复方式 | [安装与恢复说明](docs/FLASHING.zh-CN.md) |
 | 开发或调整图形组件 | [图形集成说明](docs/GRAPHICS.md) |
+| 查看休眠与电源键 | [系统休眠](docs/SUSPEND.zh-CN.md) |
 | 贡献代码或反馈问题 | [参与贡献](CONTRIBUTING.md) |
 | 查看版本记录 | [Changelog](CHANGELOG.md) |
 
@@ -108,11 +109,11 @@
 
 | 功能 | 器件 / 实现 | 状态 | 范围与限制 |
 |---|---|---|---|
-| 电源键 | Linux input / GNOME | 🟡 | 实体键熄屏、亮屏已验证；目前只关闭背光，锁屏后再次输入密码的流程待验。 |
+| 电源键 | Linux input / GNOME | 🟡 | 锁屏并熄屏；把 `/etc/erhai/power-key-action` 设为 `suspend` 时，按下还会进入系统休眠，且同一按键可唤醒。锁屏后再次输入密码的流程待验。 |
 | 调频与测温 | SCMI / IIO / thermal | 🟡 | 调频和温度读取可用；持续负载下的温控与机身温度管理仍不完整。 |
 | 电池信息 | qcom_battmgr / UPower | ✅ | 可读电量、容量与估计剩余时间；充电能力另列。 |
 | Linux 充电 | USB 供电 / 厂商固件 | ❌ | 尚不提供可靠净充电，需要返回 Android 充电。 |
-| 挂起与恢复 | Linux 电源管理 | 🟡 | 连接 USB 时定时唤醒通过；电源键唤醒、拔线待机续航及外设恢复待验。 |
+| 挂起与恢复 | Linux 电源管理 | 🟡 | s2idle 可正常进出，电源键与 PMIC RTC 均可唤醒；拔线待机续航、外设恢复与 SoC 最深电源态仍待完善；固件广告的 `deep` 默认不用。 |
 | RTC | Qualcomm PMIC RTC | 🟡 | 时间读写已验证；重启后出现过时间回退，需要重新校时。 |
 | Snap 应用 | AppArmor / snapd / 图形运行库 | ❌ | 本版不支持完整沙箱与 Snap 图形应用；所选内核未启用 AppArmor。 |
 | Android 应用 | Android 运行时 | ❌ | 尚未集成 Waydroid。 |
