@@ -47,6 +47,7 @@ other firmware sources are listed in the [firmware notes](packaging/firmware/REA
 | Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
 | Check suspend and the power button | [System suspend](docs/SUSPEND.md) |
 | Check the panel backlight and brightness | [Display and backlight](docs/DISPLAY.md) |
+| Bring up or check the sensors | [SSC sensors](docs/SENSORS.md) |
 | Contribute code or report a problem | [Contributing](CONTRIBUTING.md) |
 | Read release history | [Changelog](CHANGELOG.md) |
 
@@ -115,9 +116,10 @@ development are not included in the supported feature set.
 | H.264 software playback | Ubuntu GStreamer packages | 🔧 | Software decoding passed under emulation; player video and sound on the tablet need testing. |
 | Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
 | Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
-| Automatic rotation | SSC / iio-sensor-proxy | 🟡 | The orientation sensor is integrated with the desktop; portrait/landscape changes and touch alignment need physical testing. |
+| Automatic rotation | SSC / iio-sensor-proxy | 🟡 | Orientation reaches the desktop and the screen rotates in the initial-setup session, but not yet in a normal session even with the switch on. The mount matrix is a candidate and unmeasured. |
 | Automatic brightness | SSC ambient light / GNOME | 🟡 | The light sensor is published and the desktop follows it: with `ambient-enabled` on, the level moved from 1500 to 1805 of 2047 while the room light was steady. Idle dimming is switched off below, because this port never blanks the panel. |
-| Other sensors | Gyroscope, compass, proximity and Hall | ❌ | Complete application-facing support is not implemented. |
+| Compass and gyroscope | SSC / iio-sensor-proxy | 🟡 | Magnetometer heading and gyroscope angular velocity are published on D-Bus from a boot of the built image. Application use remains untested. |
+| Proximity and Hall | SSC | ❌ | The DSP does not publish the proximity sensor on this unit, and `libssc` has no Hall or SAR implementation. |
 
 ### Power, Time and Applications
 
