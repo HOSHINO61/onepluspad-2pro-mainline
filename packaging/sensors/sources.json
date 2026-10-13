@@ -215,6 +215,12 @@
           "sha256": "0df2077947affd5d2e197d72b680f7e635f7b8a87c4764c41cbd105d1e358b47",
           "origin": "Project adaptation of the existing SSC accelerometer polling serialization to the upstream light driver",
           "upstream_status": "not submitted; offline candidate"
+        },
+        {
+          "file": "patches/iio-sensor-proxy/0006-iio-sensor-proxy-expose-the-SSC-gyroscope.patch",
+          "sha256": "409a54b66b5c3822658db4addf7319e2ac5ad8c2c96f8b3229eaff18c22c97f0",
+          "origin": "Local erhai bring-up: expose the Qualcomm Sensor Core gyroscope over D-Bus (HasGyroscope, AngularVelocityX/Y/Z, ClaimGyroscope/ReleaseGyroscope) using a new SSC gyroscope driver",
+          "upstream_status": "not submitted; offline candidate"
         }
       ]
     }
