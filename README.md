@@ -46,6 +46,7 @@ other firmware sources are listed in the [firmware notes](packaging/firmware/REA
 | Check installation requirements and recovery | [Installation and recovery](docs/FLASHING.md) |
 | Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
 | Check suspend and the power button | [System suspend](docs/SUSPEND.md) |
+| Check the panel backlight and brightness | [Display and backlight](docs/DISPLAY.md) |
 | Contribute code or report a problem | [Contributing](CONTRIBUTING.md) |
 | Read release history | [Changelog](CHANGELOG.md) |
 

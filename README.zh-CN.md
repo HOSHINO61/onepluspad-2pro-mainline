@@ -39,6 +39,7 @@
 | 查看安装条件与恢复方式 | [安装与恢复说明](docs/FLASHING.zh-CN.md) |
 | 开发或调整图形组件 | [图形集成说明](docs/GRAPHICS.md) |
 | 查看休眠与电源键 | [系统休眠](docs/SUSPEND.zh-CN.md) |
+| 查看背光与亮度 | [显示与背光](docs/DISPLAY.zh-CN.md) |
 | 贡献代码或反馈问题 | [参与贡献](CONTRIBUTING.md) |
 | 查看版本记录 | [Changelog](CHANGELOG.md) |
 
