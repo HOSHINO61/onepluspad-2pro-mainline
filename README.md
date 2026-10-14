@@ -114,7 +114,7 @@ development are not included in the supported feature set.
 | Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
 | Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
 | Automatic rotation | SSC / iio-sensor-proxy | 🟡 | The orientation sensor is integrated with the desktop; portrait/landscape changes and touch alignment need physical testing. |
-| Automatic brightness | SSC ambient light / GNOME | 🔧 | Raw ambient-light samples have been captured on hardware. Physical light response and automatic brightness changes need testing. |
+| Automatic brightness | SSC ambient light / GNOME | 🟡 | The light sensor is published and the desktop follows it: with `ambient-enabled` on, the level moved from 1500 to 1805 of 2047 while the room light was steady. Idle dimming is switched off below, because this port never blanks the panel. |
 | Other sensors | Gyroscope, compass, proximity and Hall | ❌ | Complete application-facing support is not implemented. |
 
 ### Power, Time and Applications
