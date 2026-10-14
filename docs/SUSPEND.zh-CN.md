@@ -2,8 +2,9 @@
 
 [English](SUSPEND.md) · [项目首页](../README.zh-CN.md)
 
-高通平台没有与 suspend-to-RAM 对等的状态：真正可用的是 `s2idle`（suspend to idle），
-本项目即以它为准。本页记录真机实测结果、电源键如何接到休眠，以及你自己怎么测。
+本项目默认使用 `s2idle`（suspend to idle）。固件也提供 `deep`
+（PSCI SYSTEM_SUSPEND），不作默认的原因见“默认值”一节。
+本页记录真机实测结果、电源键如何接到休眠，以及你自己怎么测。
 
 ## 真机实测
 
@@ -26,8 +27,11 @@ compatible 的默认值，而 `qcom,pmk8350-pwrkey` 对应
 ## 默认值
 
 `tools/lib/boot_profiles.py` 里共用的 cmdline 固定 `mem_sleep_default=s2idle`。
-没有它，内核会偏好固件广告、而本板从未验证过的 `deep`。同 SoC 的小米平板 8 Pro
-（`piano`）基于同一理由做了同样选择。
+没有它，内核会偏好固件广告的 `deep`。deep 在本板上跑过 300 秒 RTC 定时挂起，
+显示、触控、Wi-Fi、蓝牙、电池和传感器都能恢复；但 deep 下 ADSP 经 IPCC/glink 中断
+发来的任何消息都会让整机完整恢复，曾因此提前醒来。
+s2idle 处理这类中断时不会离开挂起。
+同 SoC 的小米平板 8 Pro（`piano`）也使用同样的默认值。
 
 ## 电源键
 
@@ -84,8 +88,8 @@ ddr   Count: 0
 
 * s2idle 下没有 CX/AOSS 塌陷（见上），因此预期是"能撑过一天"，不是"数天"。属于平台性质，
   与骁龙 X Elite 笔记本相同。
-* `deep`（PSCI SYSTEM_SUSPEND）由固件广告，但本板未验证，默认不用。此前在本板的跟踪发现
-  deep 会提前结束且没有武装的唤醒中断：IPCC 汇总中断是 `IRQF_NO_SUSPEND`，其 irqchip 置了
+* `deep`（PSCI SYSTEM_SUSPEND）默认不用。此前在本板的跟踪发现 deep 会提前结束
+  且没有武装的唤醒中断：IPCC 汇总中断是 `IRQF_NO_SUSPEND`，其 irqchip 置了
   `IRQCHIP_SKIP_SET_WAKE`，于是远程处理器的信号可以完全绕过 `pm_system_irq_wakeup()`。
 * 长挂起后的外设恢复（Wi-Fi、USB、音频、传感器）、拔线待机续航、以及 SoC 最深电源态仍待完善。
 * 接近、霍尔与 SAR 与休眠无关，在本板上仍不可用。

@@ -2,9 +2,9 @@
 
 [中文](SUSPEND.zh-CN.md) · [Project overview](../README.md)
 
-Qualcomm platforms have no suspend-to-RAM equivalent: `s2idle` (suspend to idle) is the
-state that actually works, and it is what this project ships. This page records what has
-been measured on the tablet, how the power button is wired to it, and how to measure a
+This project defaults to `s2idle` (suspend to idle). The firmware also offers `deep` (PSCI
+SYSTEM_SUSPEND); the Defaults section explains why it is not the default. This page records
+what has been measured on the tablet, how the power button is wired to it, and how to measure a
 suspend yourself.
 
 ## Measured on hardware
@@ -29,9 +29,11 @@ line the SPMI node already points at.
 ## Defaults
 
 The shared command line in `tools/lib/boot_profiles.py` pins `mem_sleep_default=s2idle`.
-Without it the kernel prefers the firmware-advertised `deep`, which has never been
-exercised on this board. The same choice was made for the other SM8750-class tablet
-(Xiaomi Pad 8 Pro, `piano`), and for the same reason.
+Without it the kernel prefers the firmware-advertised `deep`. Deep suspend has completed
+300-second RTC-timed cycles on this board with the display, touch, Wi-Fi, Bluetooth, battery
+and sensors recovering, but in deep any ADSP message on the IPCC/glink interrupts completes a
+full resume, which caused early wakes. s2idle handles such interrupts without leaving suspend.
+The other SM8750-class tablet (Xiaomi Pad 8 Pro, `piano`) uses the same default.
 
 ## Power button
 
@@ -98,11 +100,10 @@ whose `wakeup_count` does not move did not wake the system, even if its IRQ fire
 * No CX or AOSS collapse in s2idle (see the counters above), so expect the tablet to get
   through a day, not days at a time. This is a platform property shared with the
   Snapdragon X Elite laptops.
-* `deep` (PSCI SYSTEM_SUSPEND) is advertised by the firmware but not exercised here and
-  not used by default. Earlier tracing on this board found deep suspends ending early with
-  no armed wake-up IRQ: the IPCC summary interrupt is `IRQF_NO_SUSPEND` and its irqchip
-  sets `IRQCHIP_SKIP_SET_WAKE`, so a signal from a remote processor can bypass
-  `pm_system_irq_wakeup()` entirely.
+* `deep` (PSCI SYSTEM_SUSPEND) is not used by default. Earlier tracing on this board found deep
+  suspends ending early with no armed wake-up IRQ: the IPCC summary interrupt is
+  `IRQF_NO_SUSPEND` and its irqchip sets `IRQCHIP_SKIP_SET_WAKE`, so a signal from a remote
+  processor can bypass `pm_system_irq_wakeup()` entirely.
 * Peripheral recovery after a long suspend (Wi-Fi, USB, audio, sensors), unplugged standby
   life, and the deepest SoC states still need work.
 * Proximity, Hall and SAR are unrelated to suspend and remain unavailable on this board.

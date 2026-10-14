@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Shared boot policy for temporary images and installed GKI triplets."""
 
-# The firmware advertises PSCI SYSTEM_SUSPEND, so the kernel prefers "deep"
-# (/sys/power/mem_sleep reports "s2idle [deep]"). Deep has never been exercised
-# on this board, and an aborted deep suspend gives no debug channel, so default
-# every profile to s2idle, the variant the other SM8750-class targets ship.
+# The firmware advertises PSCI SYSTEM_SUSPEND, so the kernel prefers "deep".
+# Deep suspend resumes on this board, but in deep any ADSP message on the
+# IPCC/glink interrupts (IRQF_NO_SUSPEND, never armed as wakeups) completes a
+# full resume, which made earlier tests wake early. s2idle handles such
+# interrupts without leaving suspend, and the other SM8750-class tablet
+# ships it as well.
 CMDLINE = 'rdinit=/init panic=15 erhai.boot=mainline-dev mem_sleep_default=s2idle'
 
 # Display blanking is backlight-only in the device package. No experimental
