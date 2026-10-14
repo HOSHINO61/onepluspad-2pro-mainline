@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Compass and gyroscope readings through iio-sensor-proxy
+  ([#1](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/1)).
+- System suspend defaults to s2idle
+  ([#2](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/2)).
+- Opt-in power-key suspend through `/etc/erhai/power-key-action`; the default
+  is still lock and blank
+  ([#3](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/3)).
+- GNOME idle dimming is off, because the panel is never blanked automatically
+  ([#4](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/4)).
+- Notes on the panel brightness paths
+  ([#6](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/6)).
+
+Thanks to @Pidbid for these contributions.
+
 ## v0.1.0
 
 Developer source preview for the OnePlus Pad 2 Pro (OPD2413).
