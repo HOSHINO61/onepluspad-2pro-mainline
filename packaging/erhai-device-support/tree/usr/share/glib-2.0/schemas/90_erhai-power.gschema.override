@@ -1,12 +1,17 @@
-# Tablet power button: lock and blank through GNOME, never suspend or power off.
+# Tablet power button: lock and blank through GNOME; system suspend is opt-in
+# through the device power-key service.
 [org.gnome.settings-daemon.plugins.power]
-# The device power-key service handles the button. Keep the desktop action
-# inert while it is not running: GNOME's default would suspend the system,
-# and resume of the display from system suspend has not been validated.
+# The device power-key service handles the button: it locks and blanks, and it
+# suspends only when the opt-in marker asks for it. Keep the desktop action
+# inert so the two never fight over the key.
 power-button-action='nothing'
 sleep-inactive-ac-type='nothing'
 sleep-inactive-battery-type='nothing'
-idle-dim=true
+# This port keeps the panel unblanked (idle-delay 0 below), so GNOME's dim
+# would never be undone by a blank. It just parks the panel at
+# idle-brightness (30% of the scale, measured 628 of 2047) until something
+# else moves the backlight, which reads as "the screen dimmed and stayed dim".
+idle-dim=false
 
 [org.gnome.desktop.session]
 # Retaining MDSS power avoids frame-commit failures after blanking, but
