@@ -218,7 +218,7 @@ class RecipeTest(unittest.TestCase):
 
     def test_udev_rule_limits_proxy_to_gated_sensors(self):
         rule = (TREE / 'usr/lib/udev/rules.d/81-erhai-sensors.rules').read_text()
-        self.assertIn('ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel ssc-light"', rule)
+        self.assertIn('ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel ssc-light ssc-compass ssc-gyro"', rule)
         self.assertIn('ENV{ACCEL_MOUNT_MATRIX}="0, 1, 0; -1, 0, 0; 0, 0, 1"', rule)
         self.assertIn('SYMLINK+="erhai-sensors-fastrpc"', rule)
         # Sensor interrupt lines belong to the DSP; nothing here claims a GPIO.

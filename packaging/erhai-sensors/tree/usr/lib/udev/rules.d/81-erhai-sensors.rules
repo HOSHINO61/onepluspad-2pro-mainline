@@ -12,7 +12,7 @@
 # (80-) announces ssc-light and ssc-compass for every fastrpc-adsp* node.
 # Measured on this unit (RAM desktop, SSC registry imported before the
 # sensor domain attaches):
-#   * ssc-accel    orientation/tilt: works, four-orientation test passed
+#   * ssc-accel    orientation/tilt readings work; the mount matrix below is unmeasured
 #   * ssc-light    auto-brightness: works
 #   * ssc-compass  magnetometer + compass heading: streams real readings
 #   * ssc-gyro     gyroscope: streams real readings (needs the 0006 patch
