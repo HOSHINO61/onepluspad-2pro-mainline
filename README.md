@@ -117,7 +117,7 @@ development are not included in the supported feature set.
 | Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
 | Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
 | Automatic rotation | SSC / iio-sensor-proxy | 🟡 | Orientation reaches the desktop and the screen rotates in the initial-setup session, but not yet in a normal session even with the switch on. The mount matrix is a candidate and unmeasured. |
-| Automatic brightness | SSC ambient light / GNOME | 🟡 | The light sensor is published and the desktop follows it: with `ambient-enabled` on, the level moved from 1500 to 1805 of 2047 while the room light was steady. Idle dimming is switched off below, because this port never blanks the panel. |
+| Automatic brightness | SSC ambient light / GNOME | 🟡 | The light sensor reaches GNOME, and with automatic brightness enabled the backlight level adjusted on hardware (1500 → 1805 of 2047). GNOME idle dimming is off because the panel is never blanked automatically. |
 | Compass and gyroscope | SSC / iio-sensor-proxy | 🟡 | Magnetometer heading and gyroscope angular velocity are published on D-Bus from a boot of the built image. Application use remains untested. |
 | Proximity and Hall | SSC | ❌ | The DSP does not publish the proximity sensor on this unit, and `libssc` has no Hall or SAR implementation. |
 
