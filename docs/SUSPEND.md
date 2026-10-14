@@ -49,16 +49,16 @@ echo suspend > /etc/erhai/power-key-action      # takes effect on the next press
 rm /etc/erhai/power-key-action                  # back to lock-and-blank only
 ```
 
-With the marker present, a press locks and blanks as before and then requests
-`systemctl suspend`. Waking is again a single press: the resume path has already
-restored the display, so the press that resumes the tablet must not be read as "the display is
-on, blank it again". `erhai-suspend-cycle.sh` marks the cycle in its pre phase, before the tablet
-suspends, and the service treats the next press as display restore only, clearing the flag as it
-consumes it. The pre phase is what makes it reliable: a flag written on resume is racy, because
-userspace is thawed before that hook runs, so the service can read the resuming press first and
-suspend again — measured on hardware, 5 of 12 presses were handled correctly with a post-phase
-marker. Clocks cannot help either: `CLOCK_MONOTONIC` keeps running across s2idle on this board, so
-an elapsed-time test sees a gap of zero.
+With the marker present, a press locks and blanks as before and then requests `systemctl
+suspend`. Waking is again a single press: the resume path has already restored the display, so
+the press that resumes the tablet must not be read as "the display is on, blank it again".
+`erhai-suspend-cycle.sh` marks the cycle in its pre phase, before the tablet suspends, and the
+service treats the next press as display restore only if it arrives within 15 s of the resume,
+clearing the flag as it consumes it. The pre phase is what makes it reliable: a flag written on
+resume is racy, because userspace is thawed before that hook runs, so the service can read the
+resuming press first and suspend again — measured on hardware, 5 of 12 presses were handled
+correctly with a post-phase marker. Clocks cannot help either: `CLOCK_MONOTONIC` keeps running
+across s2idle on this board, so an elapsed-time test sees a gap of zero.
 
 `/run/erhai/power-key-action` is read too and takes precedence, so an image or a test can
 enable it for one boot.

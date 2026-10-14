@@ -36,16 +36,27 @@ EVIOCGRAB = 0x40044590
 # CLOCK_MONOTONIC keeps running across s2idle on this board, so clocks cannot
 # detect the suspend either. Consumed once per handled press.
 RESUME_FLAG = Path('/run/erhai-suspend-cycle')
+RESUMED_STAMP = Path('/run/erhai-suspend-resumed')
+RESUME_PRESS_WINDOW = 15
 
 
 def suspended_since_last_press():
     if not RESUME_FLAG.exists():
         return False
     try:
-        RESUME_FLAG.unlink()
+        # The post hook stamps the resume. A flag whose resume is older than
+        # the window was left by another wake source or a failed suspend.
+        stale = time.time() - RESUMED_STAMP.stat().st_mtime > RESUME_PRESS_WINDOW
     except OSError:
-        pass
-    return True
+        # No stamp yet: userspace thawed before the post hook ran, so this
+        # is the press that resumed the tablet.
+        stale = False
+    for path in (RESUME_FLAG, RESUMED_STAMP):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    return not stale
 
 
 def command(argv, **kwargs):

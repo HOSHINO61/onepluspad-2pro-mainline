@@ -2,8 +2,10 @@
 """Authentication boundaries of the tablet's power-key policy."""
 import importlib.machinery
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -130,6 +132,37 @@ class MutterBackendTest(unittest.TestCase):
                 etc.unlink()
                 run.write_text('standard\n')
                 self.assertTrue(key.standard_path())
+
+
+class SuspendCycleTest(unittest.TestCase):
+    def test_no_resume_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            flag, stamp = Path(tmp) / 'cycle', Path(tmp) / 'resumed'
+            with patch.object(key, 'RESUME_FLAG', flag), \
+                    patch.object(key, 'RESUMED_STAMP', stamp):
+                self.assertFalse(key.suspended_since_last_press())
+
+    def test_resume_flag_without_post_stamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            flag, stamp = Path(tmp) / 'cycle', Path(tmp) / 'resumed'
+            flag.touch()
+            with patch.object(key, 'RESUME_FLAG', flag), \
+                    patch.object(key, 'RESUMED_STAMP', stamp):
+                self.assertTrue(key.suspended_since_last_press())
+            self.assertFalse(flag.exists())
+
+    def test_stale_resume_flag_is_consumed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            flag, stamp = Path(tmp) / 'cycle', Path(tmp) / 'resumed'
+            flag.touch()
+            stamp.touch()
+            old = time.time() - 60
+            os.utime(stamp, (old, old))
+            with patch.object(key, 'RESUME_FLAG', flag), \
+                    patch.object(key, 'RESUMED_STAMP', stamp):
+                self.assertFalse(key.suspended_since_last_press())
+            self.assertFalse(flag.exists())
+            self.assertFalse(stamp.exists())
 
 
 if __name__ == '__main__':

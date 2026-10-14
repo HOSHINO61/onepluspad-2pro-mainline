@@ -15,7 +15,18 @@
 #     zero.
 #
 # The service deletes the flag as it consumes it, so a later press is handled
-# normally.
-[ "$1" = pre ] || exit 0
-: > /run/erhai-suspend-cycle
+# normally. The post timestamp lets it discard flags left by another wake
+# source or a failed suspend once the resume-press window has elapsed.
+case "$1" in
+    pre)
+        : > /run/erhai-suspend-cycle
+        rm -f /run/erhai-suspend-resumed
+        ;;
+    post)
+        : > /run/erhai-suspend-resumed
+        ;;
+    *)
+        exit 0
+        ;;
+esac
 exit 0
