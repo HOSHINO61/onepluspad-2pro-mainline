@@ -147,7 +147,7 @@ root access under KernelSU's Superuser page. Erasing Android data resets this
 grant; enabling USB debugging alone is not enough. Transfer the module from the host:
 
 ```sh
-adb -s "$device_serial" push out/erhai-switch-v0.2.0.zip /sdcard/Download/
+adb -s "$device_serial" push out/erhai-switch-v0.2.1.zip /sdcard/Download/
 ```
 
 Select the ZIP from Downloads in KernelSU, install it and reboot Android.
