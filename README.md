@@ -22,10 +22,13 @@ primarily in Chinese.
   and reinstallation are provided for the 512 GB model. First-time partitioning
   erases Android data. See the [installation and recovery guide](docs/FLASHING.md)
   for firmware and layout requirements.
-- **Power:** reliable net charging under Linux is unresolved. Return to Android
-  to charge; Fastboot is not a charging fallback. Backlight-only screen blanking
-  also consumes more power than normal standby; system suspend on the power button
-  is opt-in, see [System suspend](docs/SUSPEND.md).
+- **Power:** Linux draws power from USB, but net charging is not verified. On a
+  computer's USB port with the screen on, the tablet uses more than the port
+  supplies and the battery still drains slowly; wall chargers have not been
+  measured, and the stock fast-charging protocols are not available under Linux.
+  Return to Android to charge; Fastboot is not a charging fallback.
+  Backlight-only screen blanking also consumes more power than normal standby;
+  system suspend on the power button is opt-in, see [System suspend](docs/SUSPEND.md).
 - **Data and recovery:** unlocking the bootloader erases user data. Back up
   personal files and obtain matching stock firmware before changing the device.
   Keep factory calibration and device addresses specific to each tablet.
@@ -130,7 +133,7 @@ development are not included in the supported feature set.
 | Power button | Linux input / GNOME | 🟡 | Locks and blanks the display. With `/etc/erhai/power-key-action` set to `suspend`, a press also enters system suspend, and the same button wakes the tablet. Password re-entry after locking needs testing. |
 | CPU frequency and temperature | SCMI / IIO / thermal | 🟡 | Frequency scaling and temperature readings work. Sustained-load thermal control and enclosure-temperature management remain incomplete. |
 | Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
-| Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
+| Charging in Linux | USB power / vendor firmware | 🔧 | Power is drawn from USB, but net charging is not verified. On a computer's USB port (about 2.5 W) with the screen on, the battery still drains by about 2–3 % per hour. Wall chargers are untested, and the stock fast-charging protocols are not available under Linux. Return to Android to charge. |
 | Suspend and resume | Linux power management | 🟡 | Defaults to s2idle. On the installed v0.2.0 system, 300-second RTC-timed suspends in both display modes resumed the display, touch, Wi-Fi and sensors; power-button wake was verified by a contributor. Unplugged standby life and the deepest SoC power states remain open; the firmware-advertised `deep` state is not used by default. |
 | RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after restarting and requires time synchronization. |
 | Snap applications | AppArmor / snapd / graphics runtime | ❌ | Full confinement and graphical Snap apps are unsupported in this release. The selected kernel does not enable AppArmor. |
