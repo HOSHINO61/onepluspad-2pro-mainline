@@ -38,6 +38,7 @@
 | 了解 Android 与 Ubuntu 如何切换 | [双系统切换](#双系统切换) |
 | 编译内核与设备组件 | [构建指南](docs/BUILD.zh-CN.md) |
 | 查看安装条件与恢复方式 | [安装与恢复说明](docs/FLASHING.zh-CN.md) |
+| 不自己构建、直接用发布镜像安装 | [发布版预构建镜像](docs/FLASHING.zh-CN.md#发布版预构建镜像) |
 | 开发或调整图形组件 | [图形集成说明](docs/GRAPHICS.md) |
 | 查看休眠与电源键 | [系统休眠](docs/SUSPEND.zh-CN.md) |
 | 查看背光与亮度 | [显示与背光](docs/DISPLAY.zh-CN.md) |

@@ -37,6 +37,34 @@ RAM 临时启动不替换启动分区，但使用已安装根系统的临时内�
 写入失败时切换器停止，不自动重启或自动回滚；中断标记会阻止错误更新 Android 备份。
 请保留电脑上的完整 Android 三件套备份；中断后使用下文的 Fastboot 恢复入口。
 
+## 发布版预构建镜像
+
+从 v0.2.1 起，Release 附带本文原本需要自行构建的镜像。安装仍需本仓库检出中的
+`tools/install.py` 和下文列出的主机工具，但无需构建内核、Mesa 或根文件系统。
+
+| 附件 | 用途 |
+|---|---|
+| `ubuntu-pad2pro-版本-rootfs.squashfs.part*` 与 `…-rootfs.manifest.json` | 用于安装的根文件系统，不含 USB 调试通道 |
+| `ubuntu-pad2pro-版本-setup-rootfs.squashfs.part*` 与 `…-setup-rootfs.manifest.json` | 仅供首次准备分区时的临时内存桌面使用，含 USB 调试通道 |
+| `ubuntu-pad2pro-版本-setup-boot.img` | 该临时内存桌面的启动镜像，从主机加载 setup 根文件系统 |
+| `erhai-device-packages-版本.tar` | 升级已有安装用的设备包与传感器包 |
+| `erhai-switch-版本.zip` | Android 侧切换模块 |
+| `SHA256SUMS` | 所有附件及拼接后镜像的校验值 |
+
+在下载目录中拼接并校验（以 v0.2.1 为例；setup 文件只在首次准备分区时需要）：
+
+```sh
+cat ubuntu-pad2pro-v0.2.1-rootfs.squashfs.part* > ubuntu-pad2pro-v0.2.1-rootfs.squashfs
+cat ubuntu-pad2pro-v0.2.1-setup-rootfs.squashfs.part* > ubuntu-pad2pro-v0.2.1-setup-rootfs.squashfs
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+之后用它们替代下文的构建产物：首次准备分区时，把 setup 根文件系统移到
+`out/desktop-root/rootfs.squashfs`，并用 `ubuntu-pad2pro-v0.2.1-setup-boot.img` 代替
+`out/ram-desktop/boot-mainline.img`；安装时，把安装用根文件系统与其清单放在同一目录，
+分别命名为 `rootfs.squashfs` 和 `manifest.json`，再把该 `rootfs.squashfs` 传给 `--rootfs`；
+升级时，解开 `erhai-device-packages-v0.2.1.tar`，按[升级已有安装](#升级已有安装)安装其中的包。
+
 ## 首次准备 Linux 分区
 
 本节只适用于 **512 GB OPD2413 的原厂分区布局**，Bootloader 已解锁，Android 中已有
@@ -202,6 +230,9 @@ sudo apt install ./device-packages-normal/*.deb && sudo reboot
 ```sh
 sudo apt install ./device-packages/*.deb ./sensor-debs/*.deb && sudo reboot
 ```
+
+也可以直接用 Release 里的 `erhai-device-packages-版本.tar`：其中的包不含 USB 调试通道，
+装上后调试安装也会变成普通安装（`tar xf erhai-device-packages-v0.2.1.tar && sudo apt install ./erhai-device-packages-v0.2.1/*.deb`）。
 
 安装时内核包会把新的启动镜像写入活动槽，旧内核包仍保留；安装时导入的传感器注册表保持不变。
 新内核起不来时，按下文的恢复步骤处理。

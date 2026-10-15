@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1
+
+- Prebuilt images are attached to the release: an installation root filesystem
+  without USB diagnostics, the setup root filesystem and boot image for first-time
+  preparation, and the device packages; see "Prebuilt release images" in
+  [FLASHING](docs/FLASHING.md).
+- The Wi-Fi regulatory country follows the system time zone (for example CN for
+  Asia/Shanghai), so a 5 GHz hotspot can be started where the country allows it.
+  Zones without a country keep the world domain. The kernel accepts user country
+  hints for this (`erhai-v0.2.1`).
+
 ## v0.2.0
 
 Device and sensor packages are numbered 0.2.0 and install over v0.1.0 with APT;

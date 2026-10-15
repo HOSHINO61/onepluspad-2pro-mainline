@@ -45,6 +45,7 @@ other firmware sources are listed in the [firmware notes](packaging/firmware/REA
 | Switch between Android and Ubuntu | [Dual boot](#dual-boot) |
 | Build the kernel and device components | [Build guide](docs/BUILD.md) |
 | Check installation requirements and recovery | [Installation and recovery](docs/FLASHING.md) |
+| Install from the release images without building | [Prebuilt release images](docs/FLASHING.md#prebuilt-release-images) |
 | Work on the graphics stack | [Graphics integration](docs/GRAPHICS.md) |
 | Check suspend and the power button | [System suspend](docs/SUSPEND.md) |
 | Check the panel backlight and brightness | [Display and backlight](docs/DISPLAY.md) |

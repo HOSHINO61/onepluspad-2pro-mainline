@@ -47,6 +47,39 @@ The switcher stops on a failed write, without automatically rebooting or
 rolling back. An interruption marker prevents replacing the Android backup. Keep the complete Android triplet
 backup on the host and use the Fastboot recovery procedure below after an interruption.
 
+## Prebuilt release images
+
+Releases from v0.2.1 attach the images this guide otherwise builds. The
+installation still runs `tools/install.py` from this repository's checkout with
+the host tools listed below, but no kernel, Mesa or root filesystem build is needed.
+
+| Asset | Use |
+|---|---|
+| `ubuntu-pad2pro-VERSION-rootfs.squashfs.part*` and `…-rootfs.manifest.json` | Root filesystem to install; no USB diagnostics |
+| `ubuntu-pad2pro-VERSION-setup-rootfs.squashfs.part*` and `…-setup-rootfs.manifest.json` | Root filesystem of the temporary RAM desktop for first-time preparation only; it contains the USB diagnostic channel |
+| `ubuntu-pad2pro-VERSION-setup-boot.img` | Boot image of that temporary RAM desktop; it loads the setup root filesystem from the host |
+| `erhai-device-packages-VERSION.tar` | Device and sensor packages for upgrading an existing installation |
+| `erhai-switch-VERSION.zip` | Android switch module |
+| `SHA256SUMS` | Checksums of every asset and of the joined images |
+
+Join and check the images in the download directory (shown for v0.2.1; the
+setup files are only needed for first-time preparation):
+
+```sh
+cat ubuntu-pad2pro-v0.2.1-rootfs.squashfs.part* > ubuntu-pad2pro-v0.2.1-rootfs.squashfs
+cat ubuntu-pad2pro-v0.2.1-setup-rootfs.squashfs.part* > ubuntu-pad2pro-v0.2.1-setup-rootfs.squashfs
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Then use them in place of the build outputs named below. For first-time
+preparation, move the setup root filesystem to `out/desktop-root/rootfs.squashfs`
+and boot `ubuntu-pad2pro-v0.2.1-setup-boot.img` instead of
+`out/ram-desktop/boot-mainline.img`. For installation, put the installation root
+filesystem and its manifest in one directory as `rootfs.squashfs` and
+`manifest.json`, and pass that `rootfs.squashfs` to `--rootfs`. For an upgrade,
+unpack `erhai-device-packages-v0.2.1.tar` and install its packages as described in
+[Upgrading an existing installation](#upgrading-an-existing-installation).
+
 ## Preparing Linux partitions for the first time
 
 This step is for a **512 GB OPD2413 with its stock partition layout**, an unlocked
@@ -241,6 +274,10 @@ both directories to the tablet, then run in its terminal:
 ```sh
 sudo apt install ./device-packages/*.deb ./sensor-debs/*.deb && sudo reboot
 ```
+
+The release's `erhai-device-packages-VERSION.tar` holds the same packages without
+USB diagnostics; installing them also turns a diagnostic installation into a regular
+one (`tar xf erhai-device-packages-v0.2.1.tar && sudo apt install ./erhai-device-packages-v0.2.1/*.deb`).
 
 The kernel package writes the new boot images to the active slot during the
 installation, and the previous kernel package stays installed. The sensor
