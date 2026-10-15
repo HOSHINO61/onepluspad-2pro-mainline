@@ -1,7 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
 [Unit]
-Description=Set the Wi-Fi regulatory country from the time zone
-ConditionPathExists=/usr/share/zoneinfo/zone.tab
+Description=Set the Wi-Fi regulatory country to CN
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/erhai-wifi-country
+# The WCN7860 starts in the world domain (00), which keeps 5 GHz passive: the
+# tablet joins 5 GHz networks but cannot start a hotspot there. This is a
+# China-market model, and stock Android uses CN (ro.boot.wificountrycode=CN).
+ExecStart=/usr/sbin/iw reg set CN

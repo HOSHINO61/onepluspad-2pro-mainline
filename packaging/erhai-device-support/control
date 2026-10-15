@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: systemd, python3, bluez, libglib2.0-bin, iw, tzdata, wireless-regdb, erhai-display-power (>= 0.1.0~)
+Depends: systemd, python3, bluez, libglib2.0-bin, iw, erhai-display-power (>= 0.1.0~)
 Pre-Depends: dpkg (>= 1.17.14)
 Description: OnePlus Pad 2 Pro (erhai) device support
  Everything the mainline port needs in the running system that is neither a
@@ -38,10 +38,8 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  .
  The radio starts in the world regulatory domain, which keeps 5 GHz passive:
  the tablet joins 5 GHz networks but cannot host a hotspot there.
- erhai-wifi-country maps the system time zone to its country through tzdata's
- zone.tab and passes it with iw when the radio appears and after the time zone
- changes, which a drop-in for systemd-timedated reports. A zone without a
- country, such as UTC, uses the world domain.
+ erhai-wifi-country.service sets CN with iw when the radio appears: this is a
+ China-market model, and stock Android uses the same country.
  .
  It also disables flash-kernel (/etc/flash-kernel/machine = "none", the tool's
  own documented switch). The distribution's initramfs hooks call it whenever a

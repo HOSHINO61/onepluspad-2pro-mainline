@@ -105,8 +105,7 @@ configure)
 		# shellcheck disable=SC2086
 		systemctl start $BT_UNITS $WIFI_UNITS $CHASSIS_UNIT || true
 		# Apply the regulatory country now as well; the udev rule covers the
-		# radio's add event at boot and the timedated drop-in later time zone
-		# changes.
+		# radio's add event at boot.
 		systemctl start erhai-wifi-country.service || true
 		for path in /sys/class/input/event*/device/name; do
 			[ -f "$path" ] || continue
