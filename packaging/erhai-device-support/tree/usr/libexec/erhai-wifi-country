@@ -6,7 +6,7 @@
 # keeps 5 GHz passive: the tablet joins 5 GHz networks, yet cannot start a
 # hotspot there. The time zone chosen during first-run setup names the
 # country the tablet is used in, and tzdata's zone.tab maps every zone to one
-# country. A zone without an entry (UTC, Etc/*) keeps the world domain.
+# country. A zone without an entry (UTC, Etc/*) uses the world domain.
 set -u
 localtime=${ERHAI_LOCALTIME:-/etc/localtime}
 zone_tab=${ERHAI_ZONE_TAB:-/usr/share/zoneinfo/zone.tab}
@@ -20,10 +20,16 @@ if [ -n "$zone" ] && [ -r "$zone_tab" ]; then
 fi
 case $country in
 [A-Z][A-Z]) ;;
-*)
-	echo "erhai-wifi-country: no country for time zone '${zone:-unset}'; keeping the world domain"
-	exit 0
-	;;
+*) country=00 ;;
 esac
+# cfg80211 looks for regulatory.db before the root file system is mounted and
+# does not look again. Without the database it never completes a country
+# hint, and every later hint waits behind that one, so only the first country
+# set after boot would reach the radio. Load the database first.
+iw reg reload 2>/dev/null || true
 iw reg set "$country"
-echo "erhai-wifi-country: regulatory country $country from time zone $zone"
+if [ "$country" = 00 ]; then
+	echo "erhai-wifi-country: no country for time zone '${zone:-unset}'; using the world domain"
+else
+	echo "erhai-wifi-country: regulatory country $country from time zone $zone"
+fi

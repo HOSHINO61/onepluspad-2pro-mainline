@@ -34,21 +34,27 @@ class WifiCountryTest(unittest.TestCase):
 
     def test_zone_with_a_country_sets_it(self):
         out, calls = self.run_script('Asia/Shanghai')
-        self.assertEqual(calls, 'reg set CN\n')
+        # The database is reloaded first: the boot-time load fails before the
+        # root file system is mounted and would block every later hint.
+        self.assertEqual(calls, 'reg reload\nreg set CN\n')
         self.assertIn('regulatory country CN', out)
 
-    def test_zone_without_a_country_keeps_the_world_domain(self):
+    def test_zone_without_a_country_uses_the_world_domain(self):
         out, calls = self.run_script('Etc/UTC')
-        self.assertEqual(calls, '')
-        self.assertIn('keeping the world domain', out)
+        self.assertEqual(calls, 'reg reload\nreg set 00\n')
+        self.assertIn('using the world domain', out)
 
     def test_units_follow_the_radio_and_time_zone_changes(self):
         rule = (ROOT / 'usr/lib/udev/rules.d/81-erhai-wifi-country.rules').read_text()
         self.assertIn('SUBSYSTEM=="ieee80211"', rule)
         self.assertIn('ENV{SYSTEMD_WANTS}+="erhai-wifi-country.service"', rule)
-        path = (ROOT / 'usr/lib/systemd/system/erhai-wifi-country.path').read_text()
-        self.assertIn('PathChanged=/etc/localtime', path)
-        self.assertIn('Unit=erhai-wifi-country.service', path)
+        # /etc/localtime is a symlink that a path unit cannot watch; timedated
+        # makes the change and starts the service when it exits.
+        self.assertFalse((ROOT / 'usr/lib/systemd/system/erhai-wifi-country.path').exists())
+        dropin = (ROOT / 'usr/lib/systemd/system/systemd-timedated.service.d/'
+                  '80-erhai-wifi-country.conf').read_text()
+        self.assertIn('ExecStopPost=-+/usr/bin/systemctl --no-block start '
+                      'erhai-wifi-country.service', dropin)
 
 
 if __name__ == '__main__':
