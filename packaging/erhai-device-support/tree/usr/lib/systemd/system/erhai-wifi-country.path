@@ -1,0 +1,9 @@
+[Unit]
+Description=Follow time zone changes for the Wi-Fi regulatory country
+
+[Path]
+PathChanged=/etc/localtime
+Unit=erhai-wifi-country.service
+
+[Install]
+WantedBy=paths.target

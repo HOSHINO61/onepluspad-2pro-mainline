@@ -1,0 +1,7 @@
+[Unit]
+Description=Set the Wi-Fi regulatory country from the time zone
+ConditionPathExists=/usr/share/zoneinfo/zone.tab
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/erhai-wifi-country

@@ -1,0 +1,29 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Pass the Wi-Fi regulatory country derived from the system time zone.
+#
+# The WCN7860 starts in the world domain (00). It is lawful everywhere but
+# keeps 5 GHz passive: the tablet joins 5 GHz networks, yet cannot start a
+# hotspot there. The time zone chosen during first-run setup names the
+# country the tablet is used in, and tzdata's zone.tab maps every zone to one
+# country. A zone without an entry (UTC, Etc/*) keeps the world domain.
+set -u
+localtime=${ERHAI_LOCALTIME:-/etc/localtime}
+zone_tab=${ERHAI_ZONE_TAB:-/usr/share/zoneinfo/zone.tab}
+
+target=$(readlink -f "$localtime" 2>/dev/null) || target=
+zone=${target#*/zoneinfo/}
+[ "$zone" != "$target" ] || zone=
+country=
+if [ -n "$zone" ] && [ -r "$zone_tab" ]; then
+	country=$(awk -v zone="$zone" '$1 !~ /^#/ && $3 == zone { print $1; exit }' "$zone_tab")
+fi
+case $country in
+[A-Z][A-Z]) ;;
+*)
+	echo "erhai-wifi-country: no country for time zone '${zone:-unset}'; keeping the world domain"
+	exit 0
+	;;
+esac
+iw reg set "$country"
+echo "erhai-wifi-country: regulatory country $country from time zone $zone"
