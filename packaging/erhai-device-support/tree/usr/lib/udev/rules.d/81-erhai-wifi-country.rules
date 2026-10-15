@@ -1,7 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0-only
-#
-# Pass the regulatory country once the onboard radio's wiphy exists. A hint
-# given before the self-managed wiphy registers has no radio to reach, so the
-# wiphy's own add event starts erhai-wifi-country.service.
-
-ACTION=="add", SUBSYSTEM=="ieee80211", DRIVERS=="ath12k*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="erhai-wifi-country.service"

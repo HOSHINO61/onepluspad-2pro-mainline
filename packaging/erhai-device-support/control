@@ -5,7 +5,7 @@ Maintainer: @MAINTAINER@
 Installed-Size: @INSTALLED_SIZE@
 Section: admin
 Priority: optional
-Depends: systemd, python3, bluez, libglib2.0-bin, iw, erhai-display-power (>= 0.1.0~)
+Depends: systemd, python3, bluez, libglib2.0-bin, erhai-display-power (>= 0.1.0~)
 Pre-Depends: dpkg (>= 1.17.14)
 Description: OnePlus Pad 2 Pro (erhai) device support
  Everything the mainline port needs in the running system that is neither a
@@ -35,11 +35,6 @@ Description: OnePlus Pad 2 Pro (erhai) device support
  ignores a netdev until udev has finished with it, so there is no window in
  which the interface is managed with the firmware's address. A drop-in keeps
  NetworkManager from putting the firmware's address back.
- .
- The radio starts in the world regulatory domain, which keeps 5 GHz passive:
- the tablet joins 5 GHz networks but cannot host a hotspot there.
- erhai-wifi-country.service sets CN with iw when the radio appears: this is a
- China-market model, and stock Android uses the same country.
  .
  It also disables flash-kernel (/etc/flash-kernel/machine = "none", the tool's
  own documented switch). The distribution's initramfs hooks call it whenever a
