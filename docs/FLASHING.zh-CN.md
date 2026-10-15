@@ -192,6 +192,20 @@ sudo apt install ./device-packages-normal/*.deb && sudo reboot
 普通包替换调试启动镜像，重启后不再启用 USB shell、HTTP 和调试 DHCP。
 只停止桌面上的调试服务不能关闭调试镜像在启动早期提供的通道。
 
+## 升级已有安装
+
+新版本用 APT 直接装在已有安装之上，不重新分区、不重装 Ubuntu，也不碰 Android。
+按[构建指南](BUILD.zh-CN.md#设备包与图形组件)用 `tools/build-debs.py` 和 `tools/build-sensors.py`
+分别把新版本的设备包和传感器包构建到新的空输出目录，
+`--debug` 的选择与已装的包保持一致。把两个目录传到平板，在平板终端执行：
+
+```sh
+sudo apt install ./device-packages/*.deb ./sensor-debs/*.deb && sudo reboot
+```
+
+安装时内核包会把新的启动镜像写入活动槽，旧内核包仍保留；安装时导入的传感器注册表保持不变。
+新内核起不来时，按下文的恢复步骤处理。
+
 ## 异常与完整恢复
 
 若平板无响应，同时按住 **电源键＋音量上键约 15 秒**，屏幕熄灭或出现 OnePlus

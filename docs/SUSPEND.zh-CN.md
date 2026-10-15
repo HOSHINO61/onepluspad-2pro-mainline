@@ -11,12 +11,14 @@
 | | |
 |---|---|
 | `/sys/power/state` | `freeze mem disk` |
-| `/sys/power/mem_sleep` | 固定默认前为 `s2idle [deep]`，之后为 `s2idle` |
+| `/sys/power/mem_sleep` | 固定默认前为 `s2idle [deep]`，之后为 `[s2idle] deep` |
 | PSCI | `PSCIv1.1 detected`、`OSI mode supported` —— 固件广告 SYSTEM_SUSPEND，内核因此偏好 `deep` |
 | CPU idle | 两个状态：`WFI` 与 `cpu-sleep-0`（retention） |
 | 挂起次数 | RTC 定时与电源键触发合计 `success: 4`、`fail: 0` |
 | RTC 唤醒 | 可用 —— `pm_wakeup_irq 174`（`c400000.spmi:pmic@0:rtc@6100`） |
 | 电源键唤醒 | 可用 —— `pm_wakeup_irq 21`（`pmic_pwrkey`） |
+| v0.2.0 已装系统，RTC 闹钟 300 秒 | compat 与 standard 两种显示模式：`PM: suspend entry (s2idle)`，睡 293 秒，由 IRQ 174 唤醒，闹钟后 3 秒调试通道恢复，Wi-Fi 28 秒重连；显示、触控与传感器均恢复 |
+| s2idle 中的计时 | v0.2.0 已装系统：`Timekeeping suspended for 292.961 seconds` |
 
 电源键无需改设备树即为唤醒源：`pm8941-pwrkey.c` 读取 `wakeup-source` **或**采用按
 compatible 的默认值，而 `qcom,pmk8350-pwrkey` 对应
@@ -54,7 +56,8 @@ rm /etc/erhai/power-key-action                  # 回到仅锁屏+熄屏
 之所以必须在 pre：写在恢复阶段的标记存在竞态——用户态在 `post` 钩子运行前就已解冻，
 服务可能先读到那次唤醒按键从而再次挂起
 （真机实测：post 标记方案下 12 次按键只有 5 次被正确判为唤醒）。
-时钟同样不可用：本板 s2idle 期间 `CLOCK_MONOTONIC` 照常前进，差值恒为 0。
+标记不依赖时钟：早期 RAM 镜像测量曾看到 s2idle 期间 `CLOCK_MONOTONIC` 照常前进，
+而 v0.2.0 已装系统的日志为 `Timekeeping suspended for 293 seconds`，时钟行为不能作为判断依据。
 
 `/run/erhai/power-key-action` 同样会被读取且优先，便于镜像或测试在单次启动内启用它。
 

@@ -1,20 +1,28 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
-- Compass and gyroscope readings through iio-sensor-proxy
-  ([#1](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/1)).
-- System suspend defaults to s2idle
-  ([#2](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/2)).
+Device and sensor packages are numbered 0.2.0 and install over v0.1.0 with APT;
+see "Upgrading an existing installation" in [FLASHING](docs/FLASHING.md).
+
+- System suspend defaults to s2idle. On the installed tablet, 300-second
+  RTC-timed suspends in both display modes resume the display, touch, Wi-Fi and
+  sensors ([#2](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/2)).
 - Opt-in power-key suspend through `/etc/erhai/power-key-action`; the default
   is still lock and blank
   ([#3](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/3)).
+- Compass and gyroscope readings through iio-sensor-proxy
+  ([#1](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/1)).
 - GNOME idle dimming is off, because the panel is never blanked automatically
   ([#4](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/4)).
 - Notes on the panel brightness paths
   ([#6](https://github.com/yzddmr6/onepluspad-2pro-mainline/pull/6)).
+- Kernel `erhai-v0.2.0`: the IPCC and GLINK drivers return to Linux v7.2 after
+  the default-off suspend wake diagnostics are removed.
+- H.264 hardware decoding is verified on the tablet. Known issue: Showtime aborts
+  on a Mesa freedreno assertion when it draws video frames.
 
-Thanks to @Pidbid for these contributions.
+Thanks to @Pidbid for #1–#4 and #6.
 
 ## v0.1.0
 

@@ -229,6 +229,24 @@ The regular package replaces the diagnostic boot images. After reboot, the USB
 shell, HTTP service and diagnostic DHCP stay disabled. Stopping only the desktop
 services does not disable the early-boot channels in a diagnostic image.
 
+## Upgrading an existing installation
+
+A newer release installs over an existing installation with APT. It does not
+repartition the tablet, reinstall Ubuntu or touch Android. Build the release's
+device packages and sensor package (`tools/build-debs.py` and `tools/build-sensors.py`,
+see the [build guide](BUILD.md#device-packages)), each into a new empty output
+directory, with the same choice of `--debug` as the installed packages. Transfer
+both directories to the tablet, then run in its terminal:
+
+```sh
+sudo apt install ./device-packages/*.deb ./sensor-debs/*.deb && sudo reboot
+```
+
+The kernel package writes the new boot images to the active slot during the
+installation, and the previous kernel package stays installed. The sensor
+registry imported at installation time is kept. If the new kernel does not start,
+follow the recovery steps below.
+
 ## Failure and full stock recovery
 
 If the tablet stops responding, hold **Power + Volume Up for about 15 seconds**.

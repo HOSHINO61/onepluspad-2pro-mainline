@@ -12,12 +12,14 @@ suspend yourself.
 | | |
 |---|---|
 | `/sys/power/state` | `freeze mem disk` |
-| `/sys/power/mem_sleep` | `s2idle [deep]` before the default was pinned, `s2idle` after |
+| `/sys/power/mem_sleep` | `s2idle [deep]` before the default was pinned, `[s2idle] deep` after |
 | PSCI | `PSCIv1.1 detected`, `OSI mode supported` — the firmware advertises SYSTEM_SUSPEND, which is why the kernel prefers `deep` |
 | CPU idle | two states: `WFI` and `cpu-sleep-0` (retention) |
 | Suspend cycles | `success: 4`, `fail: 0` over RTC-timed and power-button cycles |
 | Wake from s2idle by RTC | works — `pm_wakeup_irq 174` (`c400000.spmi:pmic@0:rtc@6100`) |
 | Wake from s2idle by the power button | works — `pm_wakeup_irq 21` (`pmic_pwrkey`) |
+| Installed v0.2.0, RTC alarm 300 s | compat and standard display modes: `PM: suspend entry (s2idle)`, slept 293 s, woken by IRQ 174, debug channel back 3 s after the alarm, Wi-Fi 28 s; display, touch and sensors recovered |
+| Timekeeping in s2idle | `Timekeeping suspended for 292.961 seconds` on the installed v0.2.0 system |
 
 The power button is a wake source without any devicetree change:
 `pm8941-pwrkey.c` reads `wakeup-source` *or* takes the per-compatible default, and
@@ -57,8 +59,9 @@ service treats the next press as display restore only if it arrives within 15 s 
 clearing the flag as it consumes it. The pre phase is what makes it reliable: a flag written on
 resume is racy, because userspace is thawed before that hook runs, so the service can read the
 resuming press first and suspend again — measured on hardware, 5 of 12 presses were handled
-correctly with a post-phase marker. Clocks cannot help either: `CLOCK_MONOTONIC` keeps running
-across s2idle on this board, so an elapsed-time test sees a gap of zero.
+correctly with a post-phase marker. The flag does not rely on clocks: an early RAM-image
+measurement saw `CLOCK_MONOTONIC` keep running across s2idle, while the installed v0.2.0
+system logs `Timekeeping suspended for 293 seconds`, so clock behaviour is no dependable signal.
 
 `/run/erhai/power-key-action` is read too and takes precedence, so an image or a test can
 enable it for one boot.

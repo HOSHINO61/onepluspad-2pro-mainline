@@ -24,7 +24,8 @@ primarily in Chinese.
   for firmware and layout requirements.
 - **Power:** reliable net charging under Linux is unresolved. Return to Android
   to charge; Fastboot is not a charging fallback. Backlight-only screen blanking
-  also consumes more power than normal standby.
+  also consumes more power than normal standby; system suspend on the power button
+  is opt-in, see [System suspend](docs/SUSPEND.md).
 - **Data and recovery:** unlocking the bootloader erases user data. Back up
   personal files and obtain matching stock firmware before changing the device.
   Keep factory calibration and device addresses specific to each tablet.
@@ -113,12 +114,12 @@ development are not included in the supported feature set.
 | Internal microphones | WCD939x / ALSA / PipeWire | 🟡 | Default input, two-channel capture and repeated recording passed. Speech quality, gain and background noise need listening tests. |
 | Speakers | Six AW88261 amplifiers / AudioReach | 🔧 | Playback is disabled by default. Low-level signal tests passed; listening, volume and noise need hardware testing. |
 | USB-C analog audio | WCD939x headset path | ❌ | Analog adapters and headset detection are not implemented. Digital USB audio is tracked above. |
-| H.264 software playback | Ubuntu GStreamer packages | 🔧 | Software decoding passed under emulation; player video and sound on the tablet need testing. |
-| Hardware video codecs | Qualcomm Iris | 🔧 | Driver and firmware integration are present; decoding and encoding need hardware testing. |
+| Video playback in desktop players | Ubuntu GStreamer packages | ❌ | Showtime, the default player, aborts on a Mesa freedreno assertion when it draws video frames. Other players are untested. |
+| Hardware video codecs | Qualcomm Iris | 🟡 | H.264 hardware decoding works on the tablet: a 60-frame test clip matches the software decoder frame by frame. Encoding and use from desktop players need testing. |
 | Front and rear cameras | SC820CS / SC1300CS | ❌ | Camera capture and video calls are not implemented. |
 | Automatic rotation | SSC / iio-sensor-proxy | 🟡 | Orientation reaches the desktop and the screen rotates in the initial-setup session, but not yet in a normal session even with the switch on. The mount matrix is a candidate and unmeasured. |
 | Automatic brightness | SSC ambient light / GNOME | 🟡 | The light sensor reaches GNOME, and with automatic brightness enabled the backlight level adjusted on hardware (1500 → 1805 of 2047). GNOME idle dimming is off because the panel is never blanked automatically. |
-| Compass and gyroscope | SSC / iio-sensor-proxy | 🟡 | Magnetometer heading and gyroscope angular velocity are published on D-Bus from a boot of the built image. Application use remains untested. |
+| Compass and gyroscope | SSC / iio-sensor-proxy | 🟡 | Heading and angular velocity are read over D-Bus on the installed v0.2.0 system and keep updating after suspend. No desktop application uses them yet. |
 | Proximity and Hall | SSC | ❌ | The DSP does not publish the proximity sensor on this unit, and `libssc` has no Hall or SAR implementation. |
 
 ### Power, Time and Applications
@@ -129,7 +130,7 @@ development are not included in the supported feature set.
 | CPU frequency and temperature | SCMI / IIO / thermal | 🟡 | Frequency scaling and temperature readings work. Sustained-load thermal control and enclosure-temperature management remain incomplete. |
 | Battery reporting | qcom_battmgr / UPower | ✅ | Capacity and runtime estimates available; charging behavior is a separate limitation. |
 | Charging in Linux | USB power / vendor firmware | ❌ | Reliable net charging is not supported. Return to Android to charge. |
-| Suspend and resume | Linux power management | 🟡 | s2idle enters and exits, and both the power button and the PMIC RTC wake it. Unplugged standby life, peripheral recovery and the deepest SoC power states need work; the firmware-advertised `deep` state is not used by default. |
+| Suspend and resume | Linux power management | 🟡 | Defaults to s2idle. On the installed v0.2.0 system, 300-second RTC-timed suspends in both display modes resumed the display, touch, Wi-Fi and sensors; power-button wake was verified by a contributor. Unplugged standby life and the deepest SoC power states remain open; the firmware-advertised `deep` state is not used by default. |
 | RTC | Qualcomm PMIC RTC | 🟡 | Time read/write verified. Clock rollback was observed after restarting and requires time synchronization. |
 | Snap applications | AppArmor / snapd / graphics runtime | ❌ | Full confinement and graphical Snap apps are unsupported in this release. The selected kernel does not enable AppArmor. |
 | Android applications | Android runtime | ❌ | Waydroid is not integrated. |
