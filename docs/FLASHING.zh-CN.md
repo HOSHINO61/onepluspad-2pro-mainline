@@ -127,7 +127,7 @@ fastboot -s "$device_serial" reboot
 清除 Android 数据会重置这项授权；仅开启 USB 调试还不够。从电脑把模块传到平板：
 
 ```sh
-adb -s "$device_serial" push out/erhai-switch-v0.1.0.zip /sdcard/Download/
+adb -s "$device_serial" push out/erhai-switch-v0.2.0.zip /sdcard/Download/
 ```
 
 在 KernelSU 中选择“下载”目录里的 ZIP 安装，重启 Android，随后执行下面的 Linux 安装步骤。

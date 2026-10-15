@@ -191,7 +191,7 @@ dumpsys battery
         if sha256(rootfs) != manifest['rootfs_sha256']:
             raise RuntimeError('Root filesystem does not match its build manifest')
         identity = {
-            'project_version': '0.1.0', 'serial': self.args.serial,
+            'project_version': '0.2.0', 'serial': self.args.serial,
             'rootfs_sha256': manifest['rootfs_sha256'],
             'prepared_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'partition_layout': 'existing linux_rootfs and linux_data; GPT unchanged'}
